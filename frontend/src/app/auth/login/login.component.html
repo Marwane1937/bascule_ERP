@@ -1,0 +1,80 @@
+<div class="login-container" style="background-image: url('assets/img/bg.png');">
+  <div class="login-card">
+    <div class="login-header">
+      <div class="logo-container">
+        <img src="./assets/img/LOGO white.png" alt="Cactus Informatique" class="company-logo" />
+      </div>
+      <h2>
+        <span class="welcome-text">Bienvenue</span>
+      </h2>
+      <p>Connectez-vous à votre compte</p>
+    </div>
+
+    <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="login-form">
+      <!-- Message d'erreur -->
+      <div *ngIf="errorMessage" class="error-message">
+        {{ errorMessage }}
+      </div>
+
+      <!-- Login -->
+      <div class="form-group">
+        <label for="login">Login</label>
+        <input
+          type="text"
+          id="login"
+          formControlName="login"
+          class="form-control"
+          [class.error]="getFieldError('login')"
+          placeholder="Entrez votre login"
+        />
+        <div *ngIf="getFieldError('login')" class="field-error">
+          {{ getFieldError('login') }}
+        </div>
+      </div>
+
+      <!-- Mot de passe -->
+      <div class="form-group">
+        <label for="password">Mot de passe</label>
+        <div class="password-input-wrapper">
+          <input
+            [type]="showPassword ? 'text' : 'password'"
+            id="password"
+            formControlName="password"
+            class="form-control password-input"
+            [class.error]="getFieldError('password')"
+            placeholder="Entrez votre mot de passe"
+          />
+          <button
+            type="button"
+            class="password-toggle-btn"
+            (click)="togglePasswordVisibility()"
+            tabindex="-1"
+            aria-label="Afficher/Masquer le mot de passe"
+          >
+            <i [class]="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+          </button>
+        </div>
+        <div *ngIf="getFieldError('password')" class="field-error">
+          {{ getFieldError('password') }}
+        </div>
+      </div>
+
+      <!-- Bouton de connexion -->
+      <button
+        type="submit"
+        class="login-btn"
+        [disabled]="isLoading || loginForm.invalid"
+        [class.loading]="isLoading"
+      >
+        <span class="btn-content">
+          <span *ngIf="isLoading" class="spinner"></span>
+          <span class="btn-text">{{ isLoading ? 'Connexion...' : 'Se connecter' }}</span>
+        </span>
+      </button>
+    </form>
+
+    <div class="login-footer">
+      <p>© 2026 - Système de gestion</p>
+    </div>
+  </div>
+</div>

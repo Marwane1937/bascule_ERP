@@ -1,0 +1,340 @@
+<div class="container-fluid mt-4">
+  <div class="row">
+    <div class="col-12">
+      <div class="card shadow-sm" [ngClass]="{'caisse-black-mode': caisseType === 'black'}">
+        <div class="card-header"
+          [ngClass]="caisseType === 'black' ? 'bg-dark text-white caisse-black-header' : 'bg-primary text-white'">
+          <h4 class="mb-0">
+            <i class="fas fa-cash-register me-2"></i>
+            Gestion de la Caisse
+            <span class="badge ms-2 badge-pulse"
+              [ngClass]="caisseType === 'black' ? 'bg-danger text-white' : 'bg-light text-dark'">
+              <i class="fas" [ngClass]="caisseType === 'black' ? 'fa-moon' : 'fa-check-circle'" [class.me-1]="true"></i>
+              {{ caisseType === 'black' ? 'Caisse Black' : 'Caisse Déclarée' }}
+            </span>
+          </h4>
+        </div>
+        <div class="card-body" [ngClass]="{'caisse-black-body': caisseType === 'black'}">
+          <!-- Bandeau d'alerte pour le mode Caisse Black -->
+          <div *ngIf="caisseType === 'black'" class="alert alert-dark border-danger mb-4 caisse-black-alert"
+            role="alert">
+            <div class="d-flex align-items-center">
+              <i class="fas fa-moon fa-2x text-danger me-3"></i>
+              <div class="flex-grow-1">
+                <h5 class="alert-heading mb-1">
+                  <strong>⚠️ MODE CAISSE BLACK ACTIVÉ</strong>
+                </h5>
+                <p class="mb-0">Vous consultez actuellement les données de la <strong>caisse black</strong> (non
+                  déclarée).</p>
+              </div>
+              <button type="button" class="btn btn-outline-danger btn-sm" (click)="switchCaisseType('declared')">
+                <i class="fas fa-arrow-left me-2"></i>Retour à la Caisse Déclarée
+              </button>
+            </div>
+          </div>
+
+          <!-- Alerte si solde négatif -->
+          <div *ngIf="isSoldeNegatif()" class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>Attention !</strong> Le solde de la caisse est négatif. Veuillez vérifier votre caisse
+            immédiatement.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+
+          <!-- Solde du jour -->
+          <div class="row mb-4">
+            <div class="col-md-4">
+              <div class="card"
+                [ngClass]="caisseType === 'black' ? 'border-danger caisse-black-card' : 'bg-success text-white'">
+                <div class="card-body">
+                  <h6 class="card-title"
+                    [ngClass]="{'text-dark': caisseType === 'black', 'text-white': caisseType !== 'black'}">
+                    <i class="fas fa-arrow-down me-2"></i>Total Entrées
+                  </h6>
+                  <h3 class="mb-0"
+                    [ngClass]="{'text-dark': caisseType === 'black', 'text-white': caisseType !== 'black'}">
+                    {{ solde.total_entrees | number:'1.2-2' }} DH
+                  </h3>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card"
+                [ngClass]="caisseType === 'black' ? 'border-danger caisse-black-card' : 'bg-danger text-white'">
+                <div class="card-body">
+                  <h6 class="card-title"
+                    [ngClass]="{'text-dark': caisseType === 'black', 'text-white': caisseType !== 'black'}">
+                    <i class="fas fa-arrow-up me-2"></i>Total Sorties
+                  </h6>
+                  <h3 class="mb-0"
+                    [ngClass]="{'text-dark': caisseType === 'black', 'text-white': caisseType !== 'black'}">
+                    {{ solde.total_sorties | number:'1.2-2' }} DH
+                  </h3>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card"
+                [ngClass]="caisseType === 'black' ? 'border-danger caisse-black-card' : (getSoldeClass() + ' text-white')">
+                <div class="card-body">
+                  <h6 class="card-title"
+                    [ngClass]="{'text-dark': caisseType === 'black', 'text-white': caisseType !== 'black'}">
+                    <i class="fas" [ngClass]="caisseType === 'black' ? 'fa-moon' : 'fa-wallet'"
+                      [class.me-2]="true"></i>Solde du Jour
+                  </h6>
+                  <h3 class="mb-0"
+                    [ngClass]="{'text-dark': caisseType === 'black', 'text-white': caisseType !== 'black'}">
+                    {{ solde.solde | number:'1.2-2' }} DH
+                  </h3>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sélection de date et type de caisse -->
+          <div class="row mb-4">
+            <div class="col-md-4">
+              <label class="form-label">Date</label>
+              <input type="date" class="form-control" [(ngModel)]="selectedDate" (change)="onDateChange()">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Type de Caisse</label>
+              <div class="btn-group w-100" role="group">
+                <button type="button" class="btn" [class.btn-primary]="caisseType === 'declared'"
+                  [class.btn-outline-primary]="caisseType !== 'declared'" (click)="switchCaisseType('declared')">
+                  <i class="fas fa-check-circle me-2"></i>Caisse Déclarée
+                </button>
+                <button type="button" class="btn caisse-black-btn" [class.btn-danger]="caisseType === 'black'"
+                  [class.btn-outline-danger]="caisseType !== 'black'" [class.active-black]="caisseType === 'black'"
+                  (click)="switchCaisseType('black')">
+                  <i class="fas fa-moon me-2"></i>Caisse Black
+                  <span *ngIf="caisseType === 'black'" class="badge bg-light text-dark ms-2 badge-pulse-small">
+                    ACTIF
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section Rapports/États -->
+          <div class="card mb-4" [ngClass]="caisseType === 'black' ? 'border-danger caisse-black-card' : 'border-info'">
+            <div class="card-header text-white"
+              [ngClass]="caisseType === 'black' ? 'bg-dark caisse-black-header' : 'bg-info'">
+              <h5 class="mb-0">
+                <i class="fas fa-file-pdf me-2"></i>
+                Rapports et États
+                <span *ngIf="caisseType === 'black'" class="badge bg-danger ms-2 badge-pulse-small">
+                  BLACK
+                </span>
+              </h5>
+            </div>
+            <div class="card-body">
+              <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                  <label class="form-label">Date du <span class="text-danger">*</span></label>
+                  <input type="date" class="form-control" [(ngModel)]="reportDateFrom" [max]="reportDateTo">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Date au <span class="text-danger">*</span></label>
+                  <input type="date" class="form-control" [(ngModel)]="reportDateTo" [min]="reportDateFrom">
+                </div>
+                <div class="col-md-4">
+                  <button class="btn w-100" [ngClass]="caisseType === 'black' ? 'btn-danger' : 'btn-info'"
+                    (click)="generateRapport()" [disabled]="generatingReport || !reportDateFrom || !reportDateTo">
+                    <i class="fas fa-file-pdf me-2"></i>
+                    {{ generatingReport ? 'Génération...' : 'Générer le Rapport PDF' }}
+                    <span *ngIf="caisseType === 'black' && !generatingReport" class="badge bg-light text-dark ms-2">
+                      BLACK
+                    </span>
+                  </button>
+                </div>
+              </div>
+              <div class="mt-2">
+                <small class="text-muted">
+                  <i class="fas fa-info-circle me-1"></i>
+                  Sélectionnez une plage de dates pour générer un rapport PDF avec toutes les opérations de caisse
+                  (recettes et dépenses) de cette période.
+                </small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section Rapport par Employé -->
+          <div class="card mb-4"
+            [ngClass]="caisseType === 'black' ? 'border-danger caisse-black-card' : 'border-warning'">
+            <div class="card-header text-white"
+              [ngClass]="caisseType === 'black' ? 'bg-dark caisse-black-header' : 'bg-warning'">
+              <h5 class="mb-0">
+                <i class="fas fa-user-tie me-2"></i>
+                Rapport par Employé
+                <span *ngIf="caisseType === 'black'" class="badge bg-danger ms-2 badge-pulse-small">
+                  BLACK
+                </span>
+              </h5>
+            </div>
+            <div class="card-body">
+              <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                  <label class="form-label">Date du <span class="text-danger">*</span></label>
+                  <input type="date" class="form-control" [(ngModel)]="reportEmployeDateFrom"
+                    [max]="reportEmployeDateTo">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Date au <span class="text-danger">*</span></label>
+                  <input type="date" class="form-control" [(ngModel)]="reportEmployeDateTo"
+                    [min]="reportEmployeDateFrom">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Employé <span class="text-danger">*</span></label>
+                  <select class="form-select" [(ngModel)]="selectedEmployeId" [disabled]="loadingEmployes">
+                    <option [ngValue]="null">-- Sélectionner un employé --</option>
+                    <option *ngFor="let employe of employes" [ngValue]="employe.id">
+                      {{ employe.nom_complet || employe.nom + ' ' + employe.prenom }}
+                    </option>
+                  </select>
+                  <small *ngIf="loadingEmployes" class="text-muted">
+                    <i class="fas fa-spinner fa-spin me-1"></i>Chargement des employés...
+                  </small>
+                </div>
+                <div class="col-md-2">
+                  <button class="btn w-100" [ngClass]="caisseType === 'black' ? 'btn-danger' : 'btn-warning'"
+                    (click)="generateRapportByEmploye()"
+                    [disabled]="generatingReportByEmploye || !reportEmployeDateFrom || !reportEmployeDateTo || !selectedEmployeId">
+                    <i class="fas fa-file-pdf me-2"></i>
+                    {{ generatingReportByEmploye ? 'Génération...' : 'Générer' }}
+                    <span *ngIf="caisseType === 'black' && !generatingReportByEmploye"
+                      class="badge bg-light text-dark ms-2">
+                      BLACK
+                    </span>
+                  </button>
+                </div>
+              </div>
+              <div class="mt-2">
+                <small class="text-muted">
+                  <i class="fas fa-info-circle me-1"></i>
+                  Générer un rapport PDF filtré par employé pour la période sélectionnée (recettes et dépenses).
+                </small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section Rapport Rubriques (2000/3000) -->
+          <div class="card mb-4"
+            [ngClass]="caisseType === 'black' ? 'border-danger caisse-black-card' : 'border-success'">
+            <div class="card-header text-white"
+              [ngClass]="caisseType === 'black' ? 'bg-dark caisse-black-header' : 'bg-success'">
+              <h5 class="mb-0">
+                <i class="fas fa-list-alt me-2"></i>
+                Rapport Rubriques (Recettes/Dépenses)
+                <span *ngIf="caisseType === 'black'" class="badge bg-danger ms-2 badge-pulse-small">
+                  BLACK
+                </span>
+              </h5>
+            </div>
+            <div class="card-body">
+              <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                  <label class="form-label">Date du <span class="text-danger">*</span></label>
+                  <input type="date" class="form-control" [(ngModel)]="reportGroupDateFrom" [max]="reportGroupDateTo">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Date au <span class="text-danger">*</span></label>
+                  <input type="date" class="form-control" [(ngModel)]="reportGroupDateTo" [min]="reportGroupDateFrom">
+                </div>
+                <div class="col-md-12">
+                  <label class="form-label">Filtrer par Rubriques (Optionnel)</label>
+                  <div class="dropdown w-100">
+                    <button
+                      class="btn btn-outline-secondary dropdown-toggle w-100 text-start d-flex justify-content-between align-items-center"
+                      type="button" id="dropdownRubriques" data-bs-toggle="dropdown" aria-expanded="false">
+                      <span class="text-truncate">
+                        {{ selectedRubriques.length === 0 ? 'Toutes les rubriques' : selectedRubriques.length + '
+                        rubrique(s) sélectionnée(s)' }}
+                      </span>
+                    </button>
+                    <ul class="dropdown-menu w-100 p-2" aria-labelledby="dropdownRubriques"
+                      style="max-height: 300px; overflow-y: auto;">
+                      <li>
+                        <div class="form-check">
+                          <input class="form-check-input" type="checkbox" id="selectAll"
+                            (change)="toggleAllRubriques($event)"
+                            [checked]="selectedRubriques.length === rubriques.length && rubriques.length > 0">
+                          <label class="form-check-label fw-bold" for="selectAll">Tout sélectionner</label>
+                        </div>
+                      </li>
+                      <li>
+                        <hr class="dropdown-divider">
+                      </li>
+                      <li *ngFor="let rub of rubriques">
+                        <div class="form-check">
+                          <input class="form-check-input" type="checkbox" [value]="rub.id"
+                            [checked]="isSelected(rub.id)" (change)="onRubriqueChange(rub.id, $event)"
+                            id="check{{rub.id}}">
+                          <label class="form-check-label w-100" for="check{{rub.id}}">
+                            {{ rub.nom }}
+                            <span class="badge float-end"
+                              [ngClass]="rub.group_id === 2000 ? 'bg-success' : 'bg-danger'">
+                              {{ rub.group_id === 2000 ? 'R' : 'D' }}
+                            </span>
+                          </label>
+                        </div>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <button class="btn w-100" [ngClass]="caisseType === 'black' ? 'btn-danger' : 'btn-success'"
+                    (click)="generateRapportGroup2000_3000()"
+                    [disabled]="generatingReportGroup || !reportGroupDateFrom || !reportGroupDateTo">
+                    <i class="fas fa-file-pdf me-2"></i>
+                    {{ generatingReportGroup ? 'Génération...' : 'Générer' }}
+                    <span *ngIf="caisseType === 'black' && !generatingReportGroup"
+                      class="badge bg-light text-dark ms-2">
+                      BLACK
+                    </span>
+                  </button>
+                </div>
+              </div>
+              <div class="mt-2">
+                <small class="text-muted">
+                  <i class="fas fa-info-circle me-1"></i>
+                  Générer un rapport PDF séparant les Recettes (Group 2000) et les Dépenses (Group 3000).
+                </small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Navigation vers les modules -->
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <div class="card h-100 border-primary">
+                <div class="card-body text-center">
+                  <i class="fas fa-arrow-down fa-3x text-success mb-3"></i>
+                  <h5 class="card-title">Recettes</h5>
+                  <p class="card-text">Gérer les entrées de caisse (règlements clients, etc.)</p>
+                  <button class="btn btn-success" (click)="navigateToRecettes()">
+                    <i class="fas fa-arrow-right me-2"></i>
+                    Accéder aux Recettes
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <div class="card h-100 border-danger">
+                <div class="card-body text-center">
+                  <i class="fas fa-arrow-up fa-3x text-danger mb-3"></i>
+                  <h5 class="card-title">Dépenses</h5>
+                  <p class="card-text">Gérer les sorties de caisse (paiements fournisseurs, frais, etc.)</p>
+                  <button class="btn btn-danger" (click)="navigateToDepenses()">
+                    <i class="fas fa-arrow-right me-2"></i>
+                    Accéder aux Dépenses
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,471 @@
+<div class="container-fluid mt-4" [class.black-mode]="isBlackMode">
+  <div class="row">
+    <div class="col-12">
+      <div class="card border-0 shadow-sm rounded-3 caisse-card" [class.black-card]="isBlackMode">
+        <div class="card-header" [class.bg-gradient-danger]="!isBlackMode" [class.bg-black-header]="isBlackMode">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-3">
+              <h4 class="mb-0">
+                <i class="fas fa-arrow-up me-2"></i>
+                Caisse - Dépenses
+              </h4>
+              <!-- Toggle Mode Caisse -->
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="toggleCaisseMode" 
+                       [checked]="caisseMode === 'black'"
+                       (change)="toggleCaisseMode()">
+                <label class="form-check-label text-white" for="toggleCaisseMode">
+                  <span *ngIf="caisseMode === 'declaree'">Caisse Déclarée</span>
+                  <span *ngIf="caisseMode === 'black'"><strong>CAISSE BLACK</strong></span>
+                </label>
+              </div>
+            </div>
+            <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#addDepenseModal">
+              <i class="fas fa-plus me-2"></i>
+              Ajouter une Dépense
+            </button>
+          </div>
+        </div>
+
+        <!-- Onglets -->
+        <div class="card-body p-0">
+          <ul class="nav nav-tabs border-bottom" [class.bg-dark]="isBlackMode" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" [class.active]="activeTab === 'liste'" 
+                      [class.text-white]="isBlackMode"
+                      (click)="setActiveTab('liste')" type="button">
+                <i class="fas fa-list me-2"></i> Liste
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" [class.active]="activeTab === 'ajout'" 
+                      [class.text-white]="isBlackMode"
+                      (click)="setActiveTab('ajout')" type="button">
+                <i class="fas fa-plus me-2"></i> Ajout
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Contenu des onglets -->
+        <div [class.bg-black-content]="isBlackMode">
+          <!-- Onglet Liste -->
+          <div *ngIf="activeTab === 'liste'">
+        <!-- Barre de recherche et filtres -->
+        <div class="card-body border-bottom p-3" [class.bg-light]="!isBlackMode" [class.bg-dark]="isBlackMode" *ngIf="!loading && documents.length > 0">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-5">
+              <label class="form-label small fw-bold">Recherche rapide</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input 
+                  type="text" 
+                  class="form-control form-control-sm"
+                  [(ngModel)]="searchTerm"
+                  (keyup.enter)="onSearch()"
+                  (input)="onSearchChange()"
+                  placeholder="Rechercher par numéro, date, description ou montant...">
+                <button class="btn btn-primary btn-sm" type="button" (click)="onSearch()">
+                  <i class="fas fa-search"></i>
+                </button>
+              </div>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small fw-bold">Par page</label>
+              <select class="form-select form-select-sm" [(ngModel)]="pageSize" (change)="onPageSizeChange()">
+                <option [value]="10">10</option>
+                <option [value]="25">25</option>
+                <option [value]="50">50</option>
+                <option [value]="100">100</option>
+              </select>
+            </div>
+            <div class="col-md-5 text-end">
+              <div class="d-flex gap-2 justify-content-end">
+                <button class="btn btn-outline-secondary btn-sm" (click)="toggleAdvancedFilters()">
+                  <i class="fas fa-filter"></i> Filtres avancés
+                  <i class="fas ms-1" [class.fa-chevron-down]="!showAdvancedFilters" [class.fa-chevron-up]="showAdvancedFilters"></i>
+                </button>
+                <button class="btn btn-outline-success btn-sm" (click)="exportToCSV()" title="Exporter en CSV/Excel">
+                  <i class="fas fa-file-excel"></i> Exporter
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filtres avancés -->
+        <div class="card-body border-bottom p-3" [class.bg-light]="!isBlackMode" [class.bg-dark]="isBlackMode" *ngIf="showAdvancedFilters">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label small fw-bold"><i class="fas fa-calendar-alt"></i> Date de début</label>
+              <input type="date" class="form-control form-control-sm" [(ngModel)]="filterDateFrom" (change)="onFilterChange()">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small fw-bold"><i class="fas fa-calendar-alt"></i> Date de fin</label>
+              <input type="date" class="form-control form-control-sm" [(ngModel)]="filterDateTo" (change)="onFilterChange()">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small fw-bold"><i class="fas fa-money-bill"></i> Montant min</label>
+              <input type="number" class="form-control form-control-sm" [(ngModel)]="filterMontantMin" (input)="onFilterChange()" placeholder="0.00" step="0.01">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small fw-bold"><i class="fas fa-money-bill"></i> Montant max</label>
+              <input type="number" class="form-control form-control-sm" [(ngModel)]="filterMontantMax" (input)="onFilterChange()" placeholder="0.00" step="0.01">
+            </div>
+            <div class="col-md-12 text-end">
+              <button class="btn btn-outline-danger btn-sm" (click)="resetFilters()">
+                <i class="fas fa-times"></i> Réinitialiser les filtres
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-body p-0" [class.bg-black-content]="isBlackMode">
+          <!-- Loading spinner -->
+          <div *ngIf="loading" class="text-center p-5" [class.text-white]="isBlackMode">
+            <div class="spinner-border text-danger" role="status">
+              <span class="visually-hidden">Chargement...</span>
+            </div>
+            <p class="mt-2 text-muted">Chargement des dépenses...</p>
+          </div>
+
+          <!-- Message si aucune donnée -->
+          <div *ngIf="!loading && documents.length === 0" class="text-center p-5">
+            <p [class.text-muted]="!isBlackMode" [class.text-white]="isBlackMode">Aucune dépense trouvée</p>
+          </div>
+
+          <!-- Tableau style lettrage -->
+          <div *ngIf="!loading && documents.length > 0" class="table-responsive">
+            <table class="table mb-0 caisse-table" [class.black-table]="isBlackMode">
+              <thead class="table-header-custom" [class.black-table]="isBlackMode">
+                <tr>
+                  <th (click)="onSort('numero')" class="sortable" style="cursor: pointer; width: 120px;">
+                    Numéro
+                    <i class="fas ms-1" [ngClass]="getSortIcon('numero')"></i>
+                  </th>
+                  <th (click)="onSort('date')" class="sortable" style="cursor: pointer; width: 110px;">
+                    Date
+                    <i class="fas ms-1" [ngClass]="getSortIcon('date')"></i>
+                  </th>
+                  <th (click)="onSort('description')" class="sortable" style="cursor: pointer;">
+                    Description
+                    <i class="fas ms-1" [ngClass]="getSortIcon('description')"></i>
+                  </th>
+                  <th (click)="onSort('montant')" class="sortable text-end" style="cursor: pointer; width: 120px;">
+                    Montant
+                    <i class="fas ms-1" [ngClass]="getSortIcon('montant')"></i>
+                  </th>
+                  <th style="width: 100px;">État</th>
+                  <th style="width: 180px;" class="text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let doc of getPaginatedDocuments()" [ngClass]="getRowClass(doc)">
+                  <td [class.text-white]="isBlackMode">
+                    {{ doc.numero }}
+                    <span *ngIf="shouldBeClotured(doc)" class="badge bg-danger ms-2" title="Cette caisse doit être clôturée">
+                      <i class="fas fa-exclamation-triangle"></i> À clôturer
+                    </span>
+                  </td>
+                  <td [class.text-white]="isBlackMode">{{ doc.date | date:'dd/MM/yyyy' }}</td>
+                  <td [class.text-white]="isBlackMode">{{ doc.description || '-' }}</td>
+                  <td class="text-end fw-bold" [class.text-danger]="!isBlackMode" [class.text-white]="isBlackMode">{{ doc.montant | number:'1.2-2' }} DH</td>
+                  <td>
+                    <span [ngClass]="getEtatClass(doc)">{{ getEtatLabel(doc) }}</span>
+                  </td>
+                  <td class="text-center">
+                    <div class="btn-group" role="group">
+                      <button 
+                        type="button" 
+                        class="btn btn-sm btn-info" 
+                        (click)="viewCaisseReport(doc)"
+                        title="Voir le rapport">
+                        <i class="fas fa-file-alt"></i>
+                      </button>
+                      <button 
+                        type="button" 
+                        class="btn btn-sm btn-primary" 
+                        [disabled]="!isCaisseOuverte(doc)"
+                        (click)="editCaisse(doc)"
+                        title="Modifier">
+                        <i class="fas fa-edit"></i>
+                      </button>
+                      <button 
+                        type="button" 
+                        class="btn btn-sm btn-warning" 
+                        [disabled]="!isCaisseOuverte(doc)"
+                        (click)="cloturerCaisse(doc, $event)"
+                        title="Clôturer">
+                        <i class="fas fa-lock"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          <div *ngIf="!loading && totalPages > 1" class="card-footer" [class.bg-light]="!isBlackMode" [class.bg-dark]="isBlackMode">
+            <div class="d-flex justify-content-between align-items-center">
+              <div class="text-muted small">
+                Affichage de {{ getDisplayRange() }} sur {{ totalRecords }} dépense(s)
+              </div>
+              <nav>
+                <ul class="pagination mb-0">
+                  <li class="page-item" [class.disabled]="currentPage === 1">
+                    <a class="page-link" href="javascript:void(0)" (click)="onPageChange(1)">
+                      <i class="fas fa-angle-double-left"></i>
+                    </a>
+                  </li>
+                  <li class="page-item" [class.disabled]="currentPage === 1">
+                    <a class="page-link" href="javascript:void(0)" (click)="onPageChange(currentPage - 1)">
+                      <i class="fas fa-angle-left"></i>
+                    </a>
+                  </li>
+                  <li *ngFor="let page of getPageNumbers()" class="page-item" [class.active]="page === currentPage">
+                    <a class="page-link" href="javascript:void(0)" (click)="onPageChange(page)">{{ page }}</a>
+                  </li>
+                  <li class="page-item" [class.disabled]="currentPage === totalPages">
+                    <a class="page-link" href="javascript:void(0)" (click)="onPageChange(currentPage + 1)">
+                      <i class="fas fa-angle-right"></i>
+                    </a>
+                  </li>
+                  <li class="page-item" [class.disabled]="currentPage === totalPages">
+                    <a class="page-link" href="javascript:void(0)" (click)="onPageChange(totalPages)">
+                      <i class="fas fa-angle-double-right"></i>
+                    </a>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+          </div>
+          </div>
+          <!-- Fin Onglet Liste -->
+          </div>
+
+          <!-- Onglet Ajout -->
+          <div *ngIf="activeTab === 'ajout'" class="card-body p-4" [class.bg-black-content]="isBlackMode">
+            <div class="alert" [class.alert-info]="!isBlackMode" [class.alert-dark]="isBlackMode" [class.text-white]="isBlackMode">
+              <i class="fas fa-info-circle"></i> Utilisez le bouton "Ajouter une Dépense" ci-dessus pour créer une nouvelle dépense.
+              <span *ngIf="isBlackMode" class="badge bg-warning ms-2">Mode Caisse Black Actif</span>
+            </div>
+          </div>
+          <!-- Fin Onglet Ajout -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Ajout Dépense -->
+<div class="modal fade" id="addDepenseModal" tabindex="-1" (shown.bs.modal)="onModalShow()" [class.black-modal]="isBlackMode">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content" [class.black-modal-content]="isBlackMode">
+      <div class="modal-header" [class.bg-danger]="!isBlackMode" [class.bg-black-header]="isBlackMode" [class.text-white]="isBlackMode">
+        <h5 class="modal-title">Ajouter une Dépense <span *ngIf="isBlackMode" class="badge bg-warning ms-2">CAISSE BLACK</span></h5>
+        <button type="button" class="btn-close" [class.btn-close-white]="isBlackMode" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" [class.bg-black-content]="isBlackMode" [class.text-white]="isBlackMode">
+        <form [formGroup]="DepenseForm" (ngSubmit)="onSubmitDepense()">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label" [class.text-white]="isBlackMode">Date *</label>
+              <input type="date" class="form-control" formControlName="date" [class.black-input]="isBlackMode">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label" [class.text-white]="isBlackMode">Numéro</label>
+              <input type="text" class="form-control" [value]="nextNumero" readonly [placeholder]="nextNumero ? '' : 'Chargement...'" [class.black-input]="isBlackMode">
+            </div>
+            <div class="col-md-12 mb-3">
+              <label class="form-label" [class.text-white]="isBlackMode">Description *</label>
+              <textarea class="form-control" formControlName="description" rows="3" [class.black-input]="isBlackMode"></textarea>
+            </div>
+            <div class="col-md-12 mb-3">
+              <label class="form-label" [class.text-white]="isBlackMode">Affectation *</label>
+              <input type="text" class="form-control" formControlName="affectation" [value]="currentUserName" readonly [class.black-input]="isBlackMode">
+              <small [class.text-muted]="!isBlackMode" [class.text-white-50]="isBlackMode">Nom de l'utilisateur connecté</small>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer" [class.bg-black-content]="isBlackMode">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-danger" (click)="onSubmitDepense()" [disabled]="!DepenseForm.valid">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Édition Caisse -->
+<div class="modal fade" id="editCaisseModal" tabindex="-1" *ngIf="editModalVisible" 
+     [class.black-modal]="isBlackMode"
+     data-bs-backdrop="static" 
+     data-bs-keyboard="false">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content" [class.black-modal-content]="isBlackMode">
+      <div class="modal-header" [class.bg-danger]="!isBlackMode" [class.bg-black-header]="isBlackMode" [class.text-white]="isBlackMode">
+        <h5 class="modal-title">Modifier la Caisse - {{ selectedDocument?.numero }}</h5>
+        <button type="button" class="btn-close" [class.btn-close-white]="isBlackMode" (click)="closeEditModal()"></button>
+      </div>
+      <div class="modal-body" *ngIf="selectedDocument" [class.bg-black-content]="isBlackMode" [class.text-white]="isBlackMode">
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label class="form-label" [class.text-white]="isBlackMode">Date</label>
+            <input type="date" class="form-control" [value]="selectedDocument.date" readonly [class.black-input]="isBlackMode">
+          </div>
+        </div>
+        <div class="row mb-3">
+          <div class="col-md-12">
+            <label class="form-label" [class.text-white]="isBlackMode">Description</label>
+            <textarea class="form-control" [(ngModel)]="selectedDocument.description" rows="2" [class.black-input]="isBlackMode"></textarea>
+          </div>
+        </div>
+        
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 [class.text-white]="isBlackMode">Lignes de dépenses</h6>
+          <button type="button" class="btn btn-danger btn-sm" (click)="addDetailLine(); $event.stopPropagation(); $event.preventDefault();">
+            <i class="fas fa-plus"></i> Ajouter une ligne
+          </button>
+        </div>
+        
+        <div class="table-responsive">
+          <table class="table table-striped" [class.black-table]="isBlackMode">
+            <thead [class.black-table]="isBlackMode">
+              <tr>
+                <th [class.text-white]="isBlackMode">Rubrique</th>
+                <th [class.text-white]="isBlackMode">Employé</th>
+                <th [class.text-white]="isBlackMode">Description</th>
+                <th [class.text-white]="isBlackMode">Quantité</th>
+                <th [class.text-white]="isBlackMode">Montant</th>
+                <th [class.text-white]="isBlackMode">Total</th>
+                <th [class.text-white]="isBlackMode" style="width: 80px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let detail of documentDetails; let i = index">
+                <td>
+                  <select class="form-select form-select-sm" 
+                          [ngModel]="detail.rubrique_id"
+                          (ngModelChange)="detail.rubrique_id = $event; onRubriqueChange(i)"
+                          [class.black-input]="isBlackMode">
+                    <option [ngValue]="null">-- Sélectionner --</option>
+                    <option *ngFor="let rubrique of rubriques" [ngValue]="rubrique.id">
+                      {{ rubrique.nom }}
+                    </option>
+                  </select>
+                </td>
+                <td>
+                  <select class="form-select form-select-sm" 
+                          [(ngModel)]="detail.employe_id"
+                          (ngModelChange)="detail.employe_nom_complet = getEmployeName($event)"
+                          [class.black-input]="isBlackMode">
+                    <option [ngValue]="null">-- Sélectionner --</option>
+                    <option *ngFor="let employe of employes" [ngValue]="employe.id">
+                      {{ employe.nom_complet }}
+                    </option>
+                  </select>
+                  <small *ngIf="detail.employe_nom_complet && !detail.employe_id" class="text-muted" [class.text-white-50]="isBlackMode">
+                    {{ detail.employe_nom_complet }}
+                  </small>
+                </td>
+                <td>
+                  <input type="text" class="form-control form-control-sm" 
+                         [(ngModel)]="detail.description" 
+                         placeholder="Description (optionnel)"
+                         [class.black-input]="isBlackMode">
+                </td>
+                <td>
+                  <input type="number" class="form-control form-control-sm" 
+                         [(ngModel)]="detail.quantite" 
+                         min="1" 
+                         step="1"
+                         (change)="calculateTotal(i)"
+                         [class.black-input]="isBlackMode">
+                </td>
+                <td>
+                  <input type="number" class="form-control form-control-sm" 
+                         [(ngModel)]="detail.montant" 
+                         min="0" 
+                         step="0.01"
+                         (change)="calculateTotal(i)"
+                         [class.black-input]="isBlackMode">
+                </td>
+                <td>
+                  <input type="text" class="form-control form-control-sm" 
+                         [value]="(detail.quantite || 0) * (detail.montant || 0) | number:'1.2-2'" 
+                         readonly
+                         [class.black-input]="isBlackMode">
+                </td>
+                <td class="text-center">
+                  <div class="btn-group">
+                    <button 
+                      type="button" 
+                      class="btn btn-sm btn-outline-primary dropdown-toggle" 
+                      [title]="'Actions disponibles'"
+                      data-bs-toggle="dropdown"
+                      aria-expanded="false"
+                      [class.text-white]="isBlackMode">
+                      <i class="fas fa-ellipsis-v"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" [class.bg-dark]="isBlackMode">
+                      <li>
+                        <a class="dropdown-item" 
+                           href="javascript:void(0)" 
+                           (click)="printCaisseByEmploye(detail.employe_id, i); $event.stopPropagation(); $event.preventDefault();"
+                           [class.text-white]="isBlackMode"
+                           [class.disabled]="!detail.employe_id"
+                           [style.pointer-events]="!detail.employe_id ? 'none' : 'auto'"
+                           [style.opacity]="!detail.employe_id ? '0.5' : '1'">
+                          <i class="fas fa-print me-2"></i> Imprimer
+                        </a>
+                      </li>
+                      <li>
+                        <a class="dropdown-item" 
+                           href="javascript:void(0)" 
+                           (click)="sendTelegramByEmploye(detail.employe_id, i); $event.stopPropagation(); $event.preventDefault();"
+                           [class.text-white]="isBlackMode"
+                           [class.disabled]="!detail.employe_id"
+                           [style.pointer-events]="!detail.employe_id ? 'none' : 'auto'"
+                           [style.opacity]="!detail.employe_id ? '0.5' : '1'">
+                          <i class="fab fa-telegram me-2"></i> Envoyer Telegram
+                        </a>
+                      </li>
+                      <li><hr class="dropdown-divider"></li>
+                      <li>
+                        <a class="dropdown-item text-danger" 
+                           href="javascript:void(0)" 
+                           (click)="removeDetailLine(i); $event.stopPropagation(); $event.preventDefault();"
+                           [class.text-white]="isBlackMode">
+                          <i class="fas fa-trash me-2"></i> Supprimer
+                        </a>
+                      </li>
+                    </ul>
+                  </div>
+                </td>
+              </tr>
+              <tr *ngIf="documentDetails.length === 0">
+                <td colspan="7" class="text-center" [class.text-muted]="!isBlackMode" [class.text-white-50]="isBlackMode">
+                  Aucune ligne. Cliquez sur "Ajouter une ligne" pour commencer.
+                </td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <th colspan="5" class="text-end" [class.text-white]="isBlackMode">Total:</th>
+                <th class="text-danger" [class.text-white]="isBlackMode">
+                  {{ getTotalAmount() | number:'1.2-2' }} DH
+                </th>
+                <th></th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer" [class.bg-black-content]="isBlackMode">
+        <button type="button" class="btn btn-secondary" (click)="closeEditModal(); $event.stopPropagation();">Annuler</button>
+        <button type="button" class="btn btn-danger" (click)="saveCaisseDetails(); $event.stopPropagation();">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,30 @@
+<!-- Bouton flottant pour lancer le chat -->
+<button class="chat-toggle" (click)="showPopup = !showPopup">💬</button>
+
+<!-- Pop-up de chat -->
+<div class="chat-popup" *ngIf="showPopup">
+  <div class="chat-header">
+    <h4>🤖 Assistant Commercial</h4>
+    <button class="close-btn" (click)="showPopup = false">×</button>
+  </div>
+
+  <div class="chat-body">
+    <div *ngFor="let msg of messages" [ngClass]="msg.sender" class="chat-message">
+      <span>{{ msg.text }}</span>
+    </div>
+    <div *ngIf="loading" class="chat-message bot loading">
+      ⏳ Assistant en cours...
+    </div>
+  </div>
+
+  <form class="chat-footer" (submit)="sendMessage()">
+    <input
+      [(ngModel)]="userInput"
+      name="userInput"
+      placeholder="Pose ta question…"
+      autocomplete="off"
+      required
+    />
+    <button type="submit">Envoyer</button>
+  </form>
+</div>

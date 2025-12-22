@@ -1,0 +1,50 @@
+<div class="database-selector">
+  <div class="selector-container" (click)="toggleDropdown()">
+    <div class="selected-database">
+      <div class="database-info">
+        <i class="fas fa-building"></i>
+        <span class="database-name">
+          {{ currentSociete ? currentSociete.nom : 'Sélectionner une société' }}
+        </span>
+      </div>
+      <i class="fas fa-chevron-down" [class.rotated]="showDropdown"></i>
+    </div>
+  </div>
+
+  <div class="dropdown" *ngIf="showDropdown" (clickOutside)="closeDropdown()">
+    <div class="dropdown-header">
+      <h4>Choisir une société</h4>
+      <button class="close-btn" (click)="closeDropdown()">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+
+    <div class="dropdown-content">
+      <div *ngIf="isLoading" class="loading">
+        <div class="spinner"></div>
+        Chargement des sociétés...
+      </div>
+
+      <div *ngIf="!isLoading && societes.length === 0" class="no-data">
+        Aucune société trouvée
+      </div>
+
+      <div *ngIf="!isLoading && societes.length > 0" class="databases-list">
+        <div 
+          *ngFor="let societe of societes" 
+          class="database-item"
+          [class.selected]="currentSociete && currentSociete.id === societe.id"
+          (click)="selectSociete(societe)"
+        >
+          <div class="database-details">
+            <div class="database-name">{{ societe.nom }}</div>
+            <div class="database-technical">{{ societe.nom_base }}</div>
+          </div>
+          <div class="database-status">
+            <i class="fas fa-circle" [class.active]="currentSociete && currentSociete.id === societe.id"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

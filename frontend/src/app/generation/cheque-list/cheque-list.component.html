@@ -1,0 +1,72 @@
+<!-- Liste des règlements chèque -->
+<div class="container mt-4">
+  <div class="card">
+    <div class="card-header bg-primary text-white">
+      <h4>Créer un chèque</h4>
+    </div>
+    <div class="card-body">
+      <form (ngSubmit)="creerCheque()">
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label>Bénéficiaire</label>
+            <input type="text" class="form-control" [(ngModel)]="cheque.beneficiaire" name="beneficiaire" required />
+          </div>
+          <div class="col-md-3 mb-3">
+            <label>Montant</label>
+            <input type="number" class="form-control" [(ngModel)]="cheque.montant" name="montant" required />
+          </div>
+          <div class="col-md-3 mb-3">
+            <label>Montant en lettres</label>
+            <input type="text" class="form-control" [(ngModel)]="cheque.montantLettre" name="montantLettre" required />
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-md-3 mb-3">
+            <label>Date</label>
+            <input type="date" class="form-control" [(ngModel)]="cheque.date" name="date" required />
+          </div>
+          <div class="col-md-3 mb-3">
+            <label>Émetteur</label>
+            <input type="text" class="form-control" [(ngModel)]="cheque.emetteur" name="emetteur" required />
+          </div>
+          <div class="col-md-3 mb-3">
+            <label>Banque</label>
+            <select class="form-control" [(ngModel)]="cheque.banque" name="banque" required>
+              <option value="" disabled selected>Choisir...</option>
+              <option *ngFor="let b of banques" [value]="b">{{ b }}</option>
+            </select>
+          </div>
+          <div class="col-md-3 mb-3">
+            <label>Numéro du chèque</label>
+            <input type="text" class="form-control" [(ngModel)]="cheque.numero" name="numero" required />
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-md-3 mb-3">
+            <label>Échéance</label>
+            <input type="date" class="form-control" [(ngModel)]="cheque.echeance" name="echeance" />
+          </div>
+        </div>
+        <button type="submit" class="btn btn-success mt-2">Créer le chèque</button>
+      </form>
+    </div>
+  </div>
+
+  <div *ngIf="chequeCree" class="card mt-4">
+    <div class="card-header bg-success text-white">
+      <h5>Chèque créé</h5>
+    </div>
+    <div class="card-body">
+      <ul class="list-group">
+        <li class="list-group-item"><strong>Bénéficiaire :</strong> {{ chequeCree?.beneficiaire }}</li>
+        <li class="list-group-item"><strong>Montant :</strong> {{ chequeCree?.montant }}</li>
+        <li class="list-group-item"><strong>Montant en lettres :</strong> {{ chequeCree?.montantLettre }}</li>
+        <li class="list-group-item"><strong>Date :</strong> {{ chequeCree?.date }}</li>
+        <li class="list-group-item"><strong>Émetteur :</strong> {{ chequeCree?.emetteur }}</li>
+        <li class="list-group-item"><strong>Banque :</strong> {{ chequeCree?.banque }}</li>
+        <li class="list-group-item"><strong>Numéro :</strong> {{ chequeCree?.numero }}</li>
+        <li class="list-group-item"><strong>Échéance :</strong> {{ chequeCree?.echeance }}</li>
+      </ul>
+    </div>
+  </div>
+</div>

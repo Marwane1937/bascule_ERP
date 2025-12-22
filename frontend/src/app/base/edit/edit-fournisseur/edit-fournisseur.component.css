@@ -1,0 +1,15 @@
+#adresseTable td,
+#adresseTable th {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+#contactTable td,
+#contactTable th {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+#identifiantTable td,
+#identifiantTable th {
+  text-align: center !important;
+  vertical-align: middle !important;
+}

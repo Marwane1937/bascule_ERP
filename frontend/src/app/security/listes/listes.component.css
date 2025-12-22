@@ -1,0 +1,75 @@
+/* Wrapper pour le tableau avec scrollbar */
+.listes-table-wrapper {
+  max-height: 400px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid #dee2e6;
+  border-radius: 0.25rem;
+  position: relative;
+}
+
+/* En-tête fixe lors du scroll */
+.listes-table-wrapper thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #212529;
+}
+
+/* Style de la scrollbar pour WebKit (Chrome, Safari, Edge) */
+.listes-table-wrapper::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.listes-table-wrapper::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.listes-table-wrapper::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.listes-table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Style de la scrollbar pour Firefox */
+.listes-table-wrapper {
+  scrollbar-width: thin;
+  scrollbar-color: #888 #f1f1f1;
+}
+
+/* Assurer que le tableau prend toute la largeur */
+.listes-table-wrapper table {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+/* Style pour les lignes du tableau */
+.listes-table-wrapper tbody tr {
+  cursor: pointer;
+}
+
+.listes-table-wrapper tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+/* Style pour les cellules */
+.listes-table-wrapper td,
+.listes-table-wrapper th {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0.5rem;
+}
+
+/* Permettre le retour à la ligne pour la colonne Nom */
+.listes-table-wrapper td:nth-child(4),
+.listes-table-wrapper th:nth-child(4) {
+  white-space: normal;
+  word-wrap: break-word;
+}
+

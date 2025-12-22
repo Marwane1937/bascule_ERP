@@ -1,0 +1,281 @@
+<div class="container-fluid py-4">
+    <div class="page-inner">
+        <!-- En-tête -->
+        <div class="page-header">
+            <h3 class="fw-bold mb-3">Fournisseur</h3>
+            <ul class="breadcrumbs mb-3">
+                <li class="nav-home">
+                    <a href="#"><i class="icon-home"></i></a>
+                </li>
+                <li class="separator"><i class="icon-arrow-right"></i></li>
+                <li class="nav-item"><a href="#">Base</a></li>
+                <li class="separator"><i class="icon-arrow-right"></i></li>
+                <li class="nav-item"><a href="#">Modifier Fournisseur</a></li>
+            </ul>
+        </div>
+
+        <!-- Bouton Collapse -->
+        <div class="text-end mb-3">
+            <span data-bs-toggle="collapse" data-bs-target="#collapseClient" aria-expanded="true"
+                aria-controls="collapseClient" class="text-primary fw-bold" style="cursor: pointer;">
+                <i class="bi bi-chevron-double-down"></i> Détails du Fournisseur
+            </span>
+        </div>
+
+
+
+        <!-- Collapse Stylisé -->
+        <div class="collapse show" id="collapseClient">
+            <div class="p-4 bg-white rounded-4 shadow-sm border border-light">
+                <h5 class="mb-4 text-primary fw-semibold">🧾 Informations du Fournisseur</h5>
+
+                <!-- Tes Inputs ici -->
+                <form>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Nom :</label>
+                            <input type="text" class="form-control" placeholder="Entrez le nom" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Email :</label>
+                            <input type="email" class="form-control" placeholder="exemple@domaine.com" />
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Téléphone :</label>
+                            <input type="text" class="form-control" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Adresse :</label>
+                            <input type="text" class="form-control" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Ville :</label>
+                            <input type="text" class="form-control" />
+                        </div>
+                    </div>
+
+                    <!-- Boutons -->
+                    <div class="text-end mt-4">
+                        <button type="submit" class="btn btn-success me-2">💾 Enregistrer</button>
+                        <button type="reset" class="btn btn-secondary">↩️ Réinitialiser</button>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+    </div>
+    <div class="col-md-12">
+  <div class="card">
+  <div class="card-header text-white">
+    <h4 class="card-title mb-0 text-primary">🧾 Informations Complémentaires</h4>
+  </div>
+
+  <div class="card-body">
+    <ul class="nav nav-pills nav-secondary nav-pills-no-bd" role="tablist">
+      <li class="nav-item">
+        <a class="nav-link active" data-bs-toggle="pill" href="#adresse">Adresse</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="pill" href="#contact">Commercial</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="pill" href="#identifiant">identifiant</a>
+      </li> 
+    </ul>
+
+    <div class="tab-content mt-4">
+      <!-- Adresse -->
+      <div class="tab-pane fade show active" id="adresse">
+        <div class="d-flex justify-content-end mb-2">
+          <button class="btn btn-primary btn-round btn-sm me-2" (click)="onAddAdresse()" title="Ajouter">
+            <i class="fas fa-plus"></i>
+          </button>
+          <button class="btn btn-danger btn-round btn-sm" (click)="onDeleteAdresses()" title="Supprimer">
+            <i class="fas fa-trash-alt"></i>
+          </button>
+        </div>
+
+        <table id="adresseTable" class="display table table-bordered">
+          <thead>
+            <tr>
+              <th><input type="checkbox" /></th>
+              <th>Adresse</th>
+              <th>Ville</th>
+              <th>Code Postal</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let a of adresses , let i = index">
+            <td><input type="checkbox" class="row-checkbox" [(ngModel)]="a.checked" (change)="onCheckboxChange(a)" /></td>
+              <td>{{ a.adresse }}</td>
+              <td>{{ a.nom_Ville  }}</td>
+              <td>{{ a.postal_code || '-' }}</td>
+              <td>
+           <button class="btn btn-warning btn-round" (click)="onEditAdresse(a ,i)" title="Modifier"><i class="fas fa-edit"></i></button>
+            </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Contact -->
+   <div class="tab-pane fade" id="contact">
+        <div class="d-flex justify-content-end mb-2">
+          <button class="btn btn-primary btn-round btn-sm me-2" (click)="onAddContact()" title="Ajouter">
+            <i class="fas fa-plus"></i>
+          </button>
+          <button class="btn btn-danger btn-round btn-sm" (click)="onDeleteContacts()" title="Supprimer">
+            <i class="fas fa-trash-alt"></i>
+          </button>
+        </div>
+
+        <table id="contactTable" class="display table table-bordered">
+          <thead>
+            <tr>
+              <th><input type="checkbox" /></th>
+              <th>Ligne</th>
+              <th>Commercial</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let c of contacts , let i = index">
+             <td><input type="checkbox"class="row-checkbox" [(ngModel)]="c.checked" (change)="onCheckboxChange(c)" /></td>
+              <td>{{ c.ligne }}</td>
+              <td>{{ c.commercial }}</td>
+              <td>
+                <button class="btn btn-warning btn-round" (click)="onEditContact(c, i)"><i class="fas fa-edit"></i></button>
+            </td>
+            </tr>
+          </tbody>
+        </table>
+      </div> 
+
+      <!-- identifiant  -->
+      <div class="tab-pane fade" id="identifiant">
+        <div class="d-flex justify-content-end mb-2">
+          <button class="btn btn-primary btn-round btn-sm me-2" (click)="onAddIdentifiant()" title="Ajouter">
+            <i class="fas fa-plus"></i>
+          </button>
+          <button class="btn btn-danger btn-round btn-sm" (click)="onDeleteIdentifiants()" title="Supprimer">
+            <i class="fas fa-trash-alt"></i>
+          </button>
+        </div>
+
+        <table id="identifiantTable" class="display table table-bordered">
+          <thead>
+            <tr>
+              <th><input type="checkbox" /></th>
+              <th>Type</th>
+              <th>identifiant</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let c of identifiants">
+              <td><input type="checkbox" class="row-checkbox" [(ngModel)]="c.checked"  (change)="onCheckboxChange(c)" /></td>
+              <td>{{ c.type }}</td>
+              <td>{{ c.identifiant }}</td>
+               <td>
+           <button class="btn btn-warning btn-round" (click)="onEditIdentifiant(c)" ><i class="fas fa-edit"></i></button>
+            </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>  
+
+</div>
+
+
+</div>
+<!-- ✅ MODALE GÉNÉRIQUE POUR ADRESSE -->
+<div class="modal fade" id="adresseModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-info text-white">
+        <h5 class="modal-title">Ajouter Adresse</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body px-4" *ngIf="selectedAdresse">
+        <div class="mb-3">
+          <input class="form-control" placeholder="Adresse" [(ngModel)]="selectedAdresse.adresse" name="adresse" appUppercase />
+        </div>
+        <div class="mb-3">
+          <select id="ville" class="form-select" [(ngModel)]="selectedAdresse.ville_id" name="ville_id">
+            <option disabled selected>Choisir une Ville</option>
+            <option *ngFor="let v of villes" [value]="v.id">{{ v.nom }}</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <input class="form-control" placeholder="Code Postal" [(ngModel)]="selectedAdresse.postal_code" name="code_postal" />
+        </div>
+      </div>
+      <div class="modal-footer bg-light">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button class="btn btn-success" (click)="onSaveAdresse()">✅ Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ✅ MODALE POUR CONTACT -->
+ <div class="modal fade" id="contactModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title">Ajouter Commercial</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body px-4" *ngIf="selectedContact">
+       <div class="mb-3">
+        <input type="number" class="form-control" placeholder="ligne" [(ngModel)]="selectedContact.ligne" name="ligne" disabled />
+        </div>
+        <div class="mb-3">
+        <select id="identifiant_select" class="form-select" [(ngModel)]="selectedContact.company_contact" name="company_contact">
+            <option>Choisir un(e) Commercial</option>
+            <option *ngFor="let c of comerciaux" [value]="c.id">{{ c.nom }}</option>
+        </select>
+        </div>
+      </div>
+      <div class="modal-footer bg-light">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button class="btn btn-success"(click)="onSaveContact()">✅ Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div> 
+
+<!-- ✅ MODALE POUR IDENTIFIANT -->
+ <div class="modal fade" id="identifiantModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title">Ajouter Identifiant</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body px-4" *ngIf="selectedIdentifiant">
+        <div class="mb-3">
+        <input class="form-control" placeholder="identifiant" [(ngModel)]="selectedIdentifiant.identifiant" name="identifiant" />
+        </div>
+        <div class="mb-3">
+        <select id="identifiant_select" class="form-select" [(ngModel)]="selectedIdentifiant.identifiant_type" name="identifiant_type">
+            <option disabled selected>Choisir un Identifiant</option>
+            <option *ngFor="let i of identifs" [value]="i.id">{{ i.nom }}</option>
+        </select>
+        </div>
+      </div>
+      <div class="modal-footer bg-light">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button class="btn btn-success" (click)="onSaveIdentifiant()">✅ Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div> 

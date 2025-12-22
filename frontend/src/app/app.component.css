@@ -1,0 +1,79 @@
+/* Toggle sidebar hide/show - Desktop only (min-width: 992px) */
+@media (min-width: 992px) {
+  .wrapper.sidebar-hidden-desktop .sidebar {
+    left: -265px !important;
+    transition: left 0.3s ease-in-out;
+  }
+  
+  .wrapper.sidebar-hidden-desktop .main-panel {
+    width: 100% !important;
+    margin-left: 0 !important;
+    transition: width 0.3s ease-in-out, margin-left 0.3s ease-in-out;
+  }
+  
+  .wrapper.sidebar-hidden-desktop .main-header {
+    width: 100% !important;
+    transition: width 0.3s ease-in-out;
+  }
+}
+
+/* Ensure it doesn't interfere with mobile nav_open system */
+@media (max-width: 991.5px) {
+  .wrapper.sidebar-hidden-desktop .sidebar {
+    left: 0 !important;
+    transform: none !important;
+  }
+  
+  .wrapper.sidebar-hidden-desktop .main-panel {
+    width: calc(100% - 265px) !important;
+  }
+}
+
+/* Bouton flottant pour réafficher le sidebar */
+.btn-sidebar-toggle-float {
+  position: fixed;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1003;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  animation: pulse 2s infinite;
+}
+
+.btn-sidebar-toggle-float:hover {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.btn-sidebar-toggle-float i {
+  font-size: 24px;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  }
+  50% {
+    box-shadow: 0 4px 25px rgba(102, 126, 234, 0.8);
+  }
+}
+
+/* Cacher le bouton sur mobile */
+@media (max-width: 991.5px) {
+  .btn-sidebar-toggle-float {
+    display: none !important;
+  }
+}
+

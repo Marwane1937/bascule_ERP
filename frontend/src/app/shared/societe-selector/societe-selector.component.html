@@ -1,0 +1,61 @@
+<div class="societe-selector">
+  <div class="selector-container" (click)="toggleDropdown()">
+    <div class="selected-societe">
+      <div class="societe-info">
+        <i class="fas fa-building"></i>
+        <span class="societe-name">
+          {{ selectedSociete?.nom || 'Sélectionner une société' }}
+        </span>
+      </div>
+      <i class="fas fa-chevron-down" [class.rotated]="showDropdown"></i>
+    </div>
+  </div>
+
+  <div class="dropdown" *ngIf="showDropdown" (clickOutside)="closeDropdown()">
+    <div class="dropdown-header">
+      <h4>Choisir une société</h4>
+      <button class="close-btn" (click)="closeDropdown()">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+
+    <div class="dropdown-content">
+      <div *ngIf="isLoading" class="loading">
+        <div class="spinner"></div>
+        Chargement des sociétés...
+      </div>
+
+      <div *ngIf="!isLoading && societes.length === 0" class="no-data">
+        Aucune société trouvée
+      </div>
+
+      <div *ngIf="!isLoading && societes.length > 0" class="societes-list">
+        <div 
+          *ngFor="let societe of societes" 
+          class="societe-item"
+          [class.selected]="selectedSociete?.id === societe.id"
+          (click)="selectSociete(societe)"
+        >
+          <div class="societe-details">
+            <div class="societe-name">{{ societe.nom }}</div>
+            <div class="societe-base">{{ societe.nom_base }}</div>
+            <div class="societe-status">
+              <span [class]="societe.actif ? 'status-active' : 'status-inactive'">
+                {{ societe.actif ? 'Actif' : 'Inactif' }}
+              </span>
+            </div>
+          </div>
+          <div class="societe-documents" *ngIf="societe.documentSociete">
+            <div class="document-indicators">
+              <i class="fas fa-image" [class.has-content]="societe.documentSociete.logo" title="Logo"></i>
+              <i class="fas fa-heading" [class.has-content]="societe.documentSociete.entete" title="En-tête"></i>
+              <i class="fas fa-file-alt" [class.has-content]="societe.documentSociete.pied_page" title="Pied de page"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+

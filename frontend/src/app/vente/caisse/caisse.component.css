@@ -1,0 +1,251 @@
+/* Styles pour le mode Caisse Black */
+.caisse-black-mode {
+  border: 3px solid #dc3545 !important;
+  box-shadow: 0 0 20px rgba(220, 53, 69, 0.5) !important;
+  animation: caisseBlackGlow 2s ease-in-out infinite;
+}
+
+@keyframes caisseBlackGlow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(220, 53, 69, 0.5);
+    border-color: #dc3545;
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(220, 53, 69, 0.8);
+    border-color: #ff1a35;
+  }
+}
+
+.caisse-black-header {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%) !important;
+  border-bottom: 3px solid #dc3545 !important;
+  position: relative;
+}
+
+.caisse-black-header::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 10px,
+    rgba(220, 53, 69, 0.1) 10px,
+    rgba(220, 53, 69, 0.1) 20px
+  );
+  pointer-events: none;
+}
+
+.caisse-black-body {
+  background-color: #f8f9fa;
+  position: relative;
+}
+
+.caisse-black-body::before {
+  content: 'CAISSE BLACK';
+  position: absolute;
+  top: 10px;
+  right: 20px;
+  font-size: 12px;
+  font-weight: bold;
+  color: rgba(220, 53, 69, 0.2);
+  letter-spacing: 3px;
+  transform: rotate(-5deg);
+  pointer-events: none;
+}
+
+.caisse-black-card {
+  border: 2px solid #dc3545 !important;
+  box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3) !important;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+  transition: all 0.3s ease;
+  color: #000 !important;
+}
+
+.caisse-black-card .card-body {
+  color: #000 !important;
+}
+
+.caisse-black-card .card-title {
+  color: #212529 !important;
+  font-weight: 600;
+}
+
+.caisse-black-card h3,
+.caisse-black-card .mb-0 {
+  color: #000 !important;
+  font-weight: 700;
+}
+
+.caisse-black-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 6px 20px rgba(220, 53, 69, 0.5) !important;
+}
+
+.caisse-black-btn {
+  position: relative;
+  transition: all 0.3s ease;
+  font-weight: 600;
+}
+
+.caisse-black-btn.active-black {
+  animation: blackBtnPulse 1.5s ease-in-out infinite;
+  box-shadow: 0 0 15px rgba(220, 53, 69, 0.6);
+}
+
+@keyframes blackBtnPulse {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(220, 53, 69, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(220, 53, 69, 0.9);
+  }
+}
+
+.badge-pulse {
+  animation: badgePulse 2s ease-in-out infinite;
+}
+
+.badge-pulse-small {
+  animation: badgePulseSmall 1.5s ease-in-out infinite;
+  font-size: 0.7rem;
+  padding: 0.25em 0.5em;
+}
+
+@keyframes badgePulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.9;
+  }
+}
+
+@keyframes badgePulseSmall {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+/* Animation d'alerte pour le mode black */
+@keyframes caisseBlackAlert {
+  0%, 100% {
+    background-color: #f8f9fa;
+  }
+  50% {
+    background-color: #fff5f5;
+  }
+}
+
+.caisse-black-mode .card-body {
+  animation: caisseBlackAlert 3s ease-in-out infinite;
+}
+
+/* Styles supplémentaires pour les éléments en mode black */
+.caisse-black-mode .form-label {
+  font-weight: 600;
+  color: #495057;
+}
+
+.caisse-black-mode .form-control {
+  border: 1px solid #dc3545;
+}
+
+.caisse-black-mode .form-control:focus {
+  border-color: #dc3545;
+  box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+/* Animation de vibration subtile pour le header en mode black */
+@keyframes caisseBlackVibrate {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-1px);
+  }
+  75% {
+    transform: translateX(1px);
+  }
+}
+
+.caisse-black-header {
+  animation: caisseBlackVibrate 0.1s ease-in-out infinite;
+  animation-iteration-count: 1;
+}
+
+/* Effet de brillance pour les cartes en mode black */
+.caisse-black-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    45deg,
+    transparent,
+    rgba(220, 53, 69, 0.1),
+    transparent
+  );
+  transform: rotate(45deg);
+  animation: shine 3s infinite;
+  pointer-events: none;
+}
+
+@keyframes shine {
+  0% {
+    transform: translateX(-100%) translateY(-100%) rotate(45deg);
+  }
+  100% {
+    transform: translateX(100%) translateY(100%) rotate(45deg);
+  }
+}
+
+.caisse-black-card {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Bandeau d'alerte pour le mode black */
+.caisse-black-alert {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%) !important;
+  border: 3px solid #dc3545 !important;
+  color: #fff !important;
+  animation: caisseBlackAlertBanner 2s ease-in-out infinite;
+  box-shadow: 0 4px 15px rgba(220, 53, 69, 0.4);
+}
+
+@keyframes caisseBlackAlertBanner {
+  0%, 100% {
+    border-color: #dc3545;
+    box-shadow: 0 4px 15px rgba(220, 53, 69, 0.4);
+  }
+  50% {
+    border-color: #ff1a35;
+    box-shadow: 0 4px 20px rgba(220, 53, 69, 0.7);
+  }
+}
+
+.caisse-black-alert .fas.fa-moon {
+  animation: moonRotate 3s ease-in-out infinite;
+}
+
+@keyframes moonRotate {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(15deg);
+  }
+}

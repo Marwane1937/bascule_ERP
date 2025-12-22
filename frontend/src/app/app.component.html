@@ -1,0 +1,110 @@
+<!-- Affichage conditionnel : menu complet si connecté, sinon juste le router-outlet -->
+<div class="wrapper" [class.sidebar-hidden-desktop]="sidebarHidden" *ngIf="authService.isAuthenticated()">
+      <!-- Sidebar -->
+      <div class="sidebar" data-background-color="dark">
+        <div class="sidebar-logo">
+          <!-- Logo Header -->
+          <div class="logo-header" data-background-color="dark">
+            <a href="index.html" class="logo">
+              <img
+                src="./assets/img/LOGO white.png"
+                alt="navbar brand"
+                class="navbar-brand"
+                
+                width="106"
+              />
+            </a>
+            <div class="nav-toggle">
+              <button class="btn btn-toggle toggle-sidebar" (click)="toggleSidebar()" title="Masquer/Afficher le menu">
+                <i class="gg-menu-right"></i>
+              </button>
+              <button class="btn btn-toggle sidenav-toggler">
+                <i class="gg-menu-left"></i>
+              </button>
+            </div>
+            <button class="topbar-toggler more">
+              <i class="gg-more-vertical-alt"></i>
+            </button>
+          </div>
+          <!-- End Logo Header -->
+        </div>
+        <div class="sidebar-wrapper scrollbar scrollbar-inner">
+          <div class="sidebar-content">
+            <ul class="nav nav-secondary">
+              <li class="nav-item active">
+                <a
+                  data-bs-toggle="collapse"
+                  [routerLink]="'/Dashbord'"
+                  class="collapsed"
+                  aria-expanded="false"
+                >
+                  <i class="fas fa-home"></i>
+                  <p>Dashboard</p>
+                  <span class="caret"></span>
+                </a>
+              </li>
+              <li class="nav-section">
+                <span class="sidebar-mini-icon">
+                  <i class="fa fa-ellipsis-h"></i>
+                </span>
+                <h4 class="text-section">Components</h4>
+              </li>
+              <ng-container *ngFor="let category of filteredMenuCategories">
+                <li class="nav-item">
+                  <a data-bs-toggle="collapse" [href]="'#' + getCategoryId(category.category)">
+                    <i [class]="category.icon"></i>
+                    <p>{{ category.category }}</p>
+                    <span class="caret"></span>
+                  </a>
+                  <div class="collapse" [id]="getCategoryId(category.category)">
+                    <ul class="nav nav-collapse">
+                      <li *ngFor="let item of category.items">
+                        <a [routerLink]="item.route">
+                          <span class="sub-item">{{ item.name }}</span>
+                        </a>
+                      </li>
+                    </ul>
+                  </div>
+                </li>
+              </ng-container>
+            </ul>
+          </div>
+        </div>
+        </div>
+      <!-- End Sidebar -->
+
+      <!-- Bouton flottant pour réafficher le sidebar quand il est caché -->
+      <button 
+        *ngIf="sidebarHidden" 
+        class="btn btn-sidebar-toggle-float" 
+        (click)="toggleSidebar()"
+        title="Afficher le menu">
+        <i class="gg-menu-left"></i>
+      </button>
+
+      <div class="main-panel">
+    <app-header></app-header>
+
+    <router-outlet></router-outlet>
+
+        <footer class="footer">
+          <div class="container-fluid d-flex justify-content-between">
+            <div class="copyright">
+              2025, made with <i class="fa fa-heart heart text-danger"></i> by
+              <a href="http://www.cactus.ma/">Cactus Informatique</a>
+            </div>
+            <div>
+              Distributed by
+              <a target="_blank" href="http://www.cactus.ma/">Cactus Informatique</a>.
+            </div>
+          </div>
+        </footer>
+      </div>
+</div>
+      
+<!-- Affichage simple pour la page de login -->
+<div *ngIf="!authService.isAuthenticated()">
+  <router-outlet></router-outlet>
+    </div>
+
+    <app-assistant></app-assistant>

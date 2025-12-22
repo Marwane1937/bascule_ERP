@@ -1,0 +1,529 @@
+/* Styles pour le composant d'édition de règlement */
+.modern-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  padding: 15px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 300px;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.toast-success {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.toast-error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.toast-icon {
+  font-size: 1.2em;
+}
+
+.form-label {
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.card {
+  border-radius: 8px;
+}
+
+.list-group-item-action {
+  cursor: pointer;
+}
+
+.list-group-item-action:hover {
+  background-color: #f8f9fa;
+}
+
+/* ============================================
+   STYLE SIMPLE ET ÉLÉGANT POUR LE TABLEAU
+   ============================================ */
+
+.lettrage-card {
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.bg-gradient-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  border: none;
+  padding: 18px 24px;
+}
+
+.bg-gradient-primary h5 {
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 1.15rem;
+  margin: 0;
+  letter-spacing: 0.3px;
+}
+
+/* Tableau élégant */
+.lettrage-table {
+  font-size: 0.875rem;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: #ffffff;
+  margin: 0;
+}
+
+/* En-têtes élégants */
+.table-header-custom {
+  background: linear-gradient(to bottom, #f8f9fa 0%, #f1f3f5 100%);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.table-header-custom th {
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: #374151;
+  padding: 14px 12px;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #e5e7eb;
+  background: transparent;
+  white-space: nowrap;
+  position: relative;
+}
+
+.table-header-custom th:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 20%;
+  height: 60%;
+  width: 1px;
+  background: #e5e7eb;
+}
+
+.table-header-custom th.text-end {
+  text-align: right;
+}
+
+.table-header-custom th.text-center {
+  text-align: center;
+}
+
+/* Lignes élégantes */
+.lettrage-table tbody tr {
+  background: #ffffff;
+  border-bottom: 1px solid #f3f4f6;
+  transition: all 0.2s ease;
+}
+
+.lettrage-table tbody tr:nth-child(even) {
+  background: #fafbfc;
+}
+
+.lettrage-table tbody tr:hover {
+  background: #f8f9fa !important;
+  transform: translateX(2px);
+  box-shadow: -2px 0 0 0 #667eea;
+}
+
+/* Ligne sélectionnée élégante */
+.table-row-selected {
+  background: #eff6ff !important;
+  border-left: 3px solid #667eea;
+  box-shadow: -2px 0 0 0 #667eea;
+}
+
+.table-row-selected:hover {
+  background: #dbeafe !important;
+}
+
+/* Cellules élégantes */
+.lettrage-table td {
+  padding: 14px 12px;
+  vertical-align: middle;
+  color: #1f2937;
+  font-size: 0.875rem;
+  border-bottom: 1px solid #f3f4f6;
+  transition: color 0.2s ease;
+}
+
+.lettrage-table td.text-end {
+  text-align: right;
+  font-weight: 500;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: #111827;
+}
+
+.lettrage-table td.text-center {
+  text-align: center;
+}
+
+/* Montant de facture en gras */
+.lettrage-table td.text-end:has-text("facture") {
+  font-weight: 600;
+  color: #1e40af;
+}
+
+/* Checkbox élégant */
+.lettrage-table .form-check-input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  border: 2px solid #d1d5db;
+  border-radius: 4px;
+  margin: 0;
+  transition: all 0.2s ease;
+}
+
+.lettrage-table .form-check-input:hover {
+  border-color: #667eea;
+  transform: scale(1.1);
+}
+
+.lettrage-table .form-check-input:checked {
+  background-color: #667eea;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.lettrage-table .form-check-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background-color: #f3f4f6;
+}
+
+/* Badges de statut élégants */
+.status-badge {
+  padding: 6px 14px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 6px;
+  text-transform: uppercase;
+  display: inline-block;
+  min-width: 100px;
+  text-align: center;
+  letter-spacing: 0.5px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.status-paid {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+}
+
+.status-in-progress {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #ffffff;
+}
+
+.status-pending {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+}
+
+/* Barre de recherche et filtres élégants */
+.card-body.bg-light {
+  background: #f9fafb !important;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 18px 24px;
+}
+
+.input-group-text {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #ffffff;
+  border: 1px solid #667eea;
+  font-weight: 500;
+}
+
+.form-control,
+.form-select {
+  border: 1px solid #d1d5db;
+  font-size: 0.875rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  outline: none;
+}
+
+/* Pagination élégante */
+.card-footer.bg-light {
+  background: #f9fafb !important;
+  border-top: 1px solid #e5e7eb;
+  padding: 16px 24px;
+}
+
+.pagination {
+  margin: 0;
+}
+
+.pagination .page-link {
+  color: #667eea;
+  border: 1px solid #e5e7eb;
+  padding: 8px 14px;
+  font-size: 0.875rem;
+  border-radius: 6px;
+  margin: 0 2px;
+  transition: all 0.2s ease;
+}
+
+.pagination .page-link:hover {
+  background-color: #667eea;
+  border-color: #667eea;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+}
+
+.pagination .page-item.active .page-link {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+}
+
+.pagination .page-item.disabled .page-link {
+  color: #9ca3af;
+  cursor: not-allowed;
+  background-color: #ffffff;
+  border-color: #e5e7eb;
+  opacity: 0.5;
+}
+
+/* Messages d'information élégants */
+.alert-info {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border: 1px solid #93c5fd;
+  color: #1e40af;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 0.875rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Scrollbar élégant */
+.table-responsive::-webkit-scrollbar {
+  height: 10px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+  background: #f1f3f5;
+  border-radius: 10px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 10px;
+  border: 2px solid #f1f3f5;
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%);
+}
+
+/* En-tête de colonne avec contrôles */
+.column-header {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.column-controls {
+  display: flex;
+  gap: 2px;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.btn-move-col {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  cursor: pointer;
+  color: #6c757d;
+  font-size: 0.7rem;
+  transition: color 0.2s;
+  opacity: 0.6;
+}
+
+.btn-move-col:hover:not(:disabled) {
+  color: #0d6efd;
+  opacity: 1;
+}
+
+.btn-move-col:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Filtres style Excel dans l'en-tête */
+.filter-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+}
+
+.sort-btn {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  cursor: pointer;
+  color: #6c757d;
+  font-size: 0.75rem;
+  transition: color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sort-btn:hover {
+  color: #495057;
+}
+
+.sort-btn .fa-sort-up,
+.sort-btn .fa-sort-down {
+  color: #0d6efd;
+}
+
+.filter-btn {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  cursor: pointer;
+  color: #6c757d;
+  font-size: 0.75rem;
+  transition: color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-btn:hover {
+  color: #495057;
+}
+
+.filter-btn.active {
+  color: #0d6efd;
+}
+
+.filter-btn i {
+  font-size: 0.7rem;
+}
+
+.filter-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 1000;
+  background: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  padding: 8px;
+  min-width: 180px;
+  margin-top: 4px;
+}
+
+.filter-dropdown input,
+.filter-dropdown select {
+  font-size: 0.75rem;
+}
+
+.filter-dropdown .btn-link {
+  font-size: 0.7rem;
+  text-decoration: none;
+  color: #0d6efd;
+}
+
+.filter-dropdown .btn-link:hover {
+  text-decoration: underline;
+}
+
+.table-header-custom th {
+  position: relative;
+  vertical-align: middle;
+}
+
+/* Bouton Enregistrer élégant */
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-primary i {
+  margin-right: 6px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .lettrage-table {
+    font-size: 0.8rem;
+  }
+  
+  .table-header-custom th,
+  .lettrage-table td {
+    padding: 8px 6px;
+  }
+  
+  .status-badge {
+    font-size: 0.7rem;
+    padding: 4px 8px;
+    min-width: 80px;
+  }
+  
+  .filter-select {
+    width: 100px;
+    font-size: 0.7rem;
+  }
+}

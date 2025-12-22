@@ -1,0 +1,425 @@
+.btn-gradient {
+  background: linear-gradient(135deg, #00b4db, #0083b0);
+  color: white;
+  border: none;
+  border-radius: 25px;
+  font-weight: 500;
+  transition: 0.3s ease;
+}
+.btn-gradient:hover {
+  background: linear-gradient(135deg, #0090c4, #006a8e);
+}
+
+.btn1-gradient {
+  background: linear-gradient(135deg, #00db72, #0083b0);
+  color: white;
+  border: none;
+  border-radius: 25px;
+  font-weight: 500;
+  transition: 0.3s ease;
+}
+.btn1-gradient:hover {
+  background: linear-gradient(135deg, #00db72, #006a8e);
+}
+
+.btn2-gradient {
+  background: linear-gradient(135deg, #f093fb, #f5576c);
+  color: white;
+  border: none;
+  border-radius: 25px;
+  font-weight: 500;
+  transition: 0.3s ease;
+}
+.btn2-gradient:hover {
+  background: linear-gradient(135deg, #e085e8, #e04a5e);
+}
+
+
+.modal-elegant {
+  border-radius: 15px;
+  overflow: hidden;
+}
+
+.modal-header-custom {
+  background: linear-gradient(135deg, #00b4db, #0083b0);
+  color: white;
+  border-bottom: none;
+}
+
+.card {
+  border-radius: 12px;
+}
+
+.table-hover tbody tr:hover {
+  background-color: #f6f8fc;
+}
+
+.btn-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  border-radius: 8px;
+}
+.spinner-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60vh;
+  background: linear-gradient(to right, #161b2c, #2e2c3a);
+  border-radius: 10px;
+  color: #fff;
+}
+
+.custom-spinner {
+  width: 50px;
+  height: 50px;
+  border: 6px solid rgba(255, 255, 255, 0.1);
+  border-top: 6px solid #00bcd4;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-text {
+  margin-top: 12px;
+  font-size: 16px;
+  letter-spacing: 1px;
+  color: #cccccc;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.modal-body {
+  padding-bottom: 120px;
+}
+.btn-outline-purple {
+  color: purple;
+  border-color: purple;
+}
+.modern-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  padding: 14px 20px;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+  color: white;
+  font-size: 15px;
+  z-index: 9999;
+  animation: fadein 0.4s ease-out, fadeout 0.4s ease-in 4.6s;
+  min-width: 250px;
+}
+
+.toast-success {
+  background-color: #198754;
+}
+
+.toast-error {
+  background-color: #dc3545;
+}
+
+.toast-icon {
+  margin-right: 10px;
+  font-size: 18px;
+}
+
+@keyframes fadein {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeout {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+
+/* ============================================
+   STYLES VISUELS POUR LA MODAL DE TRANSFERT
+   ============================================ */
+
+#modalCommandeLivraisonXL .modal-dialog {
+  margin: 1rem auto;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#modalCommandeLivraisonXL .modal-content {
+  border: none;
+  border-radius: 15px;
+  overflow: hidden;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.25);
+  background: #ffffff;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#modalCommandeLivraisonXL .modal-header-custom {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 15px 20px;
+  border-bottom: none;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+#modalCommandeLivraisonXL .modal-header-custom::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  animation: shimmer 3s infinite;
+}
+
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+#modalCommandeLivraisonXL .modal-header-custom .modal-title {
+  font-weight: 700;
+  font-size: 1.2rem;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  position: relative;
+  z-index: 1;
+}
+
+#modalCommandeLivraisonXL .modal-header-custom .btn-close {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  opacity: 0.9;
+  transition: all 0.3s ease;
+  position: relative;
+  z-index: 1;
+  font-size: 0.9rem;
+}
+
+#modalCommandeLivraisonXL .modal-header-custom .btn-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+  opacity: 1;
+  transform: rotate(90deg);
+}
+
+#modalCommandeLivraisonXL .modal-body {
+  padding: 15px 20px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  overflow-y: auto;
+  flex: 1 1 auto;
+  max-height: calc(90vh - 70px);
+}
+
+#modalCommandeLivraisonXL .modal-body > .row:first-child {
+  background: white;
+  padding: 12px 15px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  margin-bottom: 15px;
+  border: 1px solid rgba(102, 126, 234, 0.1);
+}
+
+#modalCommandeLivraisonXL .btn-success {
+  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 20px;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.3px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(17, 153, 142, 0.4);
+}
+
+#modalCommandeLivraisonXL .btn-success:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0d7a71 0%, #2dd36a 100%);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 35px rgba(17, 153, 142, 0.5);
+  color: white;
+}
+
+#modalCommandeLivraisonXL .btn-success:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+#modalCommandeLivraisonXL .badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 12px;
+  box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
+}
+
+#modalCommandeLivraisonXL .dataTables_wrapper {
+  background: white;
+  border-radius: 12px;
+  padding: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(102, 126, 234, 0.1);
+}
+
+#modalCommandeLivraisonXL #commandesTable-commandes {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+#modalCommandeLivraisonXL #commandesTable-commandes thead {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+#modalCommandeLivraisonXL #commandesTable-commandes thead th {
+  border: none;
+  padding: 10px 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+#modalCommandeLivraisonXL #commandesTable-commandes tbody tr {
+  transition: all 0.2s ease;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+#modalCommandeLivraisonXL #commandesTable-commandes tbody tr:hover {
+  background: linear-gradient(90deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%) !important;
+  transform: translateX(3px);
+}
+
+#modalCommandeLivraisonXL #commandesTable-commandes tbody tr td {
+  padding: 10px 8px;
+  vertical-align: middle;
+  font-size: 13px;
+}
+
+#modalCommandeLivraisonXL #commandesTable-commandes tbody tr td strong,
+#modalCommandeLivraisonXL #commandesTable-commandes tbody tr td .text-primary {
+  color: #667eea;
+  font-weight: 700;
+}
+
+#modalCommandeLivraisonXL #commandesTable-commandes tbody tr td input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  border: 2px solid #667eea;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+#modalCommandeLivraisonXL #commandesTable-commandes tbody tr td input[type="checkbox"]:checked {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
+}
+
+#modalCommandeLivraisonXL #commandesTable-commandes tbody tr td input[type="checkbox"]:hover {
+  border-color: #764ba2;
+  transform: scale(1.1);
+}
+
+#modalCommandeLivraisonXL #commandesTable-commandes tbody tr td .btn-outline-info {
+  background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(23, 162, 184, 0.2);
+}
+
+#modalCommandeLivraisonXL #commandesTable-commandes tbody tr td .btn-outline-info:hover {
+  background: linear-gradient(135deg, #138496 0%, #117a8b 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(23, 162, 184, 0.3);
+  color: white;
+}
+
+#modalCommandeLivraisonXL #commandesTable-commandes tbody tr td .btn-outline-secondary {
+  background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(108, 117, 125, 0.2);
+}
+
+#modalCommandeLivraisonXL #commandesTable-commandes tbody tr td .btn-outline-secondary:hover {
+  background: linear-gradient(135deg, #5a6268 0%, #495057 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(108, 117, 125, 0.3);
+  color: white;
+}
+
+#modalCommandeLivraisonXL .dataTables_filter input,
+#modalCommandeLivraisonXL .dataTables_length select {
+  border-radius: 6px;
+  border: 1.5px solid #e0e0e0;
+  padding: 5px 10px;
+  font-size: 0.85rem;
+  transition: all 0.3s ease;
+}
+
+#modalCommandeLivraisonXL .dataTables_filter input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  outline: none;
+}
+
+#modalCommandeLivraisonXL .dataTables_length select:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  outline: none;
+}
+
+#modalCommandeLivraisonXL .dataTables_paginate .paginate_button {
+  border-radius: 8px;
+  margin: 0 2px;
+  transition: all 0.2s ease;
+}
+
+#modalCommandeLivraisonXL .dataTables_paginate .paginate_button:hover {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white !important;
+  border-color: transparent;
+  transform: translateY(-2px);
+}
+
+#modalCommandeLivraisonXL .dataTables_paginate .paginate_button.current {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white !important;
+  border-color: transparent;
+}
+
+/* Style pour le bouton de facturation désactivé */
+.btn-outline-success:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #e9ecef !important;
+  border-color: #dee2e6 !important;
+  color: #6c757d !important;
+}
+

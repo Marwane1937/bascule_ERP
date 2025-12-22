@@ -1,0 +1,29 @@
+--- ALL COUNTERS ---
+Code: [AV], Compteur: 0, Libelle: N/A
+Code: [AVC ], Compteur: 0, Libelle: N/A
+Code: [BC], Compteur: 6, Libelle: N/A
+Code: [BCC ], Compteur: 0, Libelle: N/A
+Code: [BCF ], Compteur: 0, Libelle: N/A
+Code: [BLC ], Compteur: 7, Libelle: N/A
+Code: [BLF ], Compteur: 0, Libelle: N/A
+Code: [BS], Compteur: 0, Libelle: N/A
+Code: [CAI ], Compteur: 0, Libelle: N/A
+Code: [CD], Compteur: 2, Libelle: N/A
+Code: [CDB], Compteur: 2, Libelle: N/A
+Code: [CLI ], Compteur: 0, Libelle: N/A
+Code: [CR], Compteur: 2, Libelle: N/A
+Code: [CRB], Compteur: 2, Libelle: N/A
+Code: [DAP], Compteur: 0, Libelle: N/A
+Code: [DB  ], Compteur: 0, Libelle: N/A
+Code: [DV], Compteur: 4, Libelle: N/A
+Code: [DVC], Compteur: 3, Libelle: N/A
+Code: [ENC ], Compteur: 0, Libelle: N/A
+Code: [FA], Compteur: 3, Libelle: N/A
+Code: [FAC ], Compteur: 0, Libelle: N/A
+Code: [FAF], Compteur: 0, Libelle: N/A
+Code: [FRS ], Compteur: 0, Libelle: N/A
+Code: [RC], Compteur: 0, Libelle: N/A
+Code: [REC], Compteur: 0, Libelle: N/A
+Code: [REG], Compteur: 2, Libelle: N/A
+Code: [RTC], Compteur: 0, Libelle: N/A
+Code: [TRS ], Compteur: 0, Libelle: N/A

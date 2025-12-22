@@ -1,0 +1,21 @@
+<nav class="navbar">
+  <div class="navbar-brand">
+    <h1>Système de Gestion</h1>
+  </div>
+  
+          <div class="navbar-user" *ngIf="currentUser">
+            <!-- Sélecteur de base de données -->
+            <div class="database-selector-container">
+              <app-database-selector></app-database-selector>
+            </div>
+            
+            <div class="user-info">
+              <span class="user-name">{{ currentUser.nom || currentUser.login || 'Utilisateur' }}</span>
+              <span class="user-role">{{ getRoleDisplayName(currentUser.type) }}</span>
+            </div>
+            <button class="logout-btn" (click)="logout()" title="Se déconnecter">
+              <i class="fas fa-sign-out-alt"></i>
+              Déconnexion
+            </button>
+          </div>
+</nav>

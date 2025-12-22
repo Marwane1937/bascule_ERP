@@ -1,0 +1,155 @@
+<div class="societe-management-container">
+  <div class="management-header">
+    <h1>Gestion des Sociétés et Documents</h1>
+    <p>Configurez les documents (logo, en-tête, pied de page) pour chaque société</p>
+  </div>
+
+  <!-- Messages -->
+  <div *ngIf="successMessage" class="alert alert-success">
+    {{ successMessage }}
+  </div>
+  
+  <div *ngIf="errorMessage" class="alert alert-error">
+    {{ errorMessage }}
+  </div>
+
+  <div class="management-content">
+    <!-- Liste des sociétés -->
+    <div class="societes-list">
+      <h2>Sociétés disponibles</h2>
+      <div *ngIf="isLoading" class="loading">
+        <div class="spinner"></div>
+        Chargement des sociétés...
+      </div>
+      
+      <div *ngIf="!isLoading && societes.length === 0" class="no-data">
+        Aucune société trouvée
+      </div>
+
+      <div class="societe-cards">
+        <div 
+          *ngFor="let societe of societes" 
+          class="societe-card"
+          [class.selected]="selectedSociete?.id === societe.id"
+          (click)="selectSociete(societe)"
+        >
+          <div class="societe-info">
+            <h3>{{ societe.nom }}</h3>
+            <p class="societe-base">{{ societe.nom_base }}</p>
+            <div class="status">
+              <span [class]="societe.actif ? 'status-active' : 'status-inactive'">
+                {{ societe.actif ? 'Actif' : 'Inactif' }}
+              </span>
+            </div>
+          </div>
+          
+          <div class="document-status">
+            <div class="status-item">
+              <i class="fas fa-image" [class.has-content]="societe.documentSociete?.logo"></i>
+              <span>Logo</span>
+            </div>
+            <div class="status-item">
+              <i class="fas fa-heading" [class.has-content]="societe.documentSociete?.entete"></i>
+              <span>En-tête</span>
+            </div>
+            <div class="status-item">
+              <i class="fas fa-file-alt" [class.has-content]="societe.documentSociete?.pied_page"></i>
+              <span>Pied de page</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Formulaire de configuration -->
+    <div class="document-form" *ngIf="selectedSociete">
+      <div class="form-header">
+        <h2>Configuration des documents</h2>
+        <p>Société : <strong>{{ selectedSociete.nom }}</strong></p>
+        <button class="btn btn-secondary" (click)="resetForm()">
+          <i class="fas fa-times"></i>
+          Fermer
+        </button>
+      </div>
+
+      <form (ngSubmit)="saveDocuments()" class="document-config-form">
+        <!-- Logo -->
+        <div class="form-section">
+          <h3><i class="fas fa-image"></i> Logo de la société</h3>
+          <div class="logo-upload">
+            <div class="logo-preview" *ngIf="logoPreview">
+              <img [src]="logoPreview" alt="Logo preview" class="preview-image">
+            </div>
+            <div class="upload-area">
+              <input 
+                type="file" 
+                id="logo" 
+                accept="image/*" 
+                (change)="onLogoSelected($event)"
+                class="file-input"
+              >
+              <label for="logo" class="upload-label">
+                <i class="fas fa-upload"></i>
+                {{ logoPreview ? 'Changer le logo' : 'Sélectionner un logo' }}
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- En-tête -->
+        <div class="form-section">
+          <h3><i class="fas fa-heading"></i> En-tête des documents</h3>
+          <div class="form-group">
+            <label for="entete">Contenu de l'en-tête (HTML autorisé)</label>
+            <textarea
+              id="entete"
+              [(ngModel)]="documentForm.entete"
+              name="entete"
+              class="form-control textarea-large"
+              placeholder="Exemple: <h2>NOM DE VOTRE SOCIÉTÉ</h2><p>Adresse complète</p><p>Téléphone | Email</p>"
+              rows="6"
+            ></textarea>
+            <small class="form-help">Vous pouvez utiliser du HTML pour formater l'en-tête</small>
+          </div>
+        </div>
+
+        <!-- Pied de page -->
+        <div class="form-section">
+          <h3><i class="fas fa-file-alt"></i> Pied de page des documents</h3>
+          <div class="form-group">
+            <label for="pied_page">Contenu du pied de page</label>
+            <textarea
+              id="pied_page"
+              [(ngModel)]="documentForm.pied_page"
+              name="pied_page"
+              class="form-control"
+              placeholder="Exemple: RC Casablanca 147263 - IF 1680876 - Patente 37964603"
+              rows="3"
+            ></textarea>
+            <small class="form-help">Texte qui apparaîtra en bas de chaque document</small>
+          </div>
+        </div>
+
+        <!-- Boutons -->
+        <div class="form-actions">
+          <button 
+            type="button" 
+            class="btn btn-secondary" 
+            (click)="resetForm()"
+            [disabled]="isLoading"
+          >
+            Annuler
+          </button>
+          <button 
+            type="submit" 
+            class="btn btn-primary" 
+            [disabled]="isLoading"
+          >
+            <span *ngIf="isLoading" class="spinner"></span>
+            {{ isLoading ? 'Sauvegarde...' : 'Sauvegarder' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

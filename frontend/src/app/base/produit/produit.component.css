@@ -1,0 +1,68 @@
+.btn-gradient {
+  background: linear-gradient(135deg, #00b4db, #0083b0);
+  color: white;
+  border: none;
+  border-radius: 25px;
+  font-weight: 500;
+  transition: 0.3s ease;
+}
+.btn-gradient:hover {
+  background: linear-gradient(135deg, #0090c4, #006a8e);
+}
+
+.modal-elegant {
+  border-radius: 15px;
+  overflow: hidden;
+}
+
+.modal-header-custom {
+  background: linear-gradient(135deg, #00b4db, #0083b0);
+  color: white;
+  border-bottom: none;
+}
+
+.card {
+  border-radius: 12px;
+}
+
+.table-hover tbody tr:hover {
+  background-color: #f6f8fc;
+}
+
+.btn-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  border-radius: 8px;
+}
+.spinner-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60vh;
+  background: linear-gradient(to right, #161b2c, #2e2c3a);
+  border-radius: 10px;
+  color: #fff;
+}
+
+.custom-spinner {
+  width: 50px;
+  height: 50px;
+  border: 6px solid rgba(255, 255, 255, 0.1);
+  border-top: 6px solid #00bcd4;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-text {
+  margin-top: 12px;
+  font-size: 16px;
+  letter-spacing: 1px;
+  color: #cccccc;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

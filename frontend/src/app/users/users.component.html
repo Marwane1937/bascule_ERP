@@ -1,0 +1,185 @@
+<div class="container-fluid">
+  <!-- Header Section -->
+  <div class="row">
+    <div class="col-12">
+      <div class="page-header">
+        <div class="page-header-content">
+          <div class="page-header-info">
+            <h1 class="page-title">
+              <i class="fas fa-users"></i>
+              Gestion des Utilisateurs
+            </h1>
+            <p class="page-subtitle">Gérez les utilisateurs du système et leurs permissions</p>
+          </div>
+          <div class="page-header-actions">
+            <button class="btn btn-primary btn-lg" (click)="addUser()">
+              <i class="fas fa-plus"></i>
+              Ajouter un utilisateur
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="row mb-4">
+    <div class="col-md-3">
+      <div class="stats-card">
+        <div class="stats-icon">
+          <i class="fas fa-users text-primary"></i>
+        </div>
+        <div class="stats-content">
+          <h3>{{ getTotalUsers() }}</h3>
+          <p>Total Utilisateurs</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="stats-card">
+        <div class="stats-icon">
+          <i class="fas fa-user-check text-success"></i>
+        </div>
+        <div class="stats-content">
+          <h3>{{ getActiveUsers() }}</h3>
+          <p>Utilisateurs Actifs</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="stats-card">
+        <div class="stats-icon">
+          <i class="fas fa-user-shield text-danger"></i>
+        </div>
+        <div class="stats-content">
+          <h3>{{ getAdminUsers() }}</h3>
+          <p>Administrateurs</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="stats-card">
+        <div class="stats-icon">
+          <i class="fas fa-user-clock text-warning"></i>
+        </div>
+        <div class="stats-content">
+          <h3>{{ getInactiveUsers() }}</h3>
+          <p>Utilisateurs Inactifs</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Users Table -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-header-content">
+            <h4 class="card-title">
+              <i class="fas fa-list"></i>
+              Liste des Utilisateurs
+            </h4>
+            <div class="card-header-actions">
+              <button class="btn btn-outline-primary btn-sm" (click)="getUsers()">
+                <i class="fas fa-sync-alt"></i>
+                Actualiser
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          <!-- Loading Spinner -->
+          <div *ngIf="loading" class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+              <span class="sr-only">Chargement...</span>
+            </div>
+            <p class="mt-3 text-muted">Chargement des utilisateurs...</p>
+          </div>
+
+          <!-- Users Table -->
+          <div *ngIf="!loading" class="table-responsive">
+            <table id="usersTable" class="table table-striped table-hover">
+              <thead class="thead-dark">
+                <tr>
+                  <th>Nom</th>
+                  <th>Email</th>
+                  <th>Nom d'utilisateur</th>
+                  <th>Rôle</th>
+                  <th>Statut</th>
+                  <th>Dernière connexion</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let user of users">
+                  <td>
+                    <div class="user-info">
+                      <div class="user-avatar">
+                        <i class="fas fa-user"></i>
+                      </div>
+                      <div class="user-details">
+                        <strong>{{ user.nom }}</strong>
+                        <small class="text-muted d-block">ID: {{ user.id }}</small>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="email">{{ user.nom }}</span>
+                  </td>
+                  <td>
+                    <span class="username">{{ user.login }}</span>
+                  </td>
+                  <td>
+                    <span class="badge" [ngClass]="getRoleBadgeClass(user.type)">
+                      {{ getRoleDisplayName(user.type) }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="badge" [ngClass]="isUserActive(user) ? 'badge-success' : 'badge-danger'">
+                      <i class="fas" [ngClass]="isUserActive(user) ? 'fa-check' : 'fa-times'"></i>
+                      {{ isUserActive(user) ? 'Actif' : 'Inactif' }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="last-login">{{ formatDate(user.expire_dat) }}</span>
+                  </td>
+                  <td>
+                    <div class="btn-group" role="group">
+                      <button class="btn btn-outline-primary btn-sm" (click)="editUser(user)" title="Modifier">
+                        <i class="fas fa-edit"></i>
+                      </button>
+                      <button class="btn btn-outline-warning btn-sm" (click)="resetPassword(user)"
+                        title="Réinitialiser le mot de passe">
+                        <i class="fas fa-key"></i>
+                      </button>
+                      <button class="btn btn-outline-secondary btn-sm" (click)="toggleUserStatus(user)"
+                        [title]="isUserActive(user) ? 'Désactiver' : 'Activer'">
+                        <i class="fas" [ngClass]="isUserActive(user) ? 'fa-user-slash' : 'fa-user-check'"></i>
+                      </button>
+                      <button class="btn btn-outline-danger btn-sm" (click)="deleteUser(user)" title="Supprimer"
+                        [disabled]="user.id === currentUser?.id">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- No Users Message -->
+          <div *ngIf="hasNoUsers()" class="text-center py-5">
+            <i class="fas fa-users fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">Aucun utilisateur trouvé</h5>
+            <p class="text-muted">Commencez par ajouter votre premier utilisateur.</p>
+            <button class="btn btn-primary" (click)="addUser()">
+              <i class="fas fa-plus"></i>
+              Ajouter un utilisateur
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

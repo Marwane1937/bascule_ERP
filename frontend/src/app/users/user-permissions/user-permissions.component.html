@@ -1,0 +1,150 @@
+<div class="container-fluid user-permissions-page">
+  <!-- Header -->
+  <div class="row">
+    <div class="col-12">
+      <div class="page-header">
+        <div class="page-header-content">
+          <div class="page-header-info">
+            <h1 class="page-title">
+              <i class="fas fa-user-shield"></i>
+              Gestion des Utilisateurs
+            </h1>
+          </div>
+          <div class="page-header-actions">
+            <button class="btn btn-primary btn-lg" (click)="loadUsers()">
+              <i class="fas fa-sync-alt"></i>
+              Actualiser
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Selection -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="user-selector-card">
+        <label for="userSelect" class="user-selector-label">Sélectionner un utilisateur</label>
+        <select 
+          id="userSelect" 
+          class="form-control user-selector" 
+          [(ngModel)]="selectedUserId"
+          (change)="onUserSelect(selectedUserId)"
+          [disabled]="loading">
+          <option [ngValue]="null">-- Sélectionner un utilisateur --</option>
+          <option *ngFor="let user of safeUsers" [ngValue]="user.id">
+            {{ user.nom }} ({{ user.login }})
+          </option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Actions -->
+  <div class="row mb-4" *ngIf="selectedUser">
+    <div class="col-12">
+      <div class="user-actions-card">
+        <div class="user-info-display">
+          <strong>{{ selectedUser.nom }}</strong>
+        </div>
+        <div class="user-actions">
+          <p class="action-text">Souhaitez-vous réinitialiser le mot de passe de cet utilisateur ?</p>
+          <button class="btn btn-warning btn-sm" (click)="resetPassword()">
+            <i class="fas fa-key"></i>
+            Réinitialiser le mot de passe
+          </button>
+          <p class="action-text mt-3">Souhaitez-vous supprimer cet utilisateur ?</p>
+          <button class="btn btn-danger btn-sm delete-btn" (click)="deleteUser()">
+            <i class="fas fa-trash"></i>
+            Cliquer ICI
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Permissions Cards by Category -->
+  <div class="row" *ngIf="selectedUser && !loading">
+    <div class="col-md-6 col-lg-4 mb-4" *ngFor="let category of safeMenuCategories">
+      <div class="permission-card">
+        <div class="card-header-custom">
+          <i [class]="category.icon"></i>
+          <h3 class="card-title-custom">{{ category.category }}</h3>
+        </div>
+        <div class="card-body-custom">
+          <!-- Case à cocher "Tout sélectionner" pour la catégorie -->
+          <div class="category-select-all">
+            <label class="permission-checkbox category-checkbox">
+              <input 
+                type="checkbox" 
+                [checked]="isAllCategoryItemsChecked(category)"
+                [indeterminate]="isSomeCategoryItemsChecked(category) && !isAllCategoryItemsChecked(category)"
+                (change)="toggleCategoryPermissions(category)"
+                class="checkbox-input">
+              <span class="checkbox-custom"></span>
+              <span class="permission-label category-label">
+                <strong>Tout sélectionner</strong>
+              </span>
+            </label>
+          </div>
+          <hr class="category-divider">
+          <div class="permissions-list">
+            <div class="permission-item" *ngFor="let item of category.items">
+              <label class="permission-checkbox">
+                <input 
+                  type="checkbox" 
+                  [checked]="hasPermission(item.name)"
+                  (change)="togglePermission(item.name)"
+                  class="checkbox-input">
+                <span class="checkbox-custom"></span>
+                <span class="permission-label">{{ item.name }}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Save Button -->
+  <div class="row" *ngIf="selectedUser && !loading">
+    <div class="col-12">
+      <div class="save-actions">
+        <button 
+          class="btn btn-success btn-lg" 
+          (click)="savePermissions()"
+          [disabled]="saving">
+          <i class="fas fa-save"></i>
+          {{ saving ? 'Enregistrement...' : 'Enregistrer les permissions' }}
+        </button>
+        <button 
+          class="btn btn-warning btn-lg ml-2" 
+          (click)="disconnectUser()"
+          *ngIf="selectedUser">
+          <i class="fas fa-sign-out-alt"></i>
+          Déconnecter l'utilisateur
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div class="row" *ngIf="loading">
+    <div class="col-12 text-center py-5">
+      <div class="spinner-border text-primary" role="status">
+        <span class="sr-only">Chargement...</span>
+      </div>
+      <p class="mt-3 text-muted">Chargement des permissions...</p>
+    </div>
+  </div>
+
+  <!-- No User Selected -->
+  <div class="row" *ngIf="!selectedUser && !loading">
+    <div class="col-12 text-center py-5">
+      <i class="fas fa-user fa-3x text-muted mb-3"></i>
+      <h5 class="text-muted">Aucun utilisateur sélectionné</h5>
+      <p class="text-muted">Veuillez sélectionner un utilisateur pour gérer ses permissions</p>
+    </div>
+  </div>
+</div>

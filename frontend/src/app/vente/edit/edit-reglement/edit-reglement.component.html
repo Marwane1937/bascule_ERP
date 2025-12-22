@@ -1,0 +1,714 @@
+<div class="container-fluid py-4 px-3">
+    <!-- En-tête -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 border-bottom pb-3">
+        <div>
+            <h4 class="mb-1">{{ isEditMode ? '✏️ Modifier' : '➕ Ajouter' }} Règlement</h4>
+            <div class="small text-muted">/ Finance / Règlements / {{ isEditMode ? 'Modifier' : 'Ajouter' }}</div>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-secondary" (click)="onCancel()">
+                <i class="fas fa-times me-1"></i> Annuler
+            </button>
+            <button class="btn btn-success" (click)="onSubmit()" [disabled]="loading">
+                <i class="fas fa-save me-1"></i> {{ loading ? 'Enregistrement...' : 'Enregistrer' }}
+            </button>
+        </div>
+    </div>
+
+    <!-- Message de notification -->
+    <div
+        *ngIf="successMessage"
+        class="modern-toast"
+        [ngClass]="{ 'toast-success': !isError, 'toast-error': isError }"
+    >
+        <span class="toast-icon">
+            <i *ngIf="!isError" class="bi bi-check-circle-fill"></i>
+            <i *ngIf="isError" class="bi bi-exclamation-triangle-fill"></i>
+        </span>
+        <span class="toast-message">{{ successMessage }}</span>
+    </div>
+
+    <!-- Formulaire -->
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="card border-0 shadow-sm rounded-3">
+                <div class="card-body p-4">
+                    <form [formGroup]="reglementForm" (ngSubmit)="onSubmit()">
+                        <div class="row g-3">
+                            <!-- Numéro -->
+                            <div class="col-md-6">
+                                <label class="form-label">
+                                    Numéro <span class="text-danger">*</span>
+                                </label>
+                                <input 
+                                    type="text" 
+                                    class="form-control"
+                                    formControlName="numero"
+                                    [class.is-invalid]="reglementForm.get('numero')?.invalid && reglementForm.get('numero')?.touched"
+                                    placeholder="Numéro du règlement">
+                                <div *ngIf="reglementForm.get('numero')?.invalid && reglementForm.get('numero')?.touched" 
+                                     class="invalid-feedback">
+                                    Le numéro est obligatoire
+                                </div>
+                            </div>
+
+                            <!-- Date -->
+                            <div class="col-md-6">
+                                <label class="form-label">
+                                    Date <span class="text-danger">*</span>
+                                </label>
+                                <input 
+                                    type="date" 
+                                    class="form-control"
+                                    formControlName="date"
+                                    [class.is-invalid]="reglementForm.get('date')?.invalid && reglementForm.get('date')?.touched">
+                                <div *ngIf="reglementForm.get('date')?.invalid && reglementForm.get('date')?.touched" 
+                                     class="invalid-feedback">
+                                    La date est obligatoire
+                                </div>
+                            </div>
+
+                            <!-- Client -->
+                            <div class="col-md-6">
+                                <label class="form-label">
+                                    Client <span class="text-danger">*</span>
+                                </label>
+                                <div class="position-relative">
+                                    <input 
+                                        type="text" 
+                                        class="form-control"
+                                        formControlName="clientSearch"
+                                        [class.is-invalid]="reglementForm.get('clientSearch')?.invalid && reglementForm.get('clientSearch')?.touched"
+                                        placeholder="Rechercher un client..."
+                                        autocomplete="off">
+                                    <ul *ngIf="reglementForm.get('clientSearch')?.value && filteredClients.length > 0"
+                                        class="list-group position-absolute w-100 shadow"
+                                        style="max-height: 200px; overflow-y: auto; z-index: 1050;">
+                                        <li class="list-group-item list-group-item-action"
+                                            *ngFor="let client of filteredClients"
+                                            (click)="selectClient(client)"
+                                            style="cursor: pointer;">
+                                            {{ client.nom }}
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div *ngIf="reglementForm.get('clientSearch')?.invalid && reglementForm.get('clientSearch')?.touched" 
+                                     class="invalid-feedback">
+                                    Le client est obligatoire
+                                </div>
+                            </div>
+
+                            <!-- Mode de règlement -->
+                            <div class="col-md-6">
+                                <label class="form-label">
+                                    Mode de règlement <span class="text-danger">*</span>
+                                </label>
+                                <select 
+                                    class="form-select"
+                                    formControlName="mode"
+                                    [class.is-invalid]="reglementForm.get('mode')?.invalid && reglementForm.get('mode')?.touched">
+                                    <option [value]="null" disabled>Choisir un mode</option>
+                                    <option *ngFor="let mode of modesReglement" [value]="mode.id">
+                                        {{ mode.nom }}
+                                    </option>
+                                </select>
+                                <div *ngIf="reglementForm.get('mode')?.invalid && reglementForm.get('mode')?.touched" 
+                                     class="invalid-feedback">
+                                    Le mode de règlement est obligatoire
+                                </div>
+                            </div>
+
+                            <!-- Référence -->
+                            <div class="col-md-6">
+                                <label class="form-label">Référence</label>
+                                <input 
+                                    type="text" 
+                                    class="form-control"
+                                    formControlName="reference"
+                                    placeholder="Référence (optionnel)">
+                            </div>
+
+                            <!-- Montant -->
+                            <div class="col-md-6">
+                                <label class="form-label">
+                                    Montant <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group">
+                                    <input 
+                                        type="number" 
+                                        class="form-control"
+                                        formControlName="montant"
+                                        step="0.01"
+                                        min="0.01"
+                                        [class.is-invalid]="reglementForm.get('montant')?.invalid && reglementForm.get('montant')?.touched"
+                                        placeholder="0.00">
+                                    <span class="input-group-text">DH</span>
+                                </div>
+                                <div *ngIf="reglementForm.get('montant')?.invalid && reglementForm.get('montant')?.touched" 
+                                     class="invalid-feedback">
+                                    Le montant est obligatoire et doit être supérieur à 0
+                                </div>
+                                <div *ngIf="factures.length > 0" class="mt-2">
+                                    <small class="text-muted">
+                                        Montant restant: <strong>{{ montantRestant | number:'1.2-2' }} DH</strong>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Boutons -->
+                        <div class="row mt-4">
+                            <div class="col-12 text-end">
+                                <button type="button" class="btn btn-secondary me-2" (click)="onCancel()">
+                                    <i class="fas fa-times me-1"></i> Annuler
+                                </button>
+                                <button type="submit" class="btn btn-success" [disabled]="loading || reglementForm.invalid">
+                                    <i class="fas fa-save me-1"></i> 
+                                    {{ loading ? 'Enregistrement...' : (isEditMode ? 'Modifier' : 'Créer') }}
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tableau des factures pour le lettrage -->
+    <div class="row mt-4" *ngIf="reglementForm.get('part_id')?.value && reglementForm.get('part_id')?.value > 0">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm lettrage-card">
+                <div class="card-header bg-gradient-primary">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <h5 class="mb-0 text-white">
+                            <i class="fas fa-file-invoice me-2"></i>
+                            Factures du client - Lettrage
+                        </h5>
+                        <div class="d-flex align-items-center gap-3">
+                            <div *ngIf="infoMessage" class="alert alert-info mb-0 py-2 px-3" style="font-size: 0.875rem;">
+                                <i class="fas fa-info-circle me-2"></i>{{ infoMessage }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Barre de recherche et filtres -->
+                <div class="card-body border-bottom p-3 bg-light" *ngIf="!loadingFactures && factures.length > 0">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">Recherche rapide</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                <input 
+                                    type="text" 
+                                    class="form-control form-control-sm"
+                                    [(ngModel)]="searchFilter"
+                                    (ngModelChange)="onSearchChange()"
+                                    placeholder="Rechercher par numéro ou date...">
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">Par page</label>
+                            <select class="form-select form-select-sm" [(ngModel)]="pageSize" (change)="changePageSize(pageSize)">
+                                <option [value]="10">10</option>
+                                <option [value]="25">25</option>
+                                <option [value]="50">50</option>
+                                <option [value]="100">100</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 text-end">
+                            <div class="small text-muted">
+                                <strong>{{ filteredFactures.length }}</strong> facture(s) trouvée(s)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card-body p-0">
+                    <div *ngIf="loadingFactures" class="text-center p-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Chargement...</span>
+                        </div>
+                        <p class="mt-2 text-muted">Chargement des factures...</p>
+                    </div>
+                    
+                    <div *ngIf="!loadingFactures && factures.length === 0" class="text-center p-4">
+                        <p class="text-muted">Aucune facture trouvée pour ce client</p>
+                    </div>
+                    
+                    <div *ngIf="!loadingFactures && factures.length > 0 && filteredFactures.length === 0" class="text-center p-4">
+                        <p class="text-muted">Aucune facture ne correspond à votre recherche</p>
+                    </div>
+                    
+                    <div *ngIf="!loadingFactures && filteredFactures.length > 0" class="table-responsive">
+                        <table class="table mb-0 lettrage-table">
+                            <thead class="table-header-custom">
+                                <tr>
+                                    <!-- Colonne Checkbox -->
+                                    <th *ngIf="getColumnIndex('checkbox') >= 0" 
+                                        [style.order]="getColumnIndex('checkbox')"
+                                        class="text-center" 
+                                        style="width: 50px;">
+                                        <input 
+                                            type="checkbox" 
+                                            class="form-check-input"
+                                            [checked]="isAllSelected()"
+                                            [indeterminate]="isSomeSelected()"
+                                            (change)="toggleAllFactures($event)">
+                                    </th>
+                                    
+                                    <!-- Colonne Numéro -->
+                                    <th *ngIf="getColumnIndex('numero') >= 0" 
+                                        [style.order]="getColumnIndex('numero')">
+                                        <div class="column-header">
+                                            <div class="column-controls">
+                                                <button 
+                                                    type="button" 
+                                                    class="btn-move-col"
+                                                    (click)="moveColumn('numero', 'left')"
+                                                    [disabled]="!canMoveColumn('numero', 'left')"
+                                                    title="Déplacer à gauche">
+                                                    <i class="fas fa-chevron-left"></i>
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    class="btn-move-col"
+                                                    (click)="moveColumn('numero', 'right')"
+                                                    [disabled]="!canMoveColumn('numero', 'right')"
+                                                    title="Déplacer à droite">
+                                                    <i class="fas fa-chevron-right"></i>
+                                                </button>
+                                            </div>
+                                            <div class="filter-header">
+                                                <span>Numéro</span>
+                                                <button 
+                                                    type="button" 
+                                                    class="filter-btn"
+                                                    (click)="toggleFilterNumero()"
+                                                    [class.active]="showFilterNumero || filterNumero">
+                                                    <i class="fas fa-filter"></i>
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    class="sort-btn"
+                                                    (click)="onSort('numero')"
+                                                    title="Trier">
+                                                    <i class="fas" [ngClass]="getSortIcon('numero')"></i>
+                                                </button>
+                                                <div class="filter-dropdown" *ngIf="showFilterNumero" (click)="$event.stopPropagation()">
+                                                    <input 
+                                                        type="text" 
+                                                        class="form-control form-control-sm"
+                                                        [(ngModel)]="filterNumero"
+                                                        (ngModelChange)="onFilterNumeroChange()"
+                                                        placeholder="Filtrer par numéro..."
+                                                        (click)="$event.stopPropagation()">
+                                                    <button 
+                                                        type="button" 
+                                                        class="btn btn-sm btn-link p-0 mt-1"
+                                                        (click)="clearFilterNumero()"
+                                                        *ngIf="filterNumero">
+                                                        Effacer
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </th>
+                                    
+                                    <!-- Colonne Date -->
+                                    <th *ngIf="getColumnIndex('date') >= 0" 
+                                        [style.order]="getColumnIndex('date')">
+                                        <div class="column-header">
+                                            <div class="column-controls">
+                                                <button 
+                                                    type="button" 
+                                                    class="btn-move-col"
+                                                    (click)="moveColumn('date', 'left')"
+                                                    [disabled]="!canMoveColumn('date', 'left')"
+                                                    title="Déplacer à gauche">
+                                                    <i class="fas fa-chevron-left"></i>
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    class="btn-move-col"
+                                                    (click)="moveColumn('date', 'right')"
+                                                    [disabled]="!canMoveColumn('date', 'right')"
+                                                    title="Déplacer à droite">
+                                                    <i class="fas fa-chevron-right"></i>
+                                                </button>
+                                            </div>
+                                            <div class="filter-header">
+                                                <span>Date</span>
+                                                <button 
+                                                    type="button" 
+                                                    class="sort-btn"
+                                                    (click)="onSort('date')"
+                                                    title="Trier">
+                                                    <i class="fas" [ngClass]="getSortIcon('date')"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </th>
+                                    
+                                    <!-- Colonne Facture -->
+                                    <th *ngIf="getColumnIndex('facture') >= 0" 
+                                        [style.order]="getColumnIndex('facture')"
+                                        class="text-end">
+                                        <div class="column-header">
+                                            <div class="column-controls">
+                                                <button 
+                                                    type="button" 
+                                                    class="btn-move-col"
+                                                    (click)="moveColumn('facture', 'left')"
+                                                    [disabled]="!canMoveColumn('facture', 'left')"
+                                                    title="Déplacer à gauche">
+                                                    <i class="fas fa-chevron-left"></i>
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    class="btn-move-col"
+                                                    (click)="moveColumn('facture', 'right')"
+                                                    [disabled]="!canMoveColumn('facture', 'right')"
+                                                    title="Déplacer à droite">
+                                                    <i class="fas fa-chevron-right"></i>
+                                                </button>
+                                            </div>
+                                            <div class="filter-header">
+                                                <span>Facture</span>
+                                                <button 
+                                                    type="button" 
+                                                    class="sort-btn"
+                                                    (click)="onSort('facture')"
+                                                    title="Trier">
+                                                    <i class="fas" [ngClass]="getSortIcon('facture')"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </th>
+                                    
+                                    <!-- Colonne Avoir -->
+                                    <th *ngIf="getColumnIndex('avoir') >= 0" 
+                                        [style.order]="getColumnIndex('avoir')"
+                                        class="text-end">
+                                        <div class="column-header">
+                                            <div class="column-controls">
+                                                <button 
+                                                    type="button" 
+                                                    class="btn-move-col"
+                                                    (click)="moveColumn('avoir', 'left')"
+                                                    [disabled]="!canMoveColumn('avoir', 'left')"
+                                                    title="Déplacer à gauche">
+                                                    <i class="fas fa-chevron-left"></i>
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    class="btn-move-col"
+                                                    (click)="moveColumn('avoir', 'right')"
+                                                    [disabled]="!canMoveColumn('avoir', 'right')"
+                                                    title="Déplacer à droite">
+                                                    <i class="fas fa-chevron-right"></i>
+                                                </button>
+                                            </div>
+                                            <div class="filter-header">
+                                                <span>Avoir</span>
+                                                <button 
+                                                    type="button" 
+                                                    class="sort-btn"
+                                                    (click)="onSort('avoir')"
+                                                    title="Trier">
+                                                    <i class="fas" [ngClass]="getSortIcon('avoir')"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </th>
+                                    
+                                    <!-- Colonne Règlement -->
+                                    <th *ngIf="getColumnIndex('reglement') >= 0" 
+                                        [style.order]="getColumnIndex('reglement')"
+                                        class="text-end">
+                                        <div class="column-header">
+                                            <div class="column-controls">
+                                                <button 
+                                                    type="button" 
+                                                    class="btn-move-col"
+                                                    (click)="moveColumn('reglement', 'left')"
+                                                    [disabled]="!canMoveColumn('reglement', 'left')"
+                                                    title="Déplacer à gauche">
+                                                    <i class="fas fa-chevron-left"></i>
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    class="btn-move-col"
+                                                    (click)="moveColumn('reglement', 'right')"
+                                                    [disabled]="!canMoveColumn('reglement', 'right')"
+                                                    title="Déplacer à droite">
+                                                    <i class="fas fa-chevron-right"></i>
+                                                </button>
+                                            </div>
+                                            <div class="filter-header">
+                                                <span>Règlement</span>
+                                                <button 
+                                                    type="button" 
+                                                    class="sort-btn"
+                                                    (click)="onSort('reglement')"
+                                                    title="Trier">
+                                                    <i class="fas" [ngClass]="getSortIcon('reglement')"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </th>
+                                    
+                                    <!-- Colonne Reste à payé -->
+                                    <th *ngIf="getColumnIndex('reste') >= 0" 
+                                        [style.order]="getColumnIndex('reste')"
+                                        class="text-end">
+                                        <div class="column-header">
+                                            <div class="column-controls">
+                                                <button 
+                                                    type="button" 
+                                                    class="btn-move-col"
+                                                    (click)="moveColumn('reste', 'left')"
+                                                    [disabled]="!canMoveColumn('reste', 'left')"
+                                                    title="Déplacer à gauche">
+                                                    <i class="fas fa-chevron-left"></i>
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    class="btn-move-col"
+                                                    (click)="moveColumn('reste', 'right')"
+                                                    [disabled]="!canMoveColumn('reste', 'right')"
+                                                    title="Déplacer à droite">
+                                                    <i class="fas fa-chevron-right"></i>
+                                                </button>
+                                            </div>
+                                            <div class="filter-header">
+                                                <span>Reste à payé</span>
+                                                <button 
+                                                    type="button" 
+                                                    class="sort-btn"
+                                                    (click)="onSort('reste')"
+                                                    title="Trier">
+                                                    <i class="fas" [ngClass]="getSortIcon('reste')"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </th>
+                                    
+                                    <!-- Colonne Solde -->
+                                    <th *ngIf="getColumnIndex('solde') >= 0" 
+                                        [style.order]="getColumnIndex('solde')"
+                                        class="text-end">
+                                        <div class="column-header">
+                                            <div class="column-controls">
+                                                <button 
+                                                    type="button" 
+                                                    class="btn-move-col"
+                                                    (click)="moveColumn('solde', 'left')"
+                                                    [disabled]="!canMoveColumn('solde', 'left')"
+                                                    title="Déplacer à gauche">
+                                                    <i class="fas fa-chevron-left"></i>
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    class="btn-move-col"
+                                                    (click)="moveColumn('solde', 'right')"
+                                                    [disabled]="!canMoveColumn('solde', 'right')"
+                                                    title="Déplacer à droite">
+                                                    <i class="fas fa-chevron-right"></i>
+                                                </button>
+                                            </div>
+                                            <div class="filter-header">
+                                                <span>Solde</span>
+                                                <button 
+                                                    type="button" 
+                                                    class="sort-btn"
+                                                    (click)="onSort('solde')"
+                                                    title="Trier">
+                                                    <i class="fas" [ngClass]="getSortIcon('solde')"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </th>
+                                    
+                                    <!-- Colonne Statut -->
+                                    <th *ngIf="getColumnIndex('statut') >= 0" 
+                                        [style.order]="getColumnIndex('statut')"
+                                        class="text-center">
+                                        <div class="column-header">
+                                            <div class="column-controls">
+                                                <button 
+                                                    type="button" 
+                                                    class="btn-move-col"
+                                                    (click)="moveColumn('statut', 'left')"
+                                                    [disabled]="!canMoveColumn('statut', 'left')"
+                                                    title="Déplacer à gauche">
+                                                    <i class="fas fa-chevron-left"></i>
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    class="btn-move-col"
+                                                    (click)="moveColumn('statut', 'right')"
+                                                    [disabled]="!canMoveColumn('statut', 'right')"
+                                                    title="Déplacer à droite">
+                                                    <i class="fas fa-chevron-right"></i>
+                                                </button>
+                                            </div>
+                                            <div class="filter-header">
+                                                <span>Statut</span>
+                                                <button 
+                                                    type="button" 
+                                                    class="filter-btn"
+                                                    (click)="toggleFilterStatut()"
+                                                    [class.active]="showFilterStatut || filterStatut !== 'all'">
+                                                    <i class="fas fa-filter"></i>
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    class="sort-btn"
+                                                    (click)="onSort('statut')"
+                                                    title="Trier">
+                                                    <i class="fas" [ngClass]="getSortIcon('statut')"></i>
+                                                </button>
+                                                <div class="filter-dropdown" *ngIf="showFilterStatut" (click)="$event.stopPropagation()">
+                                                    <select 
+                                                        class="form-select form-select-sm" 
+                                                        [(ngModel)]="filterStatut"
+                                                        (change)="onFilterStatutChange()"
+                                                        (click)="$event.stopPropagation()">
+                                                        <option value="all">Tous</option>
+                                                        <option value="pending">En Attente</option>
+                                                        <option value="in-progress">En Cours</option>
+                                                        <option value="paid">Réglé</option>
+                                                    </select>
+                                                    <button 
+                                                        type="button" 
+                                                        class="btn btn-sm btn-link p-0 mt-1"
+                                                        (click)="clearFilterStatut()"
+                                                        *ngIf="filterStatut !== 'all'">
+                                                        Effacer
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr *ngFor="let facture of getPaginatedFactures()" 
+                                    [class.table-row-selected]="isFactureSelected(facture.document_id)">
+                                    <!-- Colonne Checkbox -->
+                                    <td *ngIf="getColumnIndex('checkbox') >= 0" 
+                                        [style.order]="getColumnIndex('checkbox')"
+                                        class="text-center">
+                                        <input 
+                                            type="checkbox" 
+                                            class="form-check-input"
+                                            [checked]="isFactureSelected(facture.document_id)"
+                                            (change)="toggleFactureSelection(facture)"
+                                            [disabled]="(facture.reste_a_payer === 0 || facture.reste_a_payer < 0.01) && !isFactureSelected(facture.document_id)">
+                                    </td>
+                                    <!-- Colonne Numéro -->
+                                    <td *ngIf="getColumnIndex('numero') >= 0" 
+                                        [style.order]="getColumnIndex('numero')">
+                                        {{ facture.numero }}
+                                    </td>
+                                    <!-- Colonne Date -->
+                                    <td *ngIf="getColumnIndex('date') >= 0" 
+                                        [style.order]="getColumnIndex('date')">
+                                        {{ formatDate(facture.date) }}
+                                    </td>
+                                    <!-- Colonne Facture -->
+                                    <td *ngIf="getColumnIndex('facture') >= 0" 
+                                        [style.order]="getColumnIndex('facture')"
+                                        class="text-end fw-semibold"
+                                        style="color: #1e40af;">
+                                        {{ formatNumber(facture.montant_facture) }}
+                                    </td>
+                                    <!-- Colonne Avoir -->
+                                    <td *ngIf="getColumnIndex('avoir') >= 0" 
+                                        [style.order]="getColumnIndex('avoir')"
+                                        class="text-end">
+                                        {{ formatNumber(facture.avoir) }}
+                                    </td>
+                                    <!-- Colonne Règlement -->
+                                    <td *ngIf="getColumnIndex('reglement') >= 0" 
+                                        [style.order]="getColumnIndex('reglement')"
+                                        class="text-end fw-bold">
+                                        {{ formatNumber(getReglementApplique(facture)) }}
+                                    </td>
+                                    <!-- Colonne Reste à payé -->
+                                    <td *ngIf="getColumnIndex('reste') >= 0" 
+                                        [style.order]="getColumnIndex('reste')"
+                                        class="text-end" 
+                                        [class.text-danger]="facture.reste_a_payer > 0">
+                                        {{ formatNumber(facture.reste_a_payer) }}
+                                    </td>
+                                    <!-- Colonne Solde -->
+                                    <td *ngIf="getColumnIndex('solde') >= 0" 
+                                        [style.order]="getColumnIndex('solde')"
+                                        class="text-end">
+                                        {{ formatNumber(facture.solde_initial) }}
+                                    </td>
+                                    <!-- Colonne Statut -->
+                                    <td *ngIf="getColumnIndex('statut') >= 0" 
+                                        [style.order]="getColumnIndex('statut')"
+                                        class="text-center">
+                                        <span class="badge status-badge" 
+                                              [ngClass]="{
+                                                'status-paid': getFactureStatusClass(facture) === 'status-paid',
+                                                'status-in-progress': getFactureStatusClass(facture) === 'status-in-progress',
+                                                'status-pending': getFactureStatusClass(facture) === 'status-pending'
+                                              }">
+                                            {{ getFactureStatus(facture) }}
+                                        </span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Pagination -->
+                    <div class="card-footer bg-light" *ngIf="!loadingFactures && filteredFactures.length > 0">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                            <div class="small text-muted">
+                                Affichage de {{ getStartIndex() }} à {{ getEndIndex() }} sur {{ filteredFactures.length }} facture(s)
+                            </div>
+                            <div class="d-flex gap-2 align-items-center">
+                                <button 
+                                    type="button" 
+                                    class="btn btn-primary btn-sm"
+                                    (click)="onSubmitLettrage()"
+                                    [disabled]="loading || selectedFactures.size === 0">
+                                    <i class="fas fa-save me-1"></i>
+                                    Enregistrer le lettrage
+                                </button>
+                                <nav>
+                                    <ul class="pagination pagination-sm mb-0">
+                                        <li class="page-item" [class.disabled]="currentPage === 1">
+                                            <a class="page-link" (click)="goToPage(1)" style="cursor: pointer;">«</a>
+                                        </li>
+                                        <li class="page-item" [class.disabled]="currentPage === 1">
+                                            <a class="page-link" (click)="goToPage(currentPage - 1)" style="cursor: pointer;">‹</a>
+                                        </li>
+                                        <li class="page-item" *ngFor="let page of getPageNumbers()" [class.active]="page === currentPage">
+                                            <a class="page-link" (click)="goToPage(page)" style="cursor: pointer;">{{ page }}</a>
+                                        </li>
+                                        <li class="page-item" [class.disabled]="currentPage === totalPages">
+                                            <a class="page-link" (click)="goToPage(currentPage + 1)" style="cursor: pointer;">›</a>
+                                        </li>
+                                        <li class="page-item" [class.disabled]="currentPage === totalPages">
+                                            <a class="page-link" (click)="goToPage(totalPages)" style="cursor: pointer;">»</a>
+                                        </li>
+                                    </ul>
+                                </nav>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
