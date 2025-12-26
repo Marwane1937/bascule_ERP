@@ -13,100 +13,203 @@
       </ul>
     </div>
 
-    <!-- Bouton Ajouter Client -->
+    <!-- Bouton Ajouter Commercial -->
     <div class="row mb-4">
       <div class="col-12 text-end">
-        <button
-          type="button"
-          class="btn btn-gradient px-4 py-2 shadow-sm"
-          data-bs-toggle="modal"
-          data-bs-target="#addClientModal"
-        >
+        <button type="button" class="btn btn-gradient px-4 py-2 shadow-sm" data-bs-toggle="modal"
+          data-bs-target="#addClientModal" (click)="resetForm()">
           <i class="fas fa-user-plus me-2"></i> Ajouter un Commercial
         </button>
       </div>
     </div>
 
-    <!-- Modal Formulaire d'ajout client -->
-    <div
-      class="modal fade"
-      id="addClientModal"
-      tabindex="-1"
-      aria-labelledby="addClientModalLabel"
-      aria-hidden="true"
-    >
+    <!-- Modal Formulaire d'ajout/modification commercial -->
+    <div class="modal fade" id="addClientModal" tabindex="-1" aria-labelledby="addClientModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content modal-elegant shadow">
           <div class="modal-header modal-header-custom">
-            <h5 class="modal-title text-white" id="addClientModalLabel">➕ Nouveau Commercial</h5>
-            <button
-              type="button"
-              class="btn-close btn-close-white"
-              data-bs-dismiss="modal"
-              aria-label="Close"
-            ></button>
+            <h5 class="modal-title text-white" id="addClientModalLabel">
+              {{ isEditMode ? '📝 Modifier le Commercial' : '➕ Nouveau Commercial' }}
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
-            <form>
+            <form [formGroup]="commercialForm" (ngSubmit)="onSubmit()">
               <div class="row">
-                   <div class="col-md-4 mb-3">
-                  <label for="Code" class="form-label">Code</label>
-                  <input type="number" class="form-control" id="Code" placeholder="Ex: C0001"/>
+                <div class="col-md-6 mb-3">
+                  <label for="code" class="form-label">Code</label>
+                  <input type="text" id="code" class="form-control" formControlName="code"
+                    placeholder="Ex: C0001" />
                 </div>
-                <div class="col-md-4 mb-3">
-                  <label for="name" class="form-label">Nom</label>
-                  <input type="text" class="form-control" id="name" placeholder="Ex: Nom & Prenom" />
+
+                <div class="col-md-6 mb-3">
+                  <label for="nom" class="form-label">Nom <span class="text-danger">*</span></label>
+                  <input type="text" id="nom" class="form-control" formControlName="nom"
+                    placeholder="Ex: Nom" required />
+                </div>
+
+                <div class="col-md-6 mb-3">
+                  <label for="prenom" class="form-label">Prénom</label>
+                  <input type="text" id="prenom" class="form-control" formControlName="prenom"
+                    placeholder="Ex: Prénom" />
+                </div>
+
+                <div class="col-md-6 mb-3">
+                  <label for="mobile" class="form-label">Mobile</label>
+                  <input type="text" id="mobile" class="form-control" formControlName="mobile"
+                    placeholder="Ex: 0661234567" />
+                </div>
+
+                <div class="col-md-6 mb-3">
+                  <label for="phone" class="form-label">Téléphone</label>
+                  <input type="text" id="phone" class="form-control" formControlName="phone"
+                    placeholder="Ex: 0537123456" />
+                </div>
+
+                <div class="col-md-6 mb-3">
+                  <label for="email" class="form-label">Email</label>
+                  <input type="email" id="email" class="form-control" formControlName="email"
+                    placeholder="Ex: email@example.com" />
                 </div>
               </div>
+              <div class="modal-footer bg-light border-top">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="submit" class="btn btn-info" [disabled]="!commercialForm.valid">
+                  {{ isEditMode ? '💾 Enregistrer les modifications' : '✅ Enregistrer' }}
+                </button>
+              </div>
             </form>
-          </div>
-          <div class="modal-footer bg-light border-top">
-            <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-            <button class="btn btn-success">✅ Enregistrer</button>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Tableau Client -->
+    <!-- Barre de recherche et taille page -->
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-search"></i></span>
+          <input
+            type="text"
+            class="form-control"
+            placeholder="Rechercher par code, nom, prénom..."
+            [(ngModel)]="searchTerm"
+            (keyup.enter)="onSearch()"
+          />
+          <button class="btn btn-primary" type="button" (click)="onSearch()">
+            <i class="fas fa-search"></i> Rechercher
+          </button>
+        </div>
+      </div>
+      <div class="col-md-2">
+        <select class="form-select" (change)="onPageSizeChange($event)">
+          <option [value]="10" [selected]="pageSize === 10">10 par page</option>
+          <option [value]="25" [selected]="pageSize === 25">25 par page</option>
+          <option [value]="50" [selected]="pageSize === 50">50 par page</option>
+          <option [value]="100" [selected]="pageSize === 100">100 par page</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Tableau Commercial -->
     <div class="row">
       <div class="col-md-12">
         <div class="card border-0 shadow-sm rounded-3">
-         
           <div class="card-body">
-            <div class="table-responsive">
-                <div *ngIf="loading" class="text-center my-4">
-  <div class="spinner-border text-primary" role="status">
-    <span class="visually-hidden">Chargement...</span>
-  </div>
-</div>
+            <div class="table-responsive" style="position: relative; min-height: 300px;">
+              <!-- Loader overlay -->
+              <div
+                *ngIf="loading"
+                class="text-center my-4"
+                style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"
+              >
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                  <span class="visually-hidden">Chargement...</span>
+                </div>
+                <p class="mt-3 mb-0 text-muted fw-semibold">Chargement des commerciaux...</p>
+              </div>
 
-              <table *ngIf="!loading"  id="clientTable" class="display table table-bordered table-striped" width="100%">
-  <thead>
-  <tr>
-    <th style="width: 70px;">Code</th>
-    <th>Nom</th>
-    <th style="width: 130px;">Actions</th>
-  </tr>
-</thead>
+              <table
+                class="table table-bordered table-striped table-hover"
+                width="100%"
+                [style.opacity]="loading ? '0.5' : '1'"
+              >
+                <thead class="table-light">
+                  <tr>
+                    <th (click)="onSort('code')" class="sortable" style="cursor: pointer; width: 120px;">
+                      Code <i class="fas ms-1" [ngClass]="getSortIcon('code')"></i>
+                    </th>
+                    <th (click)="onSort('nom')" class="sortable" style="cursor: pointer;">
+                      Nom <i class="fas ms-1" [ngClass]="getSortIcon('nom')"></i>
+                    </th>
+                    <th>Prénom</th>
+                    <th>Mobile</th>
+                    <th>Email</th>
+                    <th style="width: 180px;" class="text-center">Actions</th>
+                  </tr>
+                </thead>
 
-  <tbody>
-    <tr *ngFor="let Commercial of Commercials">
-      <td>{{ Commercial.code }}</td>
-      <td>{{ Commercial.nom }}</td>
+                <tbody>
+                  <tr *ngIf="!loading && commercials.length === 0">
+                    <td colspan="6" class="text-center py-4">
+                      <p class="text-muted mb-0">Aucun commercial trouvé</p>
+                    </td>
+                  </tr>
 
-      <td class="text-center">
-        <button class="btn btn-sm btn-outline-info me-1"><i class="fas fa-edit"></i></button>
-        <button class="btn btn-sm btn-outline-danger me-1"><i class="fas fa-trash-alt"></i></button>
-        <button class="btn btn-sm btn-outline-warning"><i class="fas fa-archive"></i></button>
-      </td>
-    </tr>
-  </tbody>
-</table>
+                  <tr *ngFor="let commercial of commercials">
+                    <td>{{ commercial.code || '-' }}</td>
+                    <td>{{ commercial.nom }}</td>
+                    <td>{{ commercial.prenom || '-' }}</td>
+                    <td>{{ commercial.mobile || '-' }}</td>
+                    <td>{{ commercial.email || '-' }}</td>
 
+                    <td class="text-center">
+                      <button class="btn btn-sm btn-outline-info me-1" (click)="onEdit(commercial)" title="Modifier">
+                        <i class="fas fa-edit"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-danger me-1" (click)="onDelete(commercial.id)" title="Supprimer">
+                        <i class="fas fa-trash-alt"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-warning" (click)="onArchive(commercial)" title="Archiver">
+                        <i class="fas fa-archive"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="row mt-3" *ngIf="!loading && totalPages > 0">
+      <div class="col-md-6">
+        <p class="text-muted mb-0">
+          Affichage de <strong>{{ getDisplayRange() }}</strong> sur <strong>{{ totalRecords }}</strong> commercial(aux)
+        </p>
+      </div>
+      <div class="col-md-6">
+        <nav aria-label="Pagination">
+          <ul class="pagination justify-content-end mb-0">
+            <li class="page-item" [class.disabled]="currentPage === 1">
+              <a class="page-link" (click)="onPageChange(currentPage - 1)" style="cursor: pointer;">
+                <i class="fas fa-chevron-left"></i>
+              </a>
+            </li>
+
+            <li class="page-item" *ngFor="let page of getPageNumbers()" [class.active]="page === currentPage">
+              <a class="page-link" (click)="onPageChange(page)" style="cursor: pointer;">{{ page }}</a>
+            </li>
+
+            <li class="page-item" [class.disabled]="currentPage === totalPages">
+              <a class="page-link" (click)="onPageChange(currentPage + 1)" style="cursor: pointer;">
+                <i class="fas fa-chevron-right"></i>
+              </a>
+            </li>
+          </ul>
+        </nav>
       </div>
     </div>
 
@@ -114,4 +217,3 @@
 
   <router-outlet></router-outlet>
 </div>
-

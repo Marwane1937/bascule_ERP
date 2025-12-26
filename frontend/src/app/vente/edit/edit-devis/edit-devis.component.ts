@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { BaseService } from 'src/app/service/base.service';
@@ -6,7 +6,8 @@ import { VentesService } from 'src/app/service/ventes.service';
 import Quill from 'quill';
 import Swal from 'sweetalert2';
 import { EmailService } from 'src/app/service/email.service';
-import { forkJoin } from 'rxjs';
+import { forkJoin, of } from 'rxjs';
+import { catchError, retry } from 'rxjs/operators';
 const QuillMention = require('quill-mention');
 declare var bootstrap: any;
 Quill.register('modules/mention', QuillMention.default);
@@ -99,9 +100,12 @@ export class EditDevisComponent implements OnInit {
   taxeTotal = 0;
   reducTotal = 0;
   totalGeneral = 0;
+  isClientExonerated = false; // Indique si le client est exonéré de TVA
+  private exoCheckToken = 0;
 
   constructor(private baseService: BaseService, private fb: FormBuilder, private route: ActivatedRoute,
-    private venteSerivce: VentesService, private emailService: EmailService
+    private venteSerivce: VentesService, private emailService: EmailService,
+    private cdr: ChangeDetectorRef
   ) {
     this.emailForm = this.fb.group({
       to: ['', [Validators.required, Validators.email]],
@@ -194,6 +198,12 @@ export class EditDevisComponent implements OnInit {
           }
 
     this.numeroDevis = data.numero || 'Dv25-0001';
+    console.log('[EditDevisComponent][TVA] processDevisData: devis chargé', {
+      document_id: this.route.snapshot.paramMap.get('document_id'),
+      part_id: data.part_id,
+      date: data.date,
+      isClientExonerated_before: this.isClientExonerated
+    });
 
     const clientTrouve = this.clients?.find((c: any) => c.part_id === data.part_id);
     const commercialTrouve = this.commerciaux?.find((c: any) => c.id === data.contact_id);
@@ -214,6 +224,14 @@ export class EditDevisComponent implements OnInit {
             clientSearch: clientTrouve ? clientTrouve.nom : '',
             commercialSearch: commercialTrouve ? commercialTrouve.nom : ''
           });
+
+    // Vérifier l'exonération TVA au chargement du devis
+    if (data.part_id) {
+      console.log('[EditDevisComponent][TVA] checkClientExoneration (load) -> part_id:', data.part_id);
+      this.checkClientExoneration(data.part_id);
+    } else {
+      console.warn('[EditDevisComponent][TVA] Aucun part_id sur le devis, exonération ignorée');
+    }
 
     if (data.details && Array.isArray(data.details)) {
         this.produits = data.details.map((detail: any) => {
@@ -424,17 +442,77 @@ export class EditDevisComponent implements OnInit {
 
     const baseApresReduc = this.sousTotal - this.reducTotal;
 
-    this.taxeTotal = this.produits.reduce((acc, p, index) => {
+    // TVA: si client exonéré (valide) => 0, sinon taux normal (p.taxe)
+    this.taxeTotal = this.produits.reduce((acc, p) => {
       const base = p.pu * p.qte;
       const reduc = p.reducMode === 'pourcentage'
         ? (p.reduc / 100) * base
         : p.reduc;
-      const baseApresReduc = Math.max(base - reduc, 0);
-      const tva = (p.taxe ?? 0) * baseApresReduc;
-      return acc + tva;
+      const baseApresReducLigne = Math.max(base - reduc, 0);
+      const taux = this.isClientExonerated ? 0 : (p.taxe ?? 0);
+      return acc + (taux * baseApresReducLigne);
     }, 0);
 
     this.totalGeneral = baseApresReduc + this.taxeTotal + this.fraisPort;
+  }
+
+  // Vérifier si le client a une exonération TVA valide
+  checkClientExoneration(part_id: number): void {
+    const token = ++this.exoCheckToken;
+    console.log('[EditDevisComponent][TVA] checkClientExoneration: start', { part_id, token });
+
+    this.baseService.getAllExonerations(part_id).pipe(
+      // Parfois l'API peut échouer temporairement -> retry léger
+      retry({ count: 2, delay: 300 }),
+      catchError((err: any) => {
+        console.error('[EditDevisComponent][TVA] erreur récupération exonérations', {
+          part_id,
+          token,
+          status: err?.status,
+          message: err?.message,
+          error: err?.error
+        });
+        return of({ success: false, data: [] });
+      })
+    ).subscribe((response: any) => {
+      // Si une nouvelle requête a été lancée après, ignorer cette réponse (évite flip 20%->0%->20%)
+      if (token !== this.exoCheckToken) {
+        console.warn('[EditDevisComponent][TVA] réponse ignorée (outdated)', { part_id, token, current: this.exoCheckToken });
+        return;
+      }
+
+      const exonerations = response?.data || response || [];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      console.log('[EditDevisComponent][TVA] exonérations récupérées', {
+        part_id,
+        token,
+        count: Array.isArray(exonerations) ? exonerations.length : null,
+        today: today.toISOString().slice(0, 10),
+        sample: Array.isArray(exonerations) ? exonerations.slice(0, 3) : exonerations
+      });
+
+      const validExoneration = (Array.isArray(exonerations) ? exonerations : []).find((exon: any) => {
+        if (!exon?.date_debut || !exon?.date_fin) return false;
+        const dateDebut = new Date(exon.date_debut);
+        dateDebut.setHours(0, 0, 0, 0);
+        const dateFin = new Date(exon.date_fin);
+        dateFin.setHours(0, 0, 0, 0);
+        return today >= dateDebut && today <= dateFin;
+      });
+
+      this.isClientExonerated = !!validExoneration;
+      console.log('[EditDevisComponent][TVA] résultat exonération', {
+        part_id,
+        token,
+        isClientExonerated: this.isClientExonerated,
+        validExoneration: validExoneration || null
+      });
+
+      // Recalculer les totaux + forcer le refresh UI (évite cas où l'UI reste à 20% visuellement)
+      this.calculerTotaux();
+      this.cdr.detectChanges();
+    });
   }
 
   toggleReducMode() {
@@ -570,6 +648,11 @@ export class EditDevisComponent implements OnInit {
     });
     this.filteredClients = [];
     this.searchTerm = client.nom;
+    
+    // Vérifier l'exonération TVA du client
+    if (client.part_id) {
+      this.checkClientExoneration(client.part_id);
+    }
   }
 
   get clientSearchControl() {
@@ -611,8 +694,25 @@ export class EditDevisComponent implements OnInit {
   enregistrerTout(): void {
     const lignesAModifier: any[] = [];
     const document_id = +this.route.snapshot.paramMap.get('document_id')!;
+    console.log('[EditDevisComponent][TVA] enregistrerTout: start', {
+      document_id,
+      part_id: this.DevisForm?.value?.part_id,
+      isClientExonerated: this.isClientExonerated,
+      produitsCount: this.produits?.length
+    });
     for (let i = 0; i < this.produits.length; i++) {
       const p = this.produits[i];
+      // Règle TVA (détail produit):
+      // - client exonéré valide -> taux_tva = 0
+      // - sinon -> taux TVA standard = 0.2 (20%)
+      const desiredTax = this.isClientExonerated ? 0 : 0.2;
+      console.log('[EditDevisComponent][TVA] ligne', {
+        i: i + 1,
+        article_id: p.article_id,
+        currentTax: p.taxe,
+        desiredTax,
+        update_mode_hint: this.produitsOriginal?.[i] ? 'U?' : 'I'
+      });
 
       if (!p.article_id || !p.pu || !p.qte) {
         Swal.fire({
@@ -631,7 +731,7 @@ export class EditDevisComponent implements OnInit {
           designation: p.designation,
           pu: p.pu,
           qte: p.qte,
-          taxe: '0.2',
+          taxe: String(desiredTax),
           document_id,
           update_mode: 'I'
         };
@@ -655,7 +755,7 @@ export class EditDevisComponent implements OnInit {
         p.qte !== pOriginal.qte ||
         p.reduc !== pOriginal.reduc ||
         p.reducMode !== pOriginal.reducMode ||
-        p.taxe !== pOriginal.taxe
+        desiredTax !== pOriginal.taxe
       );
 
       if (modifie) {
@@ -665,7 +765,7 @@ export class EditDevisComponent implements OnInit {
           designation: p.designation,
           pu: p.pu,
           qte: p.qte,
-          taxe: '0.2',
+          taxe: String(desiredTax),
           document_id,
           update_mode: 'U',
         };

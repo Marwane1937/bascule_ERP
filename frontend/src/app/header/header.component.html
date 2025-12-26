@@ -3,19 +3,112 @@
     <h1>Système de Gestion</h1>
   </div>
   
-          <div class="navbar-user" *ngIf="currentUser">
-            <!-- Sélecteur de base de données -->
-            <div class="database-selector-container">
-              <app-database-selector></app-database-selector>
-            </div>
-            
-            <div class="user-info">
-              <span class="user-name">{{ currentUser.nom || currentUser.login || 'Utilisateur' }}</span>
-              <span class="user-role">{{ getRoleDisplayName(currentUser.type) }}</span>
-            </div>
-            <button class="logout-btn" (click)="logout()" title="Se déconnecter">
-              <i class="fas fa-sign-out-alt"></i>
-              Déconnexion
+  <div class="navbar-user" *ngIf="currentUser">
+    <!-- Sélecteur de base de données -->
+    <div class="database-selector-container">
+      <app-database-selector></app-database-selector>
+    </div>
+    
+    <!-- Notifications -->
+    <div class="notification-container">
+      <div 
+        class="notification-icon-wrapper" 
+        [class.disabled]="!hasNotificationPermission()"
+        (click)="hasNotificationPermission() && toggleNotificationDropdown()"
+        [title]="hasNotificationPermission() ? 'Notifications' : 'Permission requise'">
+        <i 
+          class="fas fa-bell notification-icon"
+          [style.color]="urgentCount > 0 ? '#dc3545' : 'white'"></i>
+        <span 
+          class="notification-badge blink-red" 
+          *ngIf="hasNotificationPermission() && urgentCount > 0"
+          style="background-color: #dc3545;">
+          {{ urgentCount > 99 ? '99+' : urgentCount }}
+        </span>
+      </div>
+      
+      <!-- Panneau latéral notifications -->
+      <div class="notification-panel" *ngIf="showNotificationDropdown" (click)="$event.stopPropagation()">
+        <div class="notification-panel-header">
+          <h5 class="mb-0">
+            <i class="fas fa-bell me-2"></i>Notifications
+          </h5>
+          <div class="header-actions">
+            <button 
+              class="btn-remember" 
+              [class.active]="rememberEnabled"
+              (click)="toggleRemember()" 
+              [title]="rememberEnabled ? 'Désactiver les rappels' : 'Activer les rappels toutes les 10 minutes'">
+              <i class="fas" [class.fa-bell]="!rememberEnabled" [class.fa-bell-slash]="rememberEnabled"></i>
+            </button>
+            <button class="btn-close-panel" (click)="closeNotificationDropdown()" title="Fermer">
+              <i class="fas fa-times"></i>
             </button>
           </div>
+        </div>
+        
+        <div class="notification-panel-body">
+          <div *ngIf="loadingNotifications" class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Chargement...</span>
+            </div>
+          </div>
+          
+          <div *ngIf="!loadingNotifications && recentNotifications.length === 0" class="empty-notifications">
+            <div class="empty-icon">
+              <i class="fas fa-bell-slash"></i>
+            </div>
+            <p class="empty-text">Aucune notification urgente</p>
+            <p class="empty-subtext">Toutes vos notifications sont à jour</p>
+          </div>
+          
+          <div *ngIf="!loadingNotifications && recentNotifications.length > 0" class="notification-list-panel">
+            <div 
+              *ngFor="let notification of recentNotifications"
+              class="notification-item-panel">
+              <div class="notification-item-left">
+                <i class="far fa-calendar-alt notification-calendar-icon"></i>
+              </div>
+              <div class="notification-item-content">
+                <div class="notification-text-panel">
+                  {{ notification.description || 'Sans description' }}
+                </div>
+                <div class="notification-days">
+                  <span class="days-badge" [ngClass]="{
+                    'days-danger': getTimeRemaining(notification.date_alarme).isOverdue || getTimeRemaining(notification.date_alarme).days <= 1,
+                    'days-warning': !getTimeRemaining(notification.date_alarme).isOverdue && getTimeRemaining(notification.date_alarme).days <= 3,
+                    'days-info': !getTimeRemaining(notification.date_alarme).isOverdue && getTimeRemaining(notification.date_alarme).days > 3
+                  }">
+                    {{ getTimeRemaining(notification.date_alarme).text }}
+                  </span>
+                </div>
+              </div>
+              <button 
+                class="btn-close-notification"
+                (click)="markNotificationAsRead(notification.id, $event)"
+                title="Marquer comme lue">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="user-info">
+      <span class="user-name">{{ currentUser.nom || currentUser.login || 'Utilisateur' }}</span>
+      <span class="user-role">{{ getRoleDisplayName(currentUser.type) }}</span>
+    </div>
+    <button class="logout-btn" (click)="logout()" title="Se déconnecter">
+      <i class="fas fa-sign-out-alt"></i>
+      Déconnexion
+    </button>
+  </div>
 </nav>
+
+<!-- Backdrop pour fermer le dropdown -->
+<div 
+  *ngIf="showNotificationDropdown" 
+  class="notification-backdrop"
+  (click)="closeNotificationDropdown()">
+</div>

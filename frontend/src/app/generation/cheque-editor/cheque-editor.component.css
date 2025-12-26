@@ -1,0 +1,219 @@
+/* Global Layout */
+:host {
+    display: block;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* TOTAL REDESIGN (editor) */
+.gen-editor {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: #f5f7fb;
+}
+
+.gen-topbar {
+    height: 64px;
+    padding: 10px 16px;
+    background: linear-gradient(135deg, #111827 0%, #1f2937 100%);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gen-title-main {
+    font-weight: 800;
+    font-size: 1.05rem;
+    letter-spacing: .02em;
+}
+
+.gen-title-sub {
+    font-size: .78rem;
+    color: rgba(255, 255, 255, 0.70);
+}
+
+.gen-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.gen-body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 320px 1fr 320px;
+    gap: 12px;
+    padding: 12px;
+    overflow: hidden;
+}
+
+.gen-panel {
+    background: #ffffff;
+    border: 1px solid #e6edf5;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 6px 20px rgba(17, 24, 39, 0.06);
+}
+
+.gen-panel-header {
+    padding: 10px 12px;
+    border-bottom: 1px solid #eef3f9;
+    background: #fbfdff;
+}
+
+.gen-panel-content {
+    padding: 12px;
+    overflow: auto;
+}
+
+.gen-canvas-wrap {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.gen-canvas-toolbar {
+    background: #ffffff;
+    border: 1px solid #e6edf5;
+    border-radius: 12px;
+    padding: 10px 12px;
+    box-shadow: 0 6px 20px rgba(17, 24, 39, 0.06);
+}
+
+.gen-canvas-stage {
+    flex: 1;
+    margin-top: 12px;
+    background: radial-gradient(circle at 30% 20%, rgba(31, 41, 55, 0.06), transparent 60%),
+        radial-gradient(circle at 70% 60%, rgba(59, 130, 246, 0.06), transparent 55%),
+        #f5f7fb;
+    border-radius: 12px;
+    border: 1px dashed rgba(17, 24, 39, 0.15);
+    overflow: auto;
+    padding: 24px 0;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+.gen-paper {
+    position: relative;
+    background-color: #ffffff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 14px 40px rgba(17, 24, 39, 0.18);
+}
+
+.gen-grid {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+        repeating-linear-gradient(to right, rgba(17, 24, 39, 0.06), rgba(17, 24, 39, 0.06) 0.2mm, transparent 0.2mm, transparent 5mm),
+        repeating-linear-gradient(to bottom, rgba(17, 24, 39, 0.06), rgba(17, 24, 39, 0.06) 0.2mm, transparent 0.2mm, transparent 5mm);
+    mix-blend-mode: multiply;
+}
+
+.gen-field {
+    padding: 1px 3px;
+    border-radius: 4px;
+    cursor: default;
+    user-select: none;
+}
+
+.gen-field.is-design {
+    cursor: move;
+}
+
+.gen-field.is-selected {
+    outline: 2px dashed rgba(59, 130, 246, 0.85);
+    background: rgba(59, 130, 246, 0.08);
+}
+
+/* PDF modal */
+.gen-modal-backdrop{
+    position: fixed;
+    inset: 0;
+    background: rgba(17,24,39,.6);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.gen-modal{
+    background: #fff;
+    width: min(1100px, 95vw);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+}
+
+.gen-modal-header{
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #eef3f9;
+    background: #fbfdff;
+}
+
+.gen-modal-body{
+    padding: 0;
+}
+
+.gen-modal-footer{
+    padding: 12px 14px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    border-top: 1px solid #eef3f9;
+    background: #fbfdff;
+}
+
+/* Sidebar Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #29a7c8;
+    border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #1c8ea3;
+}
+
+/* Cyan Badge Style */
+.bg-cyan-badge {
+    background-color: #29a7c8 !important;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.cursor-pointer:hover {
+    opacity: 0.7;
+}
+
+/* (legacy styles removed: old cheque-preview-container / floating panel) */
+
+/* Range Input Color */
+input[type=range]::-webkit-slider-thumb {
+    background: #777;
+}

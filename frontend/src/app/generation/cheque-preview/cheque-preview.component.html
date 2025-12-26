@@ -1,1 +1,100 @@
-<!-- Aperçu visuel du chèque -->
+<div class="container-fluid py-3">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h2 class="m-0 text-info" style="font-family: serif;">Aperçu</h2>
+      <div class="text-muted small">Rendu en temps réel (positions en mm + offsets de calibration).</div>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-info text-white" (click)="print()" [disabled]="loading">Imprimer</button>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label small">Type</label>
+              <select class="form-select" [(ngModel)]="docType" (change)="onDocTypeChange()">
+                <option value="CHEQUE">Chèque</option>
+                <option value="EFFET">Effet</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label small">Banque</label>
+              <select class="form-select" [(ngModel)]="banqueId" (change)="onBanqueChange()">
+                <option *ngFor="let b of banques" [ngValue]="b.id">{{ b.nom }}</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label small">Modèle</label>
+              <select class="form-select" [(ngModel)]="templateId" (change)="onTemplateChange()">
+                <option *ngFor="let t of templates" [ngValue]="t.id">{{ t.nom_template || ('Template #' + t.id) }}</option>
+              </select>
+              <div class="form-text">
+                Image support du modèle: <code>assets/img/generation</code> (choisie et enregistrée dans le template)
+              </div>
+            </div>
+            <div class="col-12">
+              <label class="form-label small">Règlement ID (optionnel)</label>
+              <input class="form-control" [(ngModel)]="reglementId" (change)="onReglementChange()" placeholder="ID regle_settings">
+            </div>
+          </div>
+
+          <hr>
+
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label small">Date</label>
+              <input type="date" class="form-control" [(ngModel)]="formData.date">
+            </div>
+            <div class="col-6">
+              <label class="form-label small">Lieu</label>
+              <input type="text" class="form-control" [(ngModel)]="formData.lieu">
+            </div>
+            <div class="col-12">
+              <label class="form-label small">Bénéficiaire</label>
+              <input type="text" class="form-control" [(ngModel)]="formData.beneficiaire">
+            </div>
+            <div class="col-6">
+              <label class="form-label small">Montant</label>
+              <input type="number" class="form-control" [(ngModel)]="formData.montant" (ngModelChange)="onMontantChange()">
+            </div>
+            <div class="col-6">
+              <label class="form-label small">Numéro</label>
+              <input type="text" class="form-control" [(ngModel)]="formData.numero">
+            </div>
+            <div class="col-12">
+              <label class="form-label small">Payé pour</label>
+              <input type="text" class="form-control" [(ngModel)]="formData.paye_pour">
+            </div>
+            <div class="col-12">
+              <label class="form-label small">Montant en lettres</label>
+              <div class="p-2 bg-light rounded border small fst-italic">{{ formData.montant_lettres || '---' }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-8">
+      <div class="d-flex justify-content-center">
+        <div class="cheque-preview-container bg-white shadow-lg" [ngStyle]="getContainerStyle()">
+          <div *ngFor="let field of fields" class="position-absolute" [ngStyle]="getFieldStyle(field.nom_champ)">
+            <ng-container [ngSwitch]="field.nom_champ">
+              <span *ngSwitchCase="'montant_chiffres'"># {{ formData.montant | number:'1.2-2' }} #</span>
+              <span *ngSwitchCase="'montant_lettres'">{{ formData.montant_lettres }}</span>
+              <span *ngSwitchCase="'beneficiaire'">{{ formData.beneficiaire }}</span>
+              <span *ngSwitchCase="'date'">{{ formData.date | date:'dd/MM/yyyy' }}</span>
+              <span *ngSwitchCase="'lieu'">{{ formData.lieu }} </span>
+              <span *ngSwitchCase="'paye_pour'">{{ formData.paye_pour }}</span>
+              <span *ngSwitchCase="'numero'">{{ formData.numero }}</span>
+              <span *ngSwitchDefault>{{ formData[field.nom_champ] }}</span>
+            </ng-container>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, OnInit } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { BaseService } from 'src/app/service/base.service';
@@ -9,23 +9,34 @@ import Swal from 'sweetalert2';
   templateUrl: './produit.component.html',
   styleUrls: ['./produit.component.css']
 })
-export class ProduitComponent implements OnInit, AfterViewInit {
+export class ProduitComponent implements OnInit {
   produits: any[] = [];
   unites: any;
   familles: any;
-  dataTable: any;
-  loading: boolean = true; // ← par défaut on affiche le spinner
+  loading: boolean = true;
   produitForm!: FormGroup;
   successMessage: string = '';
   isEditMode: boolean = false;
   currentProduitId: string | null = null;
+
+  // Pagination
+  currentPage: number = 1;
+  pageSize: number = 25;
+  totalRecords: number = 0;
+  totalPages: number = 0;
+
+  // Recherche / tri
+  searchTerm: string = '';
+  sortColumn: string = 'article_nom';
+  sortDirection: 'ASC' | 'DESC' = 'ASC';
+
   constructor(private baseService: BaseService, private fb: FormBuilder, private router: Router) { }
 
   ngOnInit(): void {
-    this.getProduits();
+    this.initForm();
+    this.loadProduits(1);
     this.AllUnite();
     this.AllFamille();
-    this.initForm();
   }
 
   initForm(): void {
@@ -41,46 +52,54 @@ export class ProduitComponent implements OnInit, AfterViewInit {
     });
   }
 
-  ngAfterViewInit(): void {
-    // Ne rien faire ici, on initialise dans getClients après chargement
-  }
-
-  getProduits(): void {
+  loadProduits(page: number = 1, search: string = '', resetFilters: boolean = false): void {
     this.loading = true;
+    this.currentPage = page;
 
-    this.baseService.getProduit().subscribe((response: any) => {
-      // Extraire les données de la réponse API qui est au format {success: true, data: [...]}
-      this.produits = response?.data || (Array.isArray(response) ? response : []);
+    if (resetFilters) {
+      this.searchTerm = '';
+      this.sortColumn = 'article_nom';
+      this.sortDirection = 'ASC';
+    }
 
-      setTimeout(() => {
-        if (this.dataTable) {
-          this.dataTable.destroy();
-        }
+    const requestOptions = {
+      page: this.currentPage,
+      pageSize: this.pageSize,
+      orderBy: this.sortColumn,
+      orderDirection: this.sortDirection,
+      search: search || this.searchTerm
+    };
 
-        this.dataTable = $('#clientTable').DataTable({
-          pageLength: 10,
-          ordering: true,
-          order: [[0, 'desc']], // Trier par la première colonne (Code produit) en DESC par défaut
-          searching: true,
-          lengthChange: true
-        });
+    this.baseService.getProduitsPaged(requestOptions).subscribe({
+      next: (response: any) => {
+        const result = response?.data || [];
+        const pagination = response?.pagination || {};
 
+        this.produits = Array.isArray(result) ? result : [];
+        this.totalRecords = pagination.total || 0;
+        this.totalPages = pagination.totalPages || 1;
 
-      }, 0);
-      this.loading = false; // ✅ on cache le spinner après le chargement
+        this.loading = false;
+      },
+      error: (err) => {
+        console.error('[ProduitComponent] ❌ Erreur chargement produits:', err);
+        this.produits = [];
+        this.totalRecords = 0;
+        this.totalPages = 1;
+        this.loading = false;
+        this.showError(`❌ Erreur lors du chargement des produits: ${err.error?.message || err.message || 'Erreur inconnue'}`);
+      }
     });
   }
 
   AllUnite() {
     this.baseService.getUnite().subscribe((response: any) => {
-      // Extraire les données de la réponse API qui est au format {success: true, data: [...]}
       this.unites = response?.data || (Array.isArray(response) ? response : []);
     })
   }
 
   AllFamille() {
     this.baseService.getFamille().subscribe((response: any) => {
-      // Extraire les données de la réponse API qui est au format {success: true, data: [...]}
       this.familles = response?.data || (Array.isArray(response) ? response : []);
     })
   }
@@ -90,7 +109,10 @@ export class ProduitComponent implements OnInit, AfterViewInit {
       if (this.isEditMode && this.currentProduitId) {
         this.baseService.updateProduit(this.currentProduitId, this.produitForm.value).subscribe({
           next: () => {
+            this.closeAddProduitModal();
+            this.resetForm();
             this.showSuccess('✅ Produit modifié avec succès !');
+            this.loadProduits(this.currentPage);
           },
           error: (err) => {
             console.error(err);
@@ -100,7 +122,10 @@ export class ProduitComponent implements OnInit, AfterViewInit {
       } else {
         this.baseService.addProduit(this.produitForm.value).subscribe({
           next: () => {
+            this.closeAddProduitModal();
+            this.resetForm();
             this.showSuccess('✅ Produit ajouté avec succès !');
+            this.loadProduits(1);
           },
           error: (err) => {
             console.error(err);
@@ -149,6 +174,7 @@ export class ProduitComponent implements OnInit, AfterViewInit {
         this.baseService.deleteProduit(id).subscribe({
           next: () => {
             this.showSuccess('✅ Produit supprimé avec succès !');
+            this.loadProduits(this.currentPage);
           },
           error: (err) => {
             console.error(err);
@@ -156,6 +182,42 @@ export class ProduitComponent implements OnInit, AfterViewInit {
           }
         });
       }
+    });
+  }
+
+  onArchive(produit: any): void {
+    const articleId = produit?.article_id;
+    if (!articleId) {
+      this.showError('❌ Identifiant produit introuvable.');
+      return;
+    }
+
+    Swal.fire({
+      icon: 'warning',
+      title: 'Archiver ce produit ?',
+      text: `Produit: ${produit?.article_nom || ''}`,
+      showCancelButton: true,
+      confirmButtonText: 'Oui, archiver',
+      cancelButtonText: 'Annuler',
+      customClass: {
+        confirmButton: 'btn btn-warning',
+        cancelButton: 'btn btn-secondary'
+      },
+      buttonsStyling: false
+    }).then((result) => {
+      if (!result.isConfirmed) return;
+
+      this.baseService.archiveProduit(articleId).subscribe({
+        next: (res: any) => {
+          const message = res?.message || 'Produit archivé avec succès';
+          this.showSuccess(`✅ ${message}`);
+          this.loadProduits(this.currentPage);
+        },
+        error: (err) => {
+          console.error('[ProduitComponent] ❌ Erreur archivage produit:', err);
+          this.showError(`❌ Erreur lors de l'archivage: ${err.error?.message || err.message || 'Erreur inconnue'}`);
+        }
+      });
     });
   }
 
@@ -170,6 +232,74 @@ export class ProduitComponent implements OnInit, AfterViewInit {
     });
   }
 
+  closeAddProduitModal(): void {
+    const modalElement = document.getElementById('addClientModal');
+    if (modalElement) {
+      const modal = (window as any).bootstrap.Modal.getInstance(modalElement);
+      if (modal) {
+        modal.hide();
+      }
+    }
+  }
+
+  onPageChange(page: number): void {
+    if (page >= 1 && page <= this.totalPages && page !== this.currentPage) {
+      this.loadProduits(page);
+    }
+  }
+
+  onPageSizeChange(event: any): void {
+    const newSize = parseInt(event.target.value, 10);
+    if (newSize > 0 && newSize !== this.pageSize) {
+      this.pageSize = newSize;
+      this.loadProduits(1);
+    }
+  }
+
+  onSearch(): void {
+    this.loadProduits(1, this.searchTerm);
+  }
+
+  onSort(column: string): void {
+    if (this.sortColumn === column) {
+      this.sortDirection = this.sortDirection === 'ASC' ? 'DESC' : 'ASC';
+    } else {
+      this.sortColumn = column;
+      this.sortDirection = 'ASC';
+    }
+    this.loadProduits(this.currentPage);
+  }
+
+  getSortIcon(column: string): string {
+    if (this.sortColumn !== column) {
+      return 'fa-sort text-muted';
+    }
+    return this.sortDirection === 'ASC' ? 'fa-sort-up text-primary' : 'fa-sort-down text-primary';
+  }
+
+  getPageNumbers(): number[] {
+    const pages: number[] = [];
+    const maxPages = Math.min(this.totalPages, 5);
+    let startPage = Math.max(1, this.currentPage - Math.floor(maxPages / 2));
+    let endPage = Math.min(this.totalPages, startPage + maxPages - 1);
+
+    if (endPage - startPage < maxPages - 1) {
+      startPage = Math.max(1, endPage - maxPages + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    return pages;
+  }
+
+  getDisplayRange(): string {
+    if (this.totalRecords === 0) return '0 - 0';
+    const start = (this.currentPage - 1) * this.pageSize + 1;
+    const end = Math.min(this.currentPage * this.pageSize, this.totalRecords);
+    return `${start} - ${end}`;
+  }
+
   showSuccess(message: string) {
     Swal.fire({
       icon: 'success',
@@ -180,8 +310,6 @@ export class ProduitComponent implements OnInit, AfterViewInit {
         confirmButton: 'btn btn-success'
       },
       buttonsStyling: false
-    }).then(() => {
-      window.location.reload(); // 🔄 Rechargement après succès
     });
   }
 
@@ -197,5 +325,4 @@ export class ProduitComponent implements OnInit, AfterViewInit {
       buttonsStyling: false
     });
   }
-
 }

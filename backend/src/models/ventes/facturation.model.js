@@ -276,6 +276,7 @@ const getFactureReportById = async (factureId, sequelizeConnection = null) => {
         :factureId AS etat,
         4 AS type,
         'FACTURE' AS document_kind,
+        :part_id AS part_id,
         :nom_client AS client,
         '' AS commercial,
         ISNULL(a.article_cod, '') AS article_cod,
@@ -309,6 +310,7 @@ const getFactureReportById = async (factureId, sequelizeConnection = null) => {
       factureId: factureId,
       numero: facture.numero || '',
       date: facture.date || null,
+      part_id: facture.part_id || null,
       nom_client: facture.nom_client || facture.nom || '',
       numero_livraison: facture.numero_livraison || '',
       adresse: (facture.adresse || '').substring(0, 200), // Limiter la longueur

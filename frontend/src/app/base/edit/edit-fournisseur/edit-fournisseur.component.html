@@ -30,37 +30,51 @@
                 <h5 class="mb-4 text-primary fw-semibold">🧾 Informations du Fournisseur</h5>
 
                 <!-- Tes Inputs ici -->
-                <form>
+                <form (ngSubmit)="onSaveFournisseurBasic()">
                     <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Nom :</label>
-                            <input type="text" class="form-control" placeholder="Entrez le nom" />
+                        <div class="col-md-4">
+                            <label class="form-label">Code :</label>
+                            <input
+                                type="text"
+                                class="form-control"
+                                placeholder="Ex: F0001"
+                                [(ngModel)]="fournisseurInfo.code"
+                                name="code"
+                                required
+                            />
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Email :</label>
-                            <input type="email" class="form-control" placeholder="exemple@domaine.com" />
+                        <div class="col-md-8">
+                            <label class="form-label">Nom :</label>
+                            <input
+                                type="text"
+                                class="form-control"
+                                placeholder="Entrez le nom"
+                                [(ngModel)]="fournisseurInfo.nom"
+                                name="nom"
+                                required
+                            />
                         </div>
                     </div>
 
                     <div class="row mb-3">
                         <div class="col-md-4">
                             <label class="form-label">Téléphone :</label>
-                            <input type="text" class="form-control" />
+                            <input type="text" class="form-control" disabled />
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Adresse :</label>
-                            <input type="text" class="form-control" />
+                            <input type="text" class="form-control" disabled />
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Ville :</label>
-                            <input type="text" class="form-control" />
+                            <input type="text" class="form-control" disabled />
                         </div>
                     </div>
 
                     <!-- Boutons -->
                     <div class="text-end mt-4">
                         <button type="submit" class="btn btn-success me-2">💾 Enregistrer</button>
-                        <button type="reset" class="btn btn-secondary">↩️ Réinitialiser</button>
+                        <button type="button" class="btn btn-secondary" (click)="getFournisseurBasic(part_id)">↩️ Réinitialiser</button>
                     </div>
                 </form>
 

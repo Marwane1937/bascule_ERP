@@ -1,37 +1,31 @@
-import { Component } from '@angular/core';
-
-interface ChequeForm {
-  beneficiaire: string;
-  montant: number;
-  montantLettre: string;
-  date: string;
-  emetteur: string;
-  banque: string;
-  numero: string;
-  echeance: string;
-}
+import { Component, OnInit } from '@angular/core';
+import { ChequeGenerationService } from '../cheque.service';
 
 @Component({
   selector: 'app-cheque-list',
   templateUrl: './cheque-list.component.html'
 })
-export class ChequeListComponent {
-  cheque: ChequeForm = {
-    beneficiaire: '',
-    montant: 0,
-    montantLettre: '',
-    date: '',
-    emetteur: '',
-    banque: '',
-    numero: '',
-    echeance: ''
-  };
+export class ChequeListComponent implements OnInit {
+  reglements: any[] = [];
+  loading = false;
 
-  banques: string[] = ['Société Générale', 'Attijariwafa Bank', 'BMCE', 'Banque Populaire'];
+  constructor(private chequeService: ChequeGenerationService) { }
 
-  chequeCree: ChequeForm | null = null;
+  ngOnInit(): void {
+    this.loadReglements();
+  }
 
-  creerCheque() {
-    this.chequeCree = { ...this.cheque };
+  loadReglements() {
+    this.loading = true;
+    this.chequeService.getReglementsCheque().subscribe({
+      next: (data: any[]) => {
+        this.reglements = data;
+        this.loading = false;
+      },
+      error: (err: any) => {
+        console.error('Error loading reglements', err);
+        this.loading = false;
+      }
+    });
   }
 }

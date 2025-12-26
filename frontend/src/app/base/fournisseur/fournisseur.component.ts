@@ -1,53 +1,245 @@
-import { AfterViewInit, Component, OnInit } from '@angular/core';
-import { Route, Router } from '@angular/router';
+import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { BaseService } from 'src/app/service/base.service';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import Swal from 'sweetalert2';
 
 @Component({
   selector: 'app-fournisseur',
   templateUrl: './fournisseur.component.html',
   styleUrls: ['./fournisseur.component.css']
 })
-export class FournisseurComponent  implements OnInit, AfterViewInit {
+export class FournisseurComponent  implements OnInit {
   fournisseurs: any[] = [];
-  dataTable: any;
-  loading: boolean = true; // ← par défaut on affiche le spinner
+  loading: boolean = true;
 
-  constructor(private baseService: BaseService , private router : Router) {}
+  // Formulaire ajout fournisseur
+  fournisseurForm!: FormGroup;
+
+  // Pagination
+  currentPage: number = 1;
+  pageSize: number = 25;
+  totalRecords: number = 0;
+  totalPages: number = 0;
+
+  // Recherche / tri
+  searchTerm: string = '';
+  sortColumn: string = 'nom';
+  sortDirection: 'ASC' | 'DESC' = 'ASC';
+
+  constructor(
+    private baseService: BaseService,
+    private router: Router,
+    private fb: FormBuilder
+  ) {}
 
   ngOnInit(): void {
-    this.getClients();
+    this.initForm();
+    this.loadFournisseurs(1);
   }
 
-  ngAfterViewInit(): void {
-    // Ne rien faire ici, on initialise dans getClients après chargement
+  initForm(): void {
+    this.fournisseurForm = this.fb.group({
+      code: ['', Validators.required],
+      nom: ['', Validators.required]
+    });
   }
 
-  getClients(): void {
-  this.loading = true;
+  loadFournisseurs(page: number = 1): void {
+    this.loading = true;
+    this.currentPage = page;
 
-  this.baseService.getFournisseur().subscribe((response: any) => {
-    // Extraire les données de la réponse API qui est au format {success: true, data: [...]}
-    this.fournisseurs = response?.data || (Array.isArray(response) ? response : []);
+    const requestOptions = {
+      page: this.currentPage,
+      pageSize: this.pageSize,
+      orderBy: this.sortColumn,
+      orderDirection: this.sortDirection,
+      search: this.searchTerm
+    };
 
-    setTimeout(() => {
-      if (this.dataTable) {
-        this.dataTable.destroy();
+    this.baseService.getFournisseursPaged(requestOptions).subscribe({
+      next: (response: any) => {
+        const result = response?.data || [];
+        const pagination = response?.pagination || {};
+
+        this.fournisseurs = Array.isArray(result) ? result : [];
+        this.totalRecords = pagination.total || 0;
+        this.totalPages = pagination.totalPages || 1;
+
+        this.loading = false;
+      },
+      error: (err) => {
+        console.error('[FournisseurComponent] ❌ Erreur chargement fournisseurs:', err);
+        this.fournisseurs = [];
+        this.totalRecords = 0;
+        this.totalPages = 1;
+        this.loading = false;
+        this.showError(`❌ Erreur lors du chargement des fournisseurs: ${err.error?.message || err.message || 'Erreur inconnue'}`);
       }
+    });
+  }
 
-      this.dataTable = $('#clientTable').DataTable({
-        pageLength: 10,
-        ordering: true,
-        order: [[0, 'desc']], // Trier par la première colonne (ID) en DESC par défaut
-        searching: true,
-        lengthChange: true
-      });
-
-     
-    }, 0);
-     this.loading = false; // ✅ on cache le spinner après le chargement
-  });
-}
 OnEdit(part_id : any){
   this.router.navigate(['/Edit-Fournisseur/'+ part_id]);
 }
+
+  onSubmit(): void {
+    if (this.fournisseurForm.invalid) {
+      this.showError('❗ Le formulaire est invalide.');
+      return;
+    }
+
+    this.baseService.createFournisseur(this.fournisseurForm.value).subscribe({
+      next: () => {
+        this.closeAddFournisseurModal();
+        this.fournisseurForm.reset();
+        this.initForm();
+        this.showSuccess('✅ Fournisseur ajouté avec succès !');
+        this.loadFournisseurs(1);
+      },
+      error: (err) => {
+        console.error('[FournisseurComponent] ❌ Erreur ajout fournisseur:', err);
+        this.showError(`❌ Erreur lors de l'ajout du fournisseur: ${err.error?.message || err.message || 'Erreur inconnue'}`);
+      }
+    });
+  }
+
+  removeFournisseur(fournisseur: any): void {
+    const partId = fournisseur?.part_id;
+    if (!partId) {
+      this.showError('❌ Identifiant fournisseur introuvable.');
+      return;
+    }
+
+    Swal.fire({
+      icon: 'warning',
+      title: 'Supprimer ce fournisseur ?',
+      text: `Fournisseur: ${fournisseur?.nom || ''}`,
+      showCancelButton: true,
+      confirmButtonText: 'Oui, supprimer',
+      cancelButtonText: 'Annuler',
+      customClass: {
+        confirmButton: 'btn btn-danger',
+        cancelButton: 'btn btn-secondary'
+      },
+      buttonsStyling: false
+    }).then((result) => {
+      if (!result.isConfirmed) return;
+
+      this.baseService.deleteClient(partId).subscribe({
+        next: (res: any) => {
+          const message = res?.message || 'Fournisseur supprimé avec succès';
+          this.showSuccess(`✅ ${message}`);
+          this.loadFournisseurs(this.currentPage);
+        },
+        error: (err) => {
+          console.error('[FournisseurComponent] ❌ Erreur suppression fournisseur:', err);
+          this.showError(`❌ Erreur lors de la suppression: ${err.error?.message || err.message || 'Erreur inconnue'}`);
+        }
+      });
+    });
+  }
+
+  onPageChange(page: number): void {
+    if (page >= 1 && page <= this.totalPages && page !== this.currentPage) {
+      this.loadFournisseurs(page);
+    }
+  }
+
+  onPageSizeChange(event: any): void {
+    const newPageSize = parseInt(event.target.value, 10);
+    if (newPageSize > 0) {
+      this.pageSize = newPageSize;
+      this.loadFournisseurs(1);
+    }
+  }
+
+  onSearch(): void {
+    this.loadFournisseurs(1);
+  }
+
+  onSort(column: string): void {
+    if (this.sortColumn === column) {
+      this.sortDirection = this.sortDirection === 'ASC' ? 'DESC' : 'ASC';
+    } else {
+      this.sortColumn = column;
+      this.sortDirection = 'ASC';
+    }
+    this.loadFournisseurs(1);
+  }
+
+  getSortIcon(column: string): string {
+    if (this.sortColumn !== column) return 'fa-sort';
+    return this.sortDirection === 'ASC' ? 'fa-sort-up' : 'fa-sort-down';
+  }
+
+  getPageNumbers(): number[] {
+    const pages: number[] = [];
+    const maxPagesToShow = 5;
+    let startPage = Math.max(1, this.currentPage - Math.floor(maxPagesToShow / 2));
+    let endPage = Math.min(this.totalPages, startPage + maxPagesToShow - 1);
+
+    if (endPage - startPage < maxPagesToShow - 1) {
+      startPage = Math.max(1, endPage - maxPagesToShow + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) pages.push(i);
+    return pages;
+  }
+
+  getDisplayRange(): string {
+    if (this.totalRecords === 0) return '0 à 0';
+    const start = ((this.currentPage - 1) * this.pageSize) + 1;
+    const end = Math.min(this.currentPage * this.pageSize, this.totalRecords);
+    return `${start} à ${end}`;
+  }
+
+  private closeAddFournisseurModal(): void {
+    const modalElement = document.getElementById('addClientModal');
+    if (!modalElement) return;
+
+    // @ts-ignore
+    if (typeof ($) !== 'undefined') {
+      // @ts-ignore
+      $('#addClientModal').modal('hide');
+      return;
+    }
+
+    const modal = (window as any).bootstrap?.Modal?.getInstance(modalElement);
+    if (modal) {
+      modal.hide();
+      return;
+    }
+
+    modalElement.classList.remove('show');
+    document.body.classList.remove('modal-open');
+    const backdrop = document.querySelector('.modal-backdrop');
+    if (backdrop) backdrop.remove();
+  }
+
+  showSuccess(message: string) {
+    Swal.fire({
+      icon: 'success',
+      title: 'Succès',
+      text: message,
+      confirmButtonText: 'OK',
+      customClass: {
+        confirmButton: 'btn btn-success'
+      },
+      buttonsStyling: false
+    });
+  }
+
+  showError(message: string) {
+    Swal.fire({
+      icon: 'error',
+      title: 'Erreur',
+      text: message,
+      confirmButtonText: 'Fermer',
+      customClass: {
+        confirmButton: 'btn btn-danger'
+      },
+      buttonsStyling: false
+    });
+  }
 }

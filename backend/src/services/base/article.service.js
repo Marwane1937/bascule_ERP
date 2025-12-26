@@ -40,12 +40,27 @@ const deleteArticle = async (article_id, sequelizeConnection = null) => {
   return { message: 'article supprimé avec succès' };
 };
 
+// Archiver un article
+const archiveArticle = async (article_id, sequelizeConnection = null) => {
+  const article = await articleModel.getArticleById(article_id, sequelizeConnection);
+  if (!article) {
+    throw new Error('article non trouvé');
+  }
+  await articleModel.archiveArticle(article_id, sequelizeConnection);
+  return { message: 'article archivé avec succès' };
+};
+
+// Récupérer les articles paginés
+const getArticlesPaged = async (options = {}, sequelizeConnection = null) => {
+  return await articleModel.getArticlesPaged(options, sequelizeConnection);
+};
 
 module.exports = {
   getArticles,
+  getArticlesPaged,
   deleteArticle,
   createArticle,
   editArticle,
-  getArticle
-
+  getArticle,
+  archiveArticle
 };

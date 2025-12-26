@@ -29,12 +29,14 @@
                 <thead>
                   <tr>
                     <th style="width: 150px;">Group ID</th>
+                    <th>Group Nom</th>
                     <th style="width: 130px;">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr *ngFor="let group of groupIds">
                     <td>{{ group.group_id }}</td>
+                    <td>{{ group.group_nom }}</td>
                     <td class="text-center">
                       <button class="btn btn-sm btn-outline-info" (click)="onEdit(group.group_id)">
                         <i class="fas fa-edit"></i> Éditer

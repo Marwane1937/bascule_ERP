@@ -30,37 +30,51 @@
                 <h5 class="mb-4 text-primary fw-semibold">🧾 Informations du client</h5>
 
                 <!-- Tes Inputs ici -->
-                <form>
+                <form (ngSubmit)="onSaveClientBasic()">
                     <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Nom :</label>
-                            <input type="text" class="form-control" placeholder="Entrez le nom" />
+                        <div class="col-md-4">
+                            <label class="form-label">Code :</label>
+                            <input
+                                type="text"
+                                class="form-control"
+                                placeholder="Ex: C0001"
+                                [(ngModel)]="clientInfo.code"
+                                name="code"
+                                required
+                            />
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Email :</label>
-                            <input type="email" class="form-control" placeholder="exemple@domaine.com" />
+                        <div class="col-md-8">
+                            <label class="form-label">Nom :</label>
+                            <input
+                                type="text"
+                                class="form-control"
+                                placeholder="Entrez le nom"
+                                [(ngModel)]="clientInfo.nom"
+                                name="nom"
+                                required
+                            />
                         </div>
                     </div>
 
                     <div class="row mb-3">
                         <div class="col-md-4">
                             <label class="form-label">Téléphone :</label>
-                            <input type="text" class="form-control" />
+                            <input type="text" class="form-control" disabled />
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Adresse :</label>
-                            <input type="text" class="form-control" />
+                            <input type="text" class="form-control" disabled />
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Ville :</label>
-                            <input type="text" class="form-control" />
+                            <input type="text" class="form-control" disabled />
                         </div>
                     </div>
 
                     <!-- Boutons -->
                     <div class="text-end mt-4">
                         <button type="submit" class="btn btn-success me-2">💾 Enregistrer</button>
-                        <button type="reset" class="btn btn-secondary">↩️ Réinitialiser</button>
+                        <button type="button" class="btn btn-secondary" (click)="getClientBasic(part_id)">↩️ Réinitialiser</button>
                     </div>
                 </form>
 
@@ -83,6 +97,14 @@
       </li>
       <li class="nav-item">
         <a class="nav-link" data-bs-toggle="pill" href="#identifiant">identifiant</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="pill" href="#exoneration">
+          Lettre d'exonération
+          <span *ngIf="hasExoneration" class="badge bg-warning text-dark ms-2" title="Une lettre d'exonération existe pour ce client">
+            <i class="fas fa-lightbulb"></i>
+          </span>
+        </a>
       </li> 
     </ul>
 
@@ -187,6 +209,80 @@
           </tbody>
         </table>
       </div>
+
+      <!-- Lettre d'exonération -->
+      <div class="tab-pane fade" id="exoneration">
+        <form (ngSubmit)="onSaveExoneration()">
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Identifiant :</label>
+              <input
+                type="text"
+                class="form-control"
+                placeholder="Identifiant"
+                [(ngModel)]="exonerationData.identifiant"
+                name="exoneration_identifiant"
+                maxlength="32"
+              />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Motif d'exonération :</label>
+              <input
+                type="text"
+                class="form-control"
+                placeholder="Motif d'exonération"
+                [(ngModel)]="exonerationData.motif"
+                name="exoneration_motif"
+                maxlength="128"
+              />
+            </div>
+          </div>
+
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Référence de l'attestation :</label>
+              <input
+                type="text"
+                class="form-control"
+                placeholder="Référence"
+                [(ngModel)]="exonerationData.reference"
+                name="exoneration_reference"
+                maxlength="32"
+              />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Date début d'exonération :</label>
+              <input
+                type="date"
+                class="form-control"
+                [(ngModel)]="exonerationData.date_debut"
+                name="exoneration_date_debut"
+              />
+            </div>
+          </div>
+
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Date fin d'exonération :</label>
+              <input
+                type="date"
+                class="form-control"
+                [(ngModel)]="exonerationData.date_fin"
+                name="exoneration_date_fin"
+              />
+            </div>
+          </div>
+
+          <!-- Boutons -->
+          <div class="text-end mt-4">
+            <button type="button" class="btn btn-info me-2" (click)="openAllExonerationsModal()">
+              <i class="fas fa-list"></i> Voir toutes les lettres
+            </button>
+            <button type="submit" class="btn btn-success me-2">💾 Enregistrer</button>
+            <button type="button" class="btn btn-secondary" (click)="loadExoneration(true)">↩️ Réinitialiser</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 </div>  
@@ -275,6 +371,79 @@
       <div class="modal-footer bg-light">
         <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
         <button class="btn btn-success" (click)="onSaveIdentifiant()">✅ Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ✅ MODALE POUR TOUTES LES LETTRES D'EXONÉRATION -->
+<div class="modal fade" id="allExonerationsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header bg-warning text-dark">
+        <h5 class="modal-title">
+          <i class="fas fa-file-alt me-2"></i>
+          Toutes les lettres d'exonération
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body px-4">
+        <div *ngIf="allExonerations.length === 0" class="text-center py-5">
+          <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+          <p class="text-muted">Aucune lettre d'exonération trouvée pour ce client.</p>
+        </div>
+        <div *ngIf="allExonerations.length > 0">
+          <div class="table-responsive">
+            <table class="table table-bordered table-hover">
+              <thead class="table-light">
+                <tr>
+                  <th>Identifiant</th>
+                  <th>Motif</th>
+                  <th>Référence</th>
+                  <th>Date début</th>
+                  <th>Date fin</th>
+                  <th>Jours restants</th>
+                  <th>Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let exon of allExonerations" [class.table-danger]="isExpired(exon.date_fin)">
+                  <td>{{ exon.identifiant || '-' }}</td>
+                  <td>{{ exon.motif || '-' }}</td>
+                  <td>{{ exon.reference || '-' }}</td>
+                  <td>{{ exon.date_debut ? (exon.date_debut | date: 'dd/MM/yyyy') : '-' }}</td>
+                  <td>{{ exon.date_fin ? (exon.date_fin | date: 'dd/MM/yyyy') : '-' }}</td>
+                  <td>
+                    <span *ngIf="getDaysRemaining(exon.date_fin) !== null" 
+                          [class.text-danger]="getDaysRemaining(exon.date_fin)! < 0"
+                          [class.text-warning]="getDaysRemaining(exon.date_fin)! >= 0 && getDaysRemaining(exon.date_fin)! <= 30"
+                          [class.text-success]="getDaysRemaining(exon.date_fin)! > 30">
+                      {{ getDaysRemaining(exon.date_fin) }} jour(s)
+                    </span>
+                    <span *ngIf="getDaysRemaining(exon.date_fin) === null">-</span>
+                  </td>
+                  <td>
+                    <span *ngIf="isExpired(exon.date_fin)" class="badge bg-danger">
+                      <i class="fas fa-times-circle"></i> Périmé
+                    </span>
+                    <span *ngIf="!isExpired(exon.date_fin) && exon.date_fin" class="badge bg-success">
+                      <i class="fas fa-check-circle"></i> Valide
+                    </span>
+                    <span *ngIf="!exon.date_fin" class="badge bg-secondary">
+                      Non défini
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="mt-3 text-muted">
+            <small><i class="fas fa-info-circle"></i> Total : {{ allExonerations.length }} lettre(s) d'exonération</small>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer bg-light">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
       </div>
     </div>
   </div>

@@ -168,6 +168,7 @@ class UserPermissionsService {
           { name: 'Client', route: '/Client' },
           { name: 'Employé', route: '/Employe' },
           { name: 'Fournisseur', route: '/Fournisseur' },
+          { name: 'Véhicule', route: '/Vehicule' },
           { name: 'Commercial', route: '/Commercial' },
           { name: 'Produit', route: '/Produit' },
           { name: 'Famille', route: '/Famille' }
@@ -218,7 +219,19 @@ class UserPermissionsService {
         items: [
           { name: 'Utilisateurs', route: '/Users' },
           { name: 'Permissions Utilisateurs', route: '/User-Permissions' },
-          { name: 'Listes', route: '/Listes' }
+          { name: 'Listes', route: '/Listes' },
+          { name: 'Notifications', route: '/Notifications' }
+        ]
+      },
+      {
+        category: 'Permissions Notifications',
+        icon: 'fas fa-bell',
+        items: [
+          { name: 'notification_view', route: '' },
+          { name: 'notification_mark_read', route: '' },
+          { name: 'notification_archive', route: '' },
+          { name: 'notification_restore', route: '' },
+          { name: 'notification_delete', route: '' }
         ]
       }
     ];

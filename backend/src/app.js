@@ -19,6 +19,7 @@ const userRoutes = require('./routes/user.routes');
 const clientRoutes = require('./routes/base/client.routes');
 const articleRoutes = require('./routes/base/article.routes');
 const familleRoutes = require('./routes/base/famille.routes');
+const vehiculeRoutes = require('./routes/base/vehicule.routes');
 
 // ✅ Ventes
 const devisRoutes = require('./routes/ventes/devis.routes');
@@ -64,6 +65,7 @@ app.use('/api/users', authenticateToken, userRoutes);
 app.use('/api/clients', authenticateToken, clientRoutes);
 app.use('/api/articles', authenticateToken, articleRoutes);
 app.use('/api/familles', authenticateToken, familleRoutes);
+app.use('/api/vehicules', authenticateToken, vehiculeRoutes);
 // ✅ Ventes
 app.use('/api/devis', authenticateToken, devisRoutes);
 app.use('/api/livraisons', authenticateToken, livraisonRoutes);
@@ -90,12 +92,20 @@ app.use('/api/retour-pdf', authenticateToken, retourPdfRoutes);
 app.use('/api/commande-pdf', authenticateToken, commandePdfRoutes);
 app.use('/api/avoir-pdf', authenticateToken, avoirPdfRoutes);
 
+// ✅ Generation / Impression Chèque
+const chequePdfRoutes = require('./routes/generation/cheque.routes');
+app.use('/api/generation/cheque', authenticateToken, chequePdfRoutes);
+
 // ✅ Documents société
 app.use('/api/document-societe', documentSocieteRoutes);
 app.use('/api/societes', societeRoutes);
 
 // ✅ Permissions utilisateurs
 app.use('/api/user-permissions', userPermissionsRoutes);
+
+// ✅ Notifications
+const notificationRoutes = require('./routes/notification.routes');
+app.use('/api/notifications', notificationRoutes);
 
 // ✅ Changement de base de données
 const databaseSwitchRoutes = require('./routes/database-switch.routes');

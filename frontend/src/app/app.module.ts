@@ -17,6 +17,8 @@ import { EditClientComponent } from './base/edit/edit-client/edit-client.compone
 import { UppercaseDirective } from './uppercase.directive';
 import { EditFournisseurComponent } from './base/edit/edit-fournisseur/edit-fournisseur.component';
 import { EditProduitComponent } from './base/edit/edit-produit/edit-produit.component';
+import { VehiculeComponent } from './base/vehicule/vehicule.component';
+import { EditVehiculeComponent } from './base/edit/edit-vehicule/edit-vehicule.component';
 import { DevisComponent } from './vente/devis/devis.component';
 import { AssistantComponent } from './assistant/assistant.component';
 import { EditDevisComponent } from './vente/edit/edit-devis/edit-devis.component';
@@ -48,6 +50,7 @@ import { CaisseRecettesComponent } from './vente/caisse/caisse-recettes.componen
 import { CaisseDepensesComponent } from './vente/caisse/caisse-depenses.component';
 import { BonCommandeComponent } from './achat/bon-commande/bon-commande.component';
 import { EditBonCommandeComponent } from './achat/edit/edit-bon-commande/edit-bon-commande.component';
+import { NotificationComponent } from './notification/notification.component';
 
 @NgModule({
   declarations: [
@@ -65,6 +68,8 @@ import { EditBonCommandeComponent } from './achat/edit/edit-bon-commande/edit-bo
     UppercaseDirective,
     EditFournisseurComponent,
     EditProduitComponent,
+    VehiculeComponent,
+    EditVehiculeComponent,
     DevisComponent,
     AssistantComponent,
     EditDevisComponent,
@@ -89,6 +94,7 @@ import { EditBonCommandeComponent } from './achat/edit/edit-bon-commande/edit-bo
     CaisseDepensesComponent,
     BonCommandeComponent,
     EditBonCommandeComponent,
+    NotificationComponent,
   ],
   imports: [
     BrowserModule,

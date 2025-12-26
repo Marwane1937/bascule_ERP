@@ -170,6 +170,45 @@ class EmailService {
     }
     return new Promise(async (resolve, reject) => {
       try {
+        // === EXONÉRATION TVA (DEVIS + BON DE LIVRAISON) ===
+        let isClientExonerated = false;
+        const part_id = devisData?.[0]?.part_id;
+        const documentType0 = devisData?.[0]?.type;
+        const documentKind0 = devisData?.[0]?.document_kind;
+        const isRetour0 = documentKind0 === 'RETOUR CLIENT' || documentType0 === 5;
+        const isLivraison0 = documentKind0 === 'LIVRAISON' || documentType0 === 2;
+        const isDevis0 = !isRetour0 && !isLivraison0;
+
+        if (part_id && (isDevis0 || isLivraison0)) {
+          try {
+            const sequelizeConn = options.sequelize || require('../config/database');
+            const exonerationModel = require('../models/base/partenaire-exoneration.model');
+            const exonerations = await exonerationModel.getAllExonerationsByPartId(part_id, sequelizeConn);
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const validExoneration = (Array.isArray(exonerations) ? exonerations : []).find((exon) => {
+              if (!exon?.date_debut || !exon?.date_fin) return false;
+              const dateDebut = new Date(exon.date_debut);
+              dateDebut.setHours(0, 0, 0, 0);
+              const dateFin = new Date(exon.date_fin);
+              dateFin.setHours(0, 0, 0, 0);
+              return today >= dateDebut && today <= dateFin;
+            });
+
+            isClientExonerated = !!validExoneration;
+            console.log('[EmailService] 📋 Exonération TVA:', {
+              isClientExonerated: isClientExonerated ? 'Oui' : 'Non',
+              document_kind: documentKind0,
+              type: documentType0
+            });
+          } catch (e) {
+            console.warn('[EmailService] ⚠️ Erreur vérification exonération TVA:', e);
+            isClientExonerated = false;
+          }
+        }
+
         // Détecter le type de document
         const documentType = devisData[0]?.type;
         const documentKind = devisData[0]?.document_kind;
@@ -530,7 +569,8 @@ class EmailService {
             const totalAvantRemise = pu * qte;
             const montantRemise = isNaN(totalAvantRemise - htAfterRemise) ? 0 : (totalAvantRemise - htAfterRemise);
             const ht = htAfterRemise; // HT = montant après remise
-            const tva = isNaN(ht * taux_tva) ? 0 : (ht * taux_tva);
+            // Si client exonéré (devis) => TVA 0
+            const tva = (isClientExonerated && isDevis) ? 0 : (isNaN(ht * taux_tva) ? 0 : (ht * taux_tva));
             const ttc = isNaN(ht + tva) ? 0 : (ht + tva);
 
             totalHT += ht;
@@ -928,6 +968,16 @@ class EmailService {
         doc.font('Helvetica-Bold').fontSize(9).fillColor('#000'); // Gras pour le montant
         doc.text(totalTTCWords, 50 + phraseWidth, y, { width: 500 - phraseWidth, align: 'left' });
         y += 20;
+
+        // Mention sur PDF (devis + bon de livraison) si exonération valide
+        if (isClientExonerated && (isDevis || isLivraison)) {
+          doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
+          doc.text('TVA non applicable – Client exonéré conformément à la lettre d\'exonération en vigueur', 50, y, {
+            width: 500,
+            align: 'center'
+          });
+          y += 15;
+        }
 
         // === TABLEAU CONDITION / EXPÉDITION / TRANSPORTEUR avec bordures arrondies ===
         const condition = devisData[0]?.condition || '';

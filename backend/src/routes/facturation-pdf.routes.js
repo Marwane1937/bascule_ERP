@@ -51,7 +51,8 @@ router.post('/generate', async (req, res) => {
 
     const pdfPath = await facturationPdfService.genererPDF(factureData, {
       withStamp: !!withStamp,
-      documentSociete: documentSociete
+      documentSociete: documentSociete,
+      sequelize: req.sequelize
     });
     
     const pdfUrl = `http://localhost:3500/factures/${path.basename(pdfPath)}`;

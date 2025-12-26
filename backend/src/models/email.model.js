@@ -26,6 +26,7 @@ const getEmailDataByDocumentId = async (document_id, sequelizeConnection = null)
           s.numero,
           s.description AS client_ref,
           s.date,
+          s.part_id,
           p.nom AS client,
           c.nom AS commercial,
           a.article_cod,
@@ -72,7 +73,7 @@ const getEmailDataByDocumentId = async (document_id, sequelizeConnection = null)
         CASE WHEN q.designation IS NULL OR LTRIM(RTRIM(CAST(q.designation AS VARCHAR(MAX)))) = '' THEN a.article_nom ELSE q.designation END as article , vd.taux_tva,
         case when vd.remise <> 0 then (vd.quantite * vd.prix)-((vd.quantite * vd.prix)*vd.remise) else (vd.quantite * vd.prix)-vd.remise_montant end as remise,
         vi.condition , vi.expedition , vi.transporteur , '' as adresse , '' as ville , vd.id AS ligne_id,
-        v.type, v.etat
+        v.type, v.etat, v.part_id
         from vente_document v
         left join vente_document_detail vd on v.document_id = vd.document_id
         left join v_partenaire p on p.part_id = v.part_id

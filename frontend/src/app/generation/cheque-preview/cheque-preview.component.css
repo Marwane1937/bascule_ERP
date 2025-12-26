@@ -1,0 +1,15 @@
+/* Utilise une base simple; le container est dimensionné en mm via ngStyle */
+.cheque-preview-container {
+  border: 1px solid #ddd;
+  overflow: hidden;
+  position: relative;
+}
+
+.cheque-preview-container span,
+.cheque-preview-container div {
+  line-height: 1;
+}
+
+
+
+

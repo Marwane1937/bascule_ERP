@@ -14,9 +14,10 @@ export class EditFournisseurComponent implements OnInit, AfterViewInit {
   identifiants: any[] = [];
   contacts: any[] = [];
   part_id: any;
-  villes: any;
-  comerciaux: any;
-  identifs: any;
+  fournisseurInfo: { code: any; nom: string } = { code: '', nom: '' };
+  villes: any[] = [];
+  comerciaux: any[] = [];
+  identifs: any[] = [];
  checkedIdentifiants: any[] = [];
 
   selectedAdresse:any = null;
@@ -34,7 +35,53 @@ export class EditFournisseurComponent implements OnInit, AfterViewInit {
     this.route.params.subscribe(params => {
       this.part_id = params['part_id'];
       if (this.part_id) {
+        this.getFournisseurBasic(this.part_id);
         this.getClientDetails(this.part_id);
+      }
+    });
+  }
+
+  getFournisseurBasic(part_id: string): void {
+    this.baseService.getClientById(part_id).subscribe({
+      next: (data: any) => {
+        const fournisseur = data?.data || data;
+        this.fournisseurInfo = {
+          code: fournisseur?.code ?? '',
+          nom: fournisseur?.nom ?? ''
+        };
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        console.error('[EditFournisseurComponent] ❌ Erreur chargement fournisseur:', err);
+        this.showError('❌ Erreur lors du chargement du fournisseur.');
+      }
+    });
+  }
+
+  onSaveFournisseurBasic(): void {
+    if (!this.part_id) {
+      this.showError('❌ Identifiant fournisseur introuvable.');
+      return;
+    }
+    if (!this.fournisseurInfo?.nom || !String(this.fournisseurInfo.nom).trim()) {
+      this.showError('❗ Le nom du fournisseur est requis.');
+      return;
+    }
+    if (this.fournisseurInfo?.code == null || String(this.fournisseurInfo.code).trim() === '') {
+      this.showError('❗ Le code du fournisseur est requis.');
+      return;
+    }
+
+    this.baseService.updateClient(this.part_id, {
+      code: this.fournisseurInfo.code,
+      nom: this.fournisseurInfo.nom
+    }).subscribe({
+      next: () => {
+        this.showSuccess('Fournisseur mis à jour avec succès.');
+      },
+      error: (err: any) => {
+        console.error('[EditFournisseurComponent] ❌ Erreur update fournisseur:', err);
+        this.showError(err?.error?.message || 'Erreur lors de la mise à jour du fournisseur.');
       }
     });
   }
@@ -42,46 +89,60 @@ export class EditFournisseurComponent implements OnInit, AfterViewInit {
   ngAfterViewInit(): void {}
 
   AllVille() {
-    this.baseService.getVille().subscribe(data => {
-      this.villes = data;
+    this.baseService.getVille().subscribe((response: any) => {
+      this.villes = response?.data || (Array.isArray(response) ? response : []);
+    }, err => {
+      console.error('[EditFournisseurComponent] Erreur chargement villes:', err);
+      this.villes = [];
     });
   }
 
   AllCommercial() {
-    this.baseService.getCommercial().subscribe(data => {
-      this.comerciaux = data;
+    this.baseService.getCommercial().subscribe((response: any) => {
+      this.comerciaux = response?.data || (Array.isArray(response) ? response : []);
+    }, err => {
+      console.error('[EditFournisseurComponent] Erreur chargement commerciaux:', err);
+      this.comerciaux = [];
     });
   }
 
   AllIdentifiant() {
-    this.baseService.getIdentifiants().subscribe(data => {
-      this.identifs = data;
+    this.baseService.getIdentifiants().subscribe((response: any) => {
+      this.identifs = response?.data || (Array.isArray(response) ? response : []);
+    }, err => {
+      console.error('[EditFournisseurComponent] Erreur chargement identifiants:', err);
+      this.identifs = [];
     });
   }
 
   getClientDetails(part_id: string): void {
-    this.baseService.getClientComplement(part_id).subscribe((data: any) => {
-      this.adresses = data.adresses || [];
-      this.contacts = data.contacts || [];
-      this.identifiants = data.identifiants || [];
+    this.baseService.getClientComplement(part_id).subscribe({
+      next: (data: any) => {
+        this.adresses = data?.adresses || [];
+        this.contacts = data?.contacts || [];
+        this.identifiants = data?.identifiants || [];
 
-      setTimeout(() => {
-        $('#adresseTable').DataTable({
-          order: [[0, 'desc']] // Trier par la première colonne en DESC par défaut
-        });
-        $('#identifiantTable').DataTable({
-          order: [[0, 'desc']] // Trier par la première colonne en DESC par défaut
-        });
-        $('#contactTable').DataTable({
-          order: [[0, 'desc']] // Trier par la première colonne en DESC par défaut
-        });
-      }, 100);
+        this.cdr.detectChanges();
+
+        setTimeout(() => {
+          this.initOrRefreshDataTable('#adresseTable', { order: [[0, 'desc']] });
+          this.initOrRefreshDataTable('#identifiantTable', { order: [[0, 'desc']] });
+          this.initOrRefreshDataTable('#contactTable', { order: [[0, 'desc']] });
+        }, 100);
+      },
+      error: (err: any) => {
+        console.error('[EditFournisseurComponent] ❌ Erreur chargement complément fournisseur:', err);
+        this.adresses = [];
+        this.contacts = [];
+        this.identifiants = [];
+        this.showError(err?.error?.message || 'Erreur lors du chargement des détails fournisseur.');
+      }
     });
   }
 
  getVilleNomById(ville: number): string {
   const ville_nom = this.villes.find((v: any) => v.id === ville);
-  return ville_nom ? ville_nom.id : '';
+  return ville_nom ? ville_nom.nom : '';
 }
 getVilleIdByNom(nom: string): number | null {
   const ville = this.villes.find((v: any) => v.nom === nom);
@@ -298,7 +359,7 @@ getNextLigne(): number {
 onSaveIdentifiant(): void {
   const part_id = this.part_id;
 
-  const isEdit = !!this.selectedIdentifiant.id; // ✅ Si ID présent => modification
+  const isEdit = !!this.selectedIdentifiant?.original_identifiant_type;
 
   const identifObj = this.identifs.find(
     (i: any) => i.id === Number(this.selectedIdentifiant.identifiant_type)
@@ -308,62 +369,25 @@ onSaveIdentifiant(): void {
     adresses: [],
     identifiants: [
       {
-        id: this.selectedIdentifiant.id, // ❗ Ne pas oublier l’id s’il existe
-        identifiant_type: identifObj ? identifObj.id : '',
-        type: identifObj ? identifObj.nom : '',
-        identifiant: this.selectedIdentifiant.identifiant
+        identifiant_type: identifObj ? identifObj.id : null,
+        identifiant: (this.selectedIdentifiant.identifiant || '').toString(),
+        original_identifiant_type: this.selectedIdentifiant.original_identifiant_type,
+        original_identifiant: this.selectedIdentifiant.original_identifiant
       }
     ],
     contacts: []
   };
 
-  this.baseService.saveClientDetails(part_id, payload).subscribe({
+  const request$ = isEdit
+    ? this.baseService.updateClientDetails(part_id, payload)
+    : this.baseService.saveClientDetails(part_id, payload);
+
+  request$.subscribe({
     next: () => {
-      const table: any = $('#identifiantTable').DataTable();
-
-      const rowData = [
-        '<input type="checkbox" />',
-        identifObj ? identifObj.nom : '',
-        this.selectedIdentifiant.identifiant,
-        `<button class="btn btn-warning btn-round"><i class="fas fa-edit"></i></button>`
-      ];
-
-      if (isEdit) {
-        // 🔁 Modifier la ligne existante
-        const rowIndex = table
-          .rows()
-          .indexes()
-          .filter((idx: number) => {
-            const row = table.row(idx).node();
-            return $(row).hasClass('editing'); // ligne marquée à modifier
-          })[0];
-
-        table.row(rowIndex).data(rowData).draw(false);
-        table.row(rowIndex).node().classList.remove('editing');
-
-        this.showSuccess('Identifiant modifié avec succès.');
-      } else {
-        // ➕ Ajouter une nouvelle ligne
-        const rowNode = table.row.add(rowData).draw(false).node();
-        if (rowNode) {
-          $(rowNode).find('td').css('text-align', 'center');
-          $(rowNode).addClass('ligne-surbrillance');
-        }
-
-        // Ajouter à ton tableau local Angular si nécessaire
-        this.identifiants.push(payload.identifiants[0]);
-
-        this.showSuccess('Identifiant ajouté avec succès.');
-      }
-
-      // Fermer la modale
       ($('#identifiantModal') as any).modal('hide');
-
-      // Réinitialiser le champ
-      this.selectedIdentifiant = {
-        identifiant: '',
-        identifiant_type: null
-      };
+      this.showSuccess(isEdit ? 'Identifiant modifié avec succès.' : 'Identifiant ajouté avec succès.');
+      this.getClientDetails(part_id);
+      this.selectedIdentifiant = { identifiant: '', identifiant_type: null };
     },
     error: (err) => {
       console.error('❌ Erreur:', err);
@@ -412,39 +436,30 @@ onCheckboxChange(row: any): void {
 
 /////// Pour la suppression
 onDeleteIdentifiants(): void {
-    if (this.checkedIdentifiants.length === 0) {
+    const selected = (this.identifiants || []).filter((x: any) => x?.checked);
+    if (selected.length === 0) {
     this.showError('Veuillez sélectionner au moins un identifiant à supprimer ');
     return;
   }
-
-  const table: any = $('#identifiantTable').DataTable();
-
-  const identifiantsToDelete = this.checkedIdentifiants.map(item => ({ id: item.id }));
-
-  this.checkedIdentifiants.forEach(item => {
-    table.rows().every((rowIdx: any) => {
-      const data = table.row(rowIdx).data();
-      const identifiant = data[2];
-      if (identifiant === item.identifiant) {
-        table.row(rowIdx).remove();
-      }
-    });
-    this.identifiants = this.identifiants.filter(c => c.id !== item.id);
-  });
-
-  table.draw(false);
-  this.checkedIdentifiants = [];
+  
+  const identifiantsToDelete = selected.map((item: any) => ({
+    identifiant_type: item.identifiant_type
+  }));
 
   this.baseService.deleteClientDetails({
-    identifiants: identifiantsToDelete,
+    part_id: this.part_id,
+    // @ts-ignore
+    identifiants: identifiantsToDelete as any,
     adresses: [],
     contacts: []
   }).subscribe({
-    next: res => {
+    next: () => {
       this.showSuccess('Les identifiants sélectionnés ont été supprimés avec succès ');
+      this.getClientDetails(this.part_id);
     },
     error: err => {
       console.error('❌ Erreur suppression', err);
+      this.showError(err?.error?.message || '❌ Erreur suppression identifiants');
     }
   });
 }
@@ -580,7 +595,33 @@ onEditContact(row: any, index: number): void {
 
 onEditIdentifiant(identifiant: any): void {
   this.editMode.identifiant = true;
-  this.selectedIdentifiant = { ...identifiant }; // Pour pré-remplir le modal
+  this.selectedIdentifiant = {
+    ...identifiant,
+    original_identifiant_type: identifiant.identifiant_type,
+    original_identifiant: identifiant.identifiant
+  };
   $('#identifiantModal').modal('show');      // Ouvre le modal (jQuery Bootstrap)
 }
+
+  private initOrRefreshDataTable(selector: string, options: any = {}): void {
+    try {
+      // @ts-ignore
+      const hasDT = typeof ($) !== 'undefined' && $.fn && $.fn.DataTable;
+      if (!hasDT) return;
+
+      const $el = $(selector);
+      if (!$el || $el.length === 0) return;
+
+      // @ts-ignore
+      if ($.fn.DataTable.isDataTable(selector)) {
+        // @ts-ignore
+        $el.DataTable().clear().destroy();
+      }
+
+      // @ts-ignore
+      $el.DataTable(options);
+    } catch (e) {
+      console.warn('[EditFournisseurComponent] DataTable init skipped/error for', selector, e);
+    }
+  }
 }

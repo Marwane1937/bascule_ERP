@@ -66,6 +66,22 @@ export class PermissionsService {
   }
 
   // Vérifier si l'utilisateur a accès à une route
+  /**
+   * Vérifier si l'utilisateur a une permission spécifique
+   */
+  hasPermission(permission: string): boolean {
+    const permissions = this.authService.getUserPermissions();
+    const hasPermission = permissions.some(p => 
+      p.menu_item === permission && this.checkAccess(p.access)
+    );
+    
+    // Les admins ont tous les droits (type === 1)
+    const currentUser = this.authService.getCurrentUser();
+    const isAdmin = currentUser && currentUser.type === 1;
+    
+    return hasPermission || isAdmin || false;
+  }
+
   hasAccessToRoute(route: string): boolean {
     const menuName = this.routeToMenuNameMap[route];
     if (!menuName) {

@@ -13,17 +13,17 @@
       </ul>
     </div>
 
-    <!-- Bouton Ajouter Client -->
+    <!-- Bouton Ajouter Produit -->
     <div class="row mb-4">
       <div class="col-12 text-end">
         <button type="button" class="btn btn-gradient px-4 py-2 shadow-sm" data-bs-toggle="modal"
           data-bs-target="#addClientModal" (click)="resetForm()">
-          <i class="fas fa-user-plus me-2"></i> Ajouter un Produit
+          <i class="fas fa-plus me-2"></i> Ajouter un Produit
         </button>
       </div>
     </div>
 
-    <!-- Modal Formulaire d'ajout client -->
+    <!-- Modal Formulaire d'ajout/modification produit -->
     <div class="modal fade" id="addClientModal" tabindex="-1" aria-labelledby="addClientModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content modal-elegant shadow">
@@ -55,9 +55,9 @@
                 </div>
 
                 <div class="col-md-4 mb-3">
-                  <label for="unite_id" class="form-label">Famille</label>
-                  <select id="unite_id" class="form-select" formControlName="famille">
-                    <option disabled selected>Choisir une Famille</option>
+                  <label for="famille" class="form-label">Famille</label>
+                  <select id="famille" class="form-select" formControlName="famille">
+                    <option [value]="0" disabled selected>Choisir une Famille</option>
                     <option *ngFor="let f of familles" [value]="f.id">{{ f.nom }}</option>
                   </select>
                 </div>
@@ -65,20 +65,13 @@
                 <div class="col-md-4 mb-3">
                   <label for="unite_id" class="form-label">Unité</label>
                   <select id="unite_id" class="form-select" formControlName="unite_id">
-                    <option disabled selected>Choisir une Unité</option>
+                    <option [value]="null" disabled selected>Choisir une Unité</option>
                     <option *ngFor="let u of unites" [value]="u.id">{{ u.nom }}</option>
                   </select>
                 </div>
-
-                <!-- <div class="col-12 mt-3">
-                  <button type="submit" class="btn btn-primary" [disabled]="!produitForm.valid">Enregistrer</button>
-                </div>
-
-                <div *ngIf="successMessage" class="alert alert-success mt-3">
-                  {{ successMessage }}
-                </div> -->
               </div>
               <div class="modal-footer bg-light border-top">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
                 <button type="submit" class="btn btn-info" [disabled]="!produitForm.valid">
                   {{ isEditMode ? '💾 Enregistrer les modifications' : '✅ Enregistrer' }}
                 </button>
@@ -89,57 +82,134 @@
       </div>
     </div>
 
-    <!-- Tableau Client -->
+    <!-- Barre de recherche et taille page -->
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-search"></i></span>
+          <input
+            type="text"
+            class="form-control"
+            placeholder="Rechercher par code, nom..."
+            [(ngModel)]="searchTerm"
+            (keyup.enter)="onSearch()"
+          />
+          <button class="btn btn-primary" type="button" (click)="onSearch()">
+            <i class="fas fa-search"></i> Rechercher
+          </button>
+        </div>
+      </div>
+      <div class="col-md-2">
+        <select class="form-select" (change)="onPageSizeChange($event)">
+          <option [value]="10" [selected]="pageSize === 10">10 par page</option>
+          <option [value]="25" [selected]="pageSize === 25">25 par page</option>
+          <option [value]="50" [selected]="pageSize === 50">50 par page</option>
+          <option [value]="100" [selected]="pageSize === 100">100 par page</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Tableau Produit -->
     <div class="row">
       <div class="col-md-12">
         <div class="card border-0 shadow-sm rounded-3">
-
           <div class="card-body">
-            <div class="table-responsive">
-              <div *ngIf="loading" class="text-center my-4">
-                <div class="spinner-border text-primary" role="status">
+            <div class="table-responsive" style="position: relative; min-height: 300px;">
+              <!-- Loader overlay -->
+              <div
+                *ngIf="loading"
+                class="text-center my-4"
+                style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"
+              >
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
                   <span class="visually-hidden">Chargement...</span>
                 </div>
+                <p class="mt-3 mb-0 text-muted fw-semibold">Chargement des produits...</p>
               </div>
 
-              <table *ngIf="!loading" id="clientTable" class="display table table-bordered table-striped" width="100%">
-                <thead>
+              <table
+                class="table table-bordered table-striped table-hover"
+                width="100%"
+                [style.opacity]="loading ? '0.5' : '1'"
+              >
+                <thead class="table-light">
                   <tr>
-                    <th style="width: 70px;">Produit Code</th>
-                    <th style="width: 130px;">Désignation</th>
+                    <th (click)="onSort('article_cod')" class="sortable" style="cursor: pointer; width: 120px;">
+                      Code Produit <i class="fas ms-1" [ngClass]="getSortIcon('article_cod')"></i>
+                    </th>
+                    <th (click)="onSort('article_nom')" class="sortable" style="cursor: pointer;">
+                      Désignation <i class="fas ms-1" [ngClass]="getSortIcon('article_nom')"></i>
+                    </th>
                     <th>Famille</th>
-                    <th>Prix</th>
-                    <th>Stock</th>
-                    <th>Actions</th>
+                    <th (click)="onSort('prix_quantite')" class="sortable" style="cursor: pointer;">
+                      Prix <i class="fas ms-1" [ngClass]="getSortIcon('prix_quantite')"></i>
+                    </th>
+                    <th>Unite</th>
+                    <th style="width: 180px;" class="text-center">Actions</th>
                   </tr>
                 </thead>
 
                 <tbody>
+                  <tr *ngIf="!loading && produits.length === 0">
+                    <td colspan="6" class="text-center py-4">
+                      <p class="text-muted mb-0">Aucun produit trouvé</p>
+                    </td>
+                  </tr>
+
                   <tr *ngFor="let produit of produits">
                     <td>{{ produit.article_cod }}</td>
                     <td>{{ produit.article_nom }}</td>
-                    <td>{{ produit.famille }}</td>
-                    <td>{{ produit.prix_quantite }}</td>
-                    <td>{{ produit.taxe_id }}</td>
+                    <td>{{ produit.famille_nom || '-' }}</td>
+                    <td>{{ produit.prix_quantite || '-' }}</td>
+                    <td>{{ produit.unite_nom || '-' }}</td>
 
                     <td class="text-center">
-                      <button class="btn btn-sm btn-outline-info me-1" (click)="onEdit(produit)">
+                      <button class="btn btn-sm btn-outline-info me-1" (click)="onEdit(produit)" title="Modifier">
                         <i class="fas fa-edit"></i>
                       </button>
-                      <button class="btn btn-sm btn-outline-danger me-1" (click)="onDelete(produit.article_id)">
+                      <button class="btn btn-sm btn-outline-danger me-1" (click)="onDelete(produit.article_id)" title="Supprimer">
                         <i class="fas fa-trash-alt"></i>
                       </button>
-                      <button class="btn btn-sm btn-outline-warning">
+                      <button class="btn btn-sm btn-outline-warning" (click)="onArchive(produit)" title="Archiver">
                         <i class="fas fa-archive"></i>
                       </button>
                     </td>
                   </tr>
                 </tbody>
               </table>
-
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="row mt-3" *ngIf="!loading && totalPages > 0">
+      <div class="col-md-6">
+        <p class="text-muted mb-0">
+          Affichage de <strong>{{ getDisplayRange() }}</strong> sur <strong>{{ totalRecords }}</strong> produit(s)
+        </p>
+      </div>
+      <div class="col-md-6">
+        <nav aria-label="Pagination">
+          <ul class="pagination justify-content-end mb-0">
+            <li class="page-item" [class.disabled]="currentPage === 1">
+              <a class="page-link" (click)="onPageChange(currentPage - 1)" style="cursor: pointer;">
+                <i class="fas fa-chevron-left"></i>
+              </a>
+            </li>
+
+            <li class="page-item" *ngFor="let page of getPageNumbers()" [class.active]="page === currentPage">
+              <a class="page-link" (click)="onPageChange(page)" style="cursor: pointer;">{{ page }}</a>
+            </li>
+
+            <li class="page-item" [class.disabled]="currentPage === totalPages">
+              <a class="page-link" (click)="onPageChange(currentPage + 1)" style="cursor: pointer;">
+                <i class="fas fa-chevron-right"></i>
+              </a>
+            </li>
+          </ul>
+        </nav>
       </div>
     </div>
 

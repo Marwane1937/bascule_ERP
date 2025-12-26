@@ -3,15 +3,16 @@ import { RouterModule, Routes } from '@angular/router';
 import { ChequeListComponent } from './cheque-list/cheque-list.component';
 import { ChequeEditorComponent } from './cheque-editor/cheque-editor.component';
 import { ChequePreviewComponent } from './cheque-preview/cheque-preview.component';
-import { CalibrationComponent } from './calibration/calibration.component';
-import { PdfPrintComponent } from './pdf-print/pdf-print.component';
 
 const routes: Routes = [
-  { path: '', component: ChequeListComponent },
+  { path: 'list', component: ChequeListComponent },
+  { path: 'editor', component: ChequeEditorComponent },
   { path: 'edit/:id', component: ChequeEditorComponent },
-  { path: 'preview/:id', component: ChequePreviewComponent },
-  { path: 'calibration/:id', component: CalibrationComponent },
-  { path: 'print/:id', component: PdfPrintComponent }
+  { path: 'preview', component: ChequePreviewComponent },
+  // Alias (ancien lien/menu)
+  { path: 'apercu', component: ChequePreviewComponent },
+  { path: 'cheques', component: ChequeListComponent },
+  { path: '', redirectTo: 'list', pathMatch: 'full' }
 ];
 
 @NgModule({

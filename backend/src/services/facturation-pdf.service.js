@@ -247,7 +247,7 @@ class FacturationPdfService {
    * @returns {Promise<string>} - Chemin du fichier PDF généré
    */
   async genererPDF(factureData, options = {}) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       try {
         console.log('[genererPDF] 📊 Données facture reçues:', {
           isArray: Array.isArray(factureData),
@@ -261,6 +261,34 @@ class FacturationPdfService {
           console.error('[genererPDF] ❌ Aucune donnée de facture disponible');
           reject(new Error('Aucune donnée de facture disponible pour la génération PDF.'));
           return;
+        }
+
+        // === EXONÉRATION TVA (FACTURE) ===
+        let isClientExonerated = false;
+        const part_id = factureData?.[0]?.part_id;
+        if (part_id) {
+          try {
+            const sequelizeConn = options.sequelize || require('../config/database');
+            const exonerationModel = require('../models/base/partenaire-exoneration.model');
+            const exonerations = await exonerationModel.getAllExonerationsByPartId(part_id, sequelizeConn);
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const validExoneration = (Array.isArray(exonerations) ? exonerations : []).find((exon) => {
+              if (!exon?.date_debut || !exon?.date_fin) return false;
+              const dateDebut = new Date(exon.date_debut);
+              dateDebut.setHours(0, 0, 0, 0);
+              const dateFin = new Date(exon.date_fin);
+              dateFin.setHours(0, 0, 0, 0);
+              return today >= dateDebut && today <= dateFin;
+            });
+
+            isClientExonerated = !!validExoneration;
+          } catch (e) {
+            console.warn('[FacturationPdfService] ⚠️ Erreur vérification exonération TVA:', e?.message || e);
+            isClientExonerated = false;
+          }
         }
 
         // Créer le dossier factures s'il n'existe pas
@@ -678,14 +706,24 @@ class FacturationPdfService {
         // Phrase principale en italique avec une taille légèrement plus grande
         doc.font('Helvetica-Oblique').fontSize(12).fillColor('#2c3e50');
         const phraseText = 'Arrêté la présente facture à la somme de :';
-        doc.text(phraseText, 50, y);
+        doc.text(phraseText, 50, y, { continued: true });
 
         // Montant en lettres en gras, taille plus grande et couleur plus foncée
-        const phraseWidth = doc.widthOfString(phraseText);
         doc.font('Helvetica-Bold').fontSize(12).fillColor('#000000');
-        doc.text(totalTTCWords, 50 + phraseWidth + 8, y);
+        doc.text(' ' + totalTTCWords, { continued: false });
 
-        y += 15; // Espacement après la phrase
+        // IMPORTANT: utiliser la position réelle après rendu (gère automatiquement les retours à la ligne)
+        y = doc.y + 10;
+
+        // Mention sur PDF facture si exonération valide
+        if (isClientExonerated) {
+          doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
+          doc.text('TVA non applicable – Client exonéré conformément à la lettre d\'exonération en vigueur', 50, y, {
+            width: 500,
+            align: 'center'
+          });
+          y = doc.y + 10;
+        }
 
         // === PIED DE PAGE - Dessiner sur la dernière page ===
         drawPageFooter();

@@ -59,10 +59,47 @@ const deleteArticle = async (req, res) => {
   }
 };
 
+const getArticlesPaged = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const options = {
+      page: req.query.page || 1,
+      pageSize: req.query.pageSize || 25,
+      orderBy: req.query.orderBy || 'article_nom',
+      orderDirection: req.query.orderDirection || 'ASC',
+      search: req.query.search || ''
+    };
+    const result = await articleService.getArticlesPaged(options, sequelize);
+    res.json({
+      success: true,
+      data: result.data,
+      pagination: result.pagination
+    });
+  } catch (err) {
+    console.error('❌ [ArticleController] Erreur récupération articles paginés:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+};
+
+const archiveArticle = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const result = await articleService.archiveArticle(req.params.id, sequelize);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 module.exports = {
   createArticle,
   deleteArticle,
   editArticle,
   getArticle,
-  getArticles
+  getArticles,
+  getArticlesPaged,
+  archiveArticle
 };

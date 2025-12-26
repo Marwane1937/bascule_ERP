@@ -1,1 +1,254 @@
-<!-- Edition des champs de chèque -->
+<div class="gen-editor">
+    <!-- Top bar -->
+    <div class="gen-topbar">
+        <div class="gen-topbar-left">
+            <div class="gen-title">
+                <div class="gen-title-main">Éditeur Chèque / Effet</div>
+                <div class="gen-title-sub">
+                    Banque: <strong>{{ banqueId }}</strong> • Template: <strong>{{ templateId || '-' }}</strong>
+                </div>
+            </div>
+        </div>
+
+        <div class="gen-topbar-actions">
+            <div class="form-check form-switch m-0">
+                <input class="form-check-input" type="checkbox" id="designModeTop" [(ngModel)]="designMode">
+                <label class="form-check-label small fw-bold" for="designModeTop">Mode conception</label>
+            </div>
+            <button class="btn btn-outline-light btn-sm" (click)="newCheque()" [disabled]="loading">
+                Nouveau
+            </button>
+            <button class="btn btn-light btn-sm" (click)="saveAll()" [disabled]="loading">
+                Enregistrer
+            </button>
+            <button class="btn btn-info btn-sm text-white" (click)="openPrintPreview()" [disabled]="loading || pdfLoading">
+                {{ pdfLoading ? 'Préparation...' : 'Imprimer' }}
+            </button>
+        </div>
+    </div>
+
+    <!-- Body -->
+    <div class="gen-body">
+        <!-- Left panel -->
+        <div class="gen-panel gen-panel-left">
+            <div class="gen-panel-header">
+                <div class="btn-group w-100">
+                    <button class="btn btn-sm" [ngClass]="leftTab==='data' ? 'btn-primary' : 'btn-outline-primary'" (click)="leftTab='data'">Données</button>
+                    <button class="btn btn-sm" [ngClass]="leftTab==='fields' ? 'btn-primary' : 'btn-outline-primary'" (click)="leftTab='fields'">Champs</button>
+                </div>
+            </div>
+
+            <div class="gen-panel-content">
+                <div *ngIf="leftTab==='data'">
+                    <div class="mb-2">
+                        <label class="form-label small">Type</label>
+                        <select class="form-select form-select-sm" [(ngModel)]="docType" (change)="onDocTypeChange()">
+                            <option value="CHEQUE">Chèque</option>
+                            <option value="EFFET">Effet</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Banque</label>
+                        <select class="form-select form-select-sm" [(ngModel)]="banqueId" (change)="onBankChange()">
+                            <option *ngFor="let b of banques" [value]="b.id">{{ b.nom }}</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Template</label>
+                        <select class="form-select form-select-sm" [(ngModel)]="templateId" (change)="onTemplateChange()">
+                            <option *ngFor="let t of templates" [ngValue]="t.id">{{ t.nom_template || ('Template #' + t.id) }}</option>
+                        </select>
+                    </div>
+                    <div class="row g-2 mb-2" *ngIf="template">
+                        <div class="col-6">
+                            <label class="form-label small">Width (mm)</label>
+                            <input type="number" class="form-control form-control-sm" [(ngModel)]="template.largeur_mm" [disabled]="!designMode">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">Height (mm)</label>
+                            <input type="number" class="form-control form-control-sm" [(ngModel)]="template.hauteur_mm" [disabled]="!designMode">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">Image support (PNG)</label>
+                        <select class="form-select form-select-sm" [(ngModel)]="selectedModelImage" (change)="onModelImageChange()">
+                            <option *ngFor="let img of modelImages" [ngValue]="img">{{ img }}</option>
+                        </select>
+                        <div class="form-text">Dossier: <code>assets/img/generation</code></div>
+                    </div>
+
+                    <hr class="my-3">
+
+                    <div class="mb-2">
+                        <label class="form-label small">Date</label>
+                        <input type="date" class="form-control form-control-sm" [(ngModel)]="formData.date">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Lieu</label>
+                        <input type="text" class="form-control form-control-sm" [(ngModel)]="formData.lieu">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Bénéficiaire</label>
+                        <input type="text" class="form-control form-control-sm" [(ngModel)]="formData.beneficiaire">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Montant</label>
+                        <input type="number" class="form-control form-control-sm" [(ngModel)]="formData.montant" (ngModelChange)="onMontantChange()">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Montant (lettres)</label>
+                        <div class="p-2 bg-light rounded border small fst-italic">{{ formData.montant_lettres || '---' }}</div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Numéro</label>
+                        <input type="text" class="form-control form-control-sm" [(ngModel)]="formData.numero">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Payé pour</label>
+                        <input type="text" class="form-control form-control-sm" [(ngModel)]="formData.paye_pour">
+                    </div>
+                </div>
+
+                <div *ngIf="leftTab==='fields'">
+                    <div class="alert alert-info py-2 small mb-2">
+                        En mode conception: clique-glisse le texte sur le chèque → X/Y se sauvegardent automatiquement.
+                    </div>
+                    <div class="list-group">
+                        <button type="button"
+                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                            *ngFor="let f of fields"
+                            [class.active]="selectedField?.id === f.id"
+                            (click)="selectField(f)">
+                            <span class="small fw-bold">{{ getFieldLabel(f) }}</span>
+                            <span class="badge bg-light text-dark border">{{ (f.x_mm||0) }} / {{ (f.y_mm||0) }}</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center preview -->
+        <div class="gen-canvas-wrap">
+            <div class="gen-canvas-toolbar">
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="small fw-bold text-muted">Zoom</span>
+                        <input type="range" min="0.6" max="1.6" step="0.05" [(ngModel)]="zoom">
+                        <span class="small text-muted">{{ (zoom * 100) | number:'1.0-0' }}%</span>
+                    </div>
+                    <div class="form-check form-switch m-0">
+                        <input class="form-check-input" type="checkbox" id="gridToggle" [(ngModel)]="showGrid">
+                        <label class="form-check-label small" for="gridToggle">Grille</label>
+                    </div>
+                    <div class="form-check form-switch m-0">
+                        <input class="form-check-input" type="checkbox" id="snapToggle" [(ngModel)]="snapEnabled">
+                        <label class="form-check-label small" for="snapToggle">Snap</label>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="small text-muted">pas</span>
+                        <input type="number" class="form-control form-control-sm" style="width:80px" [(ngModel)]="snapStepMm" [disabled]="!snapEnabled">
+                        <span class="small text-muted">mm</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="gen-canvas-stage">
+                <div class="gen-paper"
+                    #previewContainer
+                    [ngStyle]="getContainerStyle()"
+                    [style.transform]="'scale(' + zoom + ')'"
+                    [style.transformOrigin]="'top center'">
+
+                    <div class="gen-grid" *ngIf="showGrid"></div>
+
+                    <div *ngFor="let field of fields"
+                        class="gen-field"
+                        [ngClass]="{'is-selected': selectedField?.id === field.id, 'is-design': designMode}"
+                        [ngStyle]="getFieldStyle(field.nom_champ)"
+                        (mousedown)="onFieldMouseDown(field, $event)"
+                        (click)="selectField(field)">
+                        {{ getFieldPreviewValue(field) }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right inspector -->
+        <div class="gen-panel gen-panel-right">
+            <div class="gen-panel-header">
+                <div class="small fw-bold text-muted">Propriétés</div>
+            </div>
+            <div class="gen-panel-content">
+                <div *ngIf="!selectedField" class="text-muted small">
+                    Sélectionne un champ dans la liste ou clique sur le texte dans le chèque.
+                </div>
+
+                <div *ngIf="selectedField as f">
+                    <div class="mb-2">
+                        <div class="fw-bold">{{ getFieldLabel(f) }}</div>
+                        <div class="text-muted small">{{ f.nom_champ }}</div>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label small">X (mm)</label>
+                            <input type="number" class="form-control form-control-sm" [(ngModel)]="f.x_mm" [disabled]="!designMode">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">Y (mm)</label>
+                            <input type="number" class="form-control form-control-sm" [(ngModel)]="f.y_mm" [disabled]="!designMode">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">W (mm)</label>
+                            <input type="number" class="form-control form-control-sm" [(ngModel)]="f.largeur_mm" [disabled]="!designMode">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">H (mm)</label>
+                            <input type="number" class="form-control form-control-sm" [(ngModel)]="f.hauteur_mm" [disabled]="!designMode">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small">Police</label>
+                            <input type="text" class="form-control form-control-sm" [(ngModel)]="f.font" [disabled]="!designMode">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">Taille (pt)</label>
+                            <input type="number" class="form-control form-control-sm" [(ngModel)]="f.font_size" [disabled]="!designMode">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">Style</label>
+                            <input type="text" class="form-control form-control-sm" [(ngModel)]="f.font_style" [disabled]="!designMode" placeholder="bold/italic">
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="reqField" [(ngModel)]="f.obligatoire" [disabled]="!designMode">
+                                <label class="form-check-label small" for="reqField">Obligatoire</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 d-grid gap-2">
+                        <button class="btn btn-outline-warning btn-sm" (click)="saveGlobalModel()" [disabled]="!designMode">Enregistrer modèle</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Aperçu PDF avant impression -->
+<div *ngIf="showPdfModal" class="gen-modal-backdrop" (click)="closePdfModal()">
+    <div class="gen-modal" (click)="$event.stopPropagation()">
+        <div class="gen-modal-header">
+            <div class="fw-bold">Aperçu PDF</div>
+            <button class="btn btn-sm btn-light" (click)="closePdfModal()">Fermer</button>
+        </div>
+        <div class="gen-modal-body">
+            <iframe *ngIf="pdfPreviewSafeUrl" [src]="pdfPreviewSafeUrl" style="width:100%;height:70vh;border:0;"></iframe>
+        </div>
+        <div class="gen-modal-footer">
+            <button class="btn btn-secondary" (click)="closePdfModal()">Annuler</button>
+            <button class="btn btn-info text-white" (click)="printFromPreview()" [disabled]="pdfLoading">
+                {{ pdfLoading ? 'Impression...' : 'Lancer impression' }}
+            </button>
+        </div>
+    </div>
+</div>

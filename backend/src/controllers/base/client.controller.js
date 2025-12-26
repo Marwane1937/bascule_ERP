@@ -1,6 +1,7 @@
 const clientService = require('../../services/base/client.service');
 const listesService = require('../../services/listes.service');
 const databaseSwitchService = require('../../services/database-switch.service');
+const exonerationService = require('../../services/base/partenaire-exoneration.service');
 
 const getClients = async (req, res) => {
   try {
@@ -19,6 +20,74 @@ const getClients = async (req, res) => {
       success: false,
       message: err.message || 'Erreur lors de la récupération des clients',
       data: []
+    });
+  }
+};
+
+const getClientsPaged = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const options = {
+      page: req.query.page || 1,
+      pageSize: req.query.pageSize || 25,
+      orderBy: req.query.orderBy || 'nom',
+      orderDirection: req.query.orderDirection || 'ASC',
+      search: req.query.search || ''
+    };
+
+    const result = await clientService.getClientsPaged(options, sequelize);
+
+    res.json({
+      success: true,
+      data: result.data || [],
+      pagination: result.pagination || {}
+    });
+  } catch (err) {
+    console.error('❌ [ClientController] Erreur récupération clients paginés:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la récupération des clients',
+      data: [],
+      pagination: {
+        total: 0,
+        page: parseInt(req.query.page, 10) || 1,
+        pageSize: parseInt(req.query.pageSize, 10) || 25,
+        totalPages: 0
+      }
+    });
+  }
+};
+
+const getFournisseursPaged = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const options = {
+      page: req.query.page || 1,
+      pageSize: req.query.pageSize || 25,
+      orderBy: req.query.orderBy || 'nom',
+      orderDirection: req.query.orderDirection || 'ASC',
+      search: req.query.search || ''
+    };
+
+    const result = await clientService.getFournisseursPaged(options, sequelize);
+
+    res.json({
+      success: true,
+      data: result.data || [],
+      pagination: result.pagination || {}
+    });
+  } catch (err) {
+    console.error('❌ [ClientController] Erreur récupération fournisseurs paginés:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la récupération des fournisseurs',
+      data: [],
+      pagination: {
+        total: 0,
+        page: parseInt(req.query.page, 10) || 1,
+        pageSize: parseInt(req.query.pageSize, 10) || 25,
+        totalPages: 0
+      }
     });
   }
 };
@@ -54,6 +123,82 @@ const getContacts = async (req, res) => {
       success: false,
       message: err.message
     });
+  }
+};
+
+const getContactsPaged = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const options = {
+      page: req.query.page || 1,
+      pageSize: req.query.pageSize || 25,
+      orderBy: req.query.orderBy || 'nom',
+      orderDirection: req.query.orderDirection || 'ASC',
+      search: req.query.search || ''
+    };
+    const result = await clientService.getContactsPaged(options, sequelize);
+    res.json({
+      success: true,
+      data: result.data,
+      pagination: result.pagination
+    });
+  } catch (err) {
+    console.error('❌ [ClientController] Erreur récupération contacts paginés:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+};
+
+const getContact = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const contact = await clientService.getContact(req.params.id, sequelize);
+    if (!contact) return res.status(404).json({ message: 'Contact non trouvé' });
+    res.json(contact);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const createContact = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const newContact = await clientService.createContact(req.body, sequelize);
+    res.status(201).json(newContact);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const editContact = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const updated = await clientService.editContact(req.params.id, req.body, sequelize);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const archiveContact = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const result = await clientService.archiveContact(req.params.id, sequelize);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const deleteContact = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const result = await clientService.deleteContact(req.params.id, sequelize);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };
 
@@ -147,8 +292,19 @@ const getClientDetails = async (req, res) => {
 
 const createClient = async (req, res) => {
   try {
-    const newClient = await clientService.createClient(req.body); // ✅ nom corrigé
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const newClient = await clientService.createClient(req.body, sequelize);
     res.status(201).json(newClient);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+const createFournisseur = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const newFournisseur = await clientService.createFournisseur(req.body, sequelize);
+    res.status(201).json(newFournisseur);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -159,7 +315,8 @@ const createClientDetails = async (req, res) => {
   const details = req.body;
 
   try {
-    const result = await clientService.createClientDetails(part_id, details);
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const result = await clientService.createClientDetails(part_id, details, sequelize);
     res.status(201).json(result);
   } catch (err) {
     console.error(err);
@@ -168,11 +325,17 @@ const createClientDetails = async (req, res) => {
 };
 
 const deleteClientDetails = async (req, res) => {
-  const part_id = parseInt(req.params.id);
+  // ⚠️ Cette route est montée sur /clients/details/delete (sans :id)
+  // => récupérer part_id depuis le body (ou depuis :id si présent)
+  const part_id = parseInt(req.params.id || req.body.part_id);
   const details = req.body;
 
   try {
-    const result = await clientService.deleteClientDetails(part_id, details);
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    if (!part_id || Number.isNaN(part_id)) {
+      return res.status(400).json({ message: 'part_id requis pour la suppression des détails client' });
+    }
+    const result = await clientService.deleteClientDetails(part_id, details, sequelize);
     res.status(200).json(result);
   } catch (err) {
     console.error(err);
@@ -185,7 +348,8 @@ const updateClientDetails = async (req, res) => {
   const details = req.body;
 
   try {
-    const result = await clientService.updateClientDetails(part_id, details);
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const result = await clientService.updateClientDetails(part_id, details, sequelize);
     res.status(200).json(result);
   } catch (err) {
     console.error('Erreur updateClientDetails:', err);
@@ -196,7 +360,8 @@ const updateClientDetails = async (req, res) => {
 
 const editClient = async (req, res) => {
   try {
-    const updated = await clientService.editClient(req.params.id, req.body); // ✅ nom corrigé
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const updated = await clientService.editClient(req.params.id, req.body, sequelize);
     res.json(updated);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -205,19 +370,103 @@ const editClient = async (req, res) => {
 
 const deleteClient = async (req, res) => {
   try {
-    const result = await clientService.deleteClient(req.params.id);
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const result = await clientService.deleteClient(req.params.id, sequelize);
     res.json(result);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
+const getExoneration = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const part_id = parseInt(req.params.id);
+    const exoneration = await exonerationService.getExoneration(part_id, sequelize);
+    res.json({
+      success: true,
+      data: exoneration
+    });
+  } catch (err) {
+    console.error('❌ [ClientController] Erreur récupération exonération:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la récupération de l\'exonération'
+    });
+  }
+};
+
+const getAllExonerations = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const part_id = parseInt(req.params.id);
+    const exonerations = await exonerationService.getAllExonerations(part_id, sequelize);
+    res.json({
+      success: true,
+      data: exonerations || []
+    });
+  } catch (err) {
+    console.error('❌ [ClientController] Erreur récupération toutes les exonérations:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la récupération des exonérations'
+    });
+  }
+};
+
+const saveOrUpdateExoneration = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const part_id = parseInt(req.params.id);
+    const exonerationData = req.body;
+    const result = await exonerationService.saveOrUpdateExoneration(part_id, exonerationData, sequelize);
+    res.json({
+      success: true,
+      message: 'Lettre d\'exonération ajoutée avec succès',
+      data: result
+    });
+  } catch (err) {
+    console.error('❌ [ClientController] Erreur sauvegarde exonération:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la sauvegarde de l\'exonération'
+    });
+  }
+};
+
+const deleteExoneration = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const part_id = parseInt(req.params.id);
+    const result = await exonerationService.deleteExoneration(part_id, sequelize);
+    res.json({
+      success: true,
+      message: result.message
+    });
+  } catch (err) {
+    console.error('❌ [ClientController] Erreur suppression exonération:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la suppression de l\'exonération'
+    });
+  }
+};
+
 module.exports = {
   getClients,
+  getClientsPaged,
+  getFournisseursPaged,
   getFournisseurs,
   getContacts,
+  getContactsPaged,
+  getContact,
+  createContact,
+  editContact,
+  archiveContact,
+  deleteContact,
   getClient,
   createClient,
+  createFournisseur,
   createClientDetails,
   deleteClientDetails,
   updateClientDetails,
@@ -226,5 +475,9 @@ module.exports = {
   getClientDetails,
   getVilles,
   getIdentifiants,
-  getListesByGroupId
+  getListesByGroupId,
+  getExoneration,
+  getAllExonerations,
+  saveOrUpdateExoneration,
+  deleteExoneration
 };

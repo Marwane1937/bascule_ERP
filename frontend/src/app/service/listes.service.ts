@@ -11,6 +11,7 @@ export interface Liste {
 
 export interface GroupId {
   group_id: number;
+  group_nom: string;
 }
 
 @Injectable({

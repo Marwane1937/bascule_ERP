@@ -1,6 +1,8 @@
 import { AfterViewInit, ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { BaseService } from 'src/app/service/base.service';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import Swal from 'sweetalert2';
 declare var $: any;
 
@@ -14,10 +16,20 @@ export class EditClientComponent implements OnInit, AfterViewInit {
   identifiants: any[] = [];
   contacts: any[] = [];
   part_id: any;
-  villes: any;
-  comerciaux: any;
-  identifs: any;
+  clientInfo: { code: any; nom: string } = { code: '', nom: '' };
+  villes: any[] = [];
+  comerciaux: any[] = [];
+  identifs: any[] = [];
  checkedIdentifiants: any[] = [];
+  exonerationData: any = {
+    identifiant: '',
+    motif: 'Exonération TVA',
+    reference: '',
+    date_debut: null,
+    date_fin: null
+  };
+  hasExoneration: boolean = false;
+  allExonerations: any[] = [];
 
   selectedAdresse:any = null;
   selectedContact: any = null;
@@ -28,60 +40,230 @@ export class EditClientComponent implements OnInit, AfterViewInit {
   ) {}
 
   ngOnInit(): void {
-    this.AllVille();
-    this.AllCommercial();
-    this.AllIdentifiant();
+    // Charger les données de référence en parallèle (une seule fois)
+    forkJoin({
+      villes: this.baseService.getVille().pipe(catchError(() => of({ data: [] }))),
+      commerciaux: this.baseService.getCommercial().pipe(catchError(() => of({ data: [] }))),
+      identifiants: this.baseService.getIdentifiants().pipe(catchError(() => of({ data: [] })))
+    }).subscribe({
+      next: (results: any) => {
+        this.villes = results.villes?.data || (Array.isArray(results.villes) ? results.villes : []);
+        this.comerciaux = results.comerciaux?.data || (Array.isArray(results.comerciaux) ? results.comerciaux : []);
+        this.identifs = results.identifiants?.data || (Array.isArray(results.identifiants) ? results.identifiants : []);
+      },
+      error: (err) => {
+        console.error('[EditClientComponent] Erreur chargement données de référence:', err);
+        this.villes = [];
+        this.comerciaux = [];
+        this.identifs = [];
+      }
+    });
+
+    // Charger les données du client en parallèle
     this.route.params.subscribe(params => {
       this.part_id = params['part_id'];
       if (this.part_id) {
-        this.getClientDetails(this.part_id);
+        this.loadClientData();
+      }
+    });
+  }
+
+  /**
+   * Charge toutes les données du client en parallèle pour optimiser les performances
+   */
+  loadClientData(): void {
+    forkJoin({
+      client: this.baseService.getClientById(this.part_id).pipe(catchError(() => of(null))),
+      details: this.baseService.getClientComplement(this.part_id).pipe(catchError(() => of(null))),
+      exoneration: this.baseService.getExoneration(this.part_id).pipe(catchError(() => of(null)))
+    }).subscribe({
+      next: (results: any) => {
+        // Traiter les données du client de base
+        if (results.client) {
+          const client = results.client?.data || results.client;
+          this.clientInfo = {
+            code: client?.code ?? '',
+            nom: client?.nom ?? ''
+          };
+        }
+
+        // Traiter les détails (adresses, contacts, identifiants)
+        if (results.details) {
+          const details: any = results.details;
+          this.adresses = details.adresses || [];
+          this.contacts = details.contacts || [];
+          this.identifiants = details.identifiants || [];
+        } else {
+          this.adresses = [];
+          this.contacts = [];
+          this.identifiants = [];
+        }
+
+        // Traiter l'exonération
+        if (results.exoneration) {
+          const data = results.exoneration?.data || results.exoneration;
+          if (data && (data.identifiant || data.motif || data.reference || data.date_debut || data.date_fin)) {
+            this.hasExoneration = true;
+            this.exonerationData = {
+              identifiant: data.identifiant || '',
+              motif: data.motif || 'Exonération TVA',
+              reference: data.reference || '',
+              date_debut: data.date_debut || null,
+              date_fin: data.date_fin || null
+            };
+          } else {
+            this.hasExoneration = false;
+            this.exonerationData = {
+              identifiant: '',
+              motif: 'Exonération TVA',
+              reference: '',
+              date_debut: null,
+              date_fin: null
+            };
+          }
+        } else {
+          this.hasExoneration = false;
+          this.exonerationData = {
+            identifiant: '',
+            motif: 'Exonération TVA',
+            reference: '',
+            date_debut: null,
+            date_fin: null
+          };
+        }
+
+        // Une seule détection de changements après tous les chargements
+        this.cdr.detectChanges();
+
+        // Initialiser DataTables après un court délai pour s'assurer que le DOM est prêt
+        setTimeout(() => {
+          this.initOrRefreshDataTable('#adresseTable', { order: [[0, 'desc']] });
+          this.initOrRefreshDataTable('#identifiantTable', { order: [[0, 'desc']] });
+          this.initOrRefreshDataTable('#contactTable', { order: [[0, 'desc']] });
+        }, 50); // Réduit de 100ms à 50ms
+      },
+      error: (err) => {
+        console.error('[EditClientComponent] ❌ Erreur chargement données client:', err);
+        this.showError('Erreur lors du chargement des données du client.');
+      }
+    });
+  }
+  getClientBasic(part_id: string): void {
+    this.baseService.getClientById(part_id).subscribe({
+      next: (data: any) => {
+        const client = data?.data || data;
+        this.clientInfo = {
+          code: client?.code ?? '',
+          nom: client?.nom ?? ''
+        };
+        // Pas besoin de detectChanges ici, sera fait dans loadClientData
+      },
+      error: (err: any) => {
+        console.error('[EditClientComponent] ❌ Erreur chargement client:', err);
+        this.showError('❌ Erreur lors du chargement du client.');
+      }
+    });
+  }
+
+  onSaveClientBasic(): void {
+    if (!this.part_id) {
+      this.showError('❌ Identifiant client introuvable.');
+      return;
+    }
+    if (!this.clientInfo?.nom || !String(this.clientInfo.nom).trim()) {
+      this.showError('❗ Le nom du client est requis.');
+      return;
+    }
+    if (this.clientInfo?.code == null || String(this.clientInfo.code).trim() === '') {
+      this.showError('❗ Le code du client est requis.');
+      return;
+    }
+
+    this.baseService.updateClient(this.part_id, {
+      code: this.clientInfo.code,
+      nom: this.clientInfo.nom
+    }).subscribe({
+      next: () => {
+        this.showSuccess('Client mis à jour avec succès.');
+      },
+      error: (err: any) => {
+        console.error('[EditClientComponent] ❌ Erreur update client:', err);
+        this.showError(err?.error?.message || 'Erreur lors de la mise à jour du client.');
       }
     });
   }
 
   ngAfterViewInit(): void {}
 
+  // Méthodes conservées pour compatibilité mais maintenant chargées en parallèle dans ngOnInit
   AllVille() {
-    this.baseService.getVille().subscribe(data => {
-      this.villes = data;
-    });
+    // Déjà chargé dans ngOnInit en parallèle
   }
 
   AllCommercial() {
-    this.baseService.getCommercial().subscribe(data => {
-      this.comerciaux = data;
-    });
+    // Déjà chargé dans ngOnInit en parallèle
   }
 
   AllIdentifiant() {
-    this.baseService.getIdentifiants().subscribe(data => {
-      this.identifs = data;
-    });
+    // Déjà chargé dans ngOnInit en parallèle
   }
 
   getClientDetails(part_id: string): void {
-    this.baseService.getClientComplement(part_id).subscribe((data: any) => {
-      this.adresses = data.adresses || [];
-      this.contacts = data.contacts || [];
-      this.identifiants = data.identifiants || [];
+    this.baseService.getClientComplement(part_id).subscribe({
+      next: (data: any) => {
+        this.adresses = data?.adresses || [];
+        this.contacts = data?.contacts || [];
+        this.identifiants = data?.identifiants || [];
 
-      setTimeout(() => {
-        $('#adresseTable').DataTable({
-          order: [[0, 'desc']] // Trier par la première colonne en DESC par défaut
-        });
-        $('#identifiantTable').DataTable({
-          order: [[0, 'desc']] // Trier par la première colonne en DESC par défaut
-        });
-        $('#contactTable').DataTable({
-          order: [[0, 'desc']] // Trier par la première colonne en DESC par défaut
-        });
-      }, 100);
+        // S'assurer que le DOM est à jour avant de (re)initialiser DataTables
+        this.cdr.detectChanges();
+
+        setTimeout(() => {
+          this.initOrRefreshDataTable('#adresseTable', { order: [[0, 'desc']] });
+          this.initOrRefreshDataTable('#identifiantTable', { order: [[0, 'desc']] });
+          this.initOrRefreshDataTable('#contactTable', { order: [[0, 'desc']] });
+        }, 50); // Réduit de 100ms à 50ms
+      },
+      error: (err: any) => {
+        console.error('[EditClientComponent] ❌ Erreur chargement complément client:', err);
+        this.adresses = [];
+        this.contacts = [];
+        this.identifiants = [];
+        this.showError(err?.error?.message || 'Erreur lors du chargement des détails client.');
+      }
     });
+  }
+
+  /**
+   * Évite l'erreur DataTables "Cannot reinitialise DataTable" en détruisant
+   * l'instance existante avant ré-init (utile après reload / onglets).
+   */
+  private initOrRefreshDataTable(selector: string, options: any = {}): void {
+    try {
+      // @ts-ignore
+      const hasDT = typeof ($) !== 'undefined' && $.fn && $.fn.DataTable;
+      if (!hasDT) return;
+
+      const $el = $(selector);
+      if (!$el || $el.length === 0) return;
+
+      // @ts-ignore
+      if ($.fn.DataTable.isDataTable(selector)) {
+        // @ts-ignore
+        $el.DataTable().clear().destroy();
+      }
+
+      // @ts-ignore
+      $el.DataTable(options);
+    } catch (e) {
+      // Ne pas casser l'écran si DataTables n'est pas dispo
+      console.warn('[EditClientComponent] DataTable init skipped/error for', selector, e);
+    }
   }
 
  getVilleNomById(ville: number): string {
   const ville_nom = this.villes.find((v: any) => v.id === ville);
-  return ville_nom ? ville_nom.id : '';
+  return ville_nom ? ville_nom.nom : '';
 }
 getVilleIdByNom(nom: string): number | null {
   const ville = this.villes.find((v: any) => v.nom === nom);
@@ -298,7 +480,7 @@ getNextLigne(): number {
 onSaveIdentifiant(): void {
   const part_id = this.part_id;
 
-  const isEdit = !!this.selectedIdentifiant.id; // ✅ Si ID présent => modification
+  const isEdit = !!this.selectedIdentifiant?.original_identifiant_type; // ✅ modification si on a un "original"
 
   const identifObj = this.identifs.find(
     (i: any) => i.id === Number(this.selectedIdentifiant.identifiant_type)
@@ -308,62 +490,29 @@ onSaveIdentifiant(): void {
     adresses: [],
     identifiants: [
       {
-        id: this.selectedIdentifiant.id, // ❗ Ne pas oublier l’id s’il existe
-        identifiant_type: identifObj ? identifObj.id : '',
-        type: identifObj ? identifObj.nom : '',
-        identifiant: this.selectedIdentifiant.identifiant
+        identifiant_type: identifObj ? identifObj.id : null,
+        identifiant: (this.selectedIdentifiant.identifiant || '').toString(),
+        // Pour gérer le changement de type (PK = part_id + identifiant_type)
+        original_identifiant_type: this.selectedIdentifiant.original_identifiant_type,
+        original_identifiant: this.selectedIdentifiant.original_identifiant
       }
     ],
     contacts: []
   };
 
-  this.baseService.saveClientDetails(part_id, payload).subscribe({
+  // Ajout => POST /:id/details (UPSERT côté backend)
+  // Modif => PUT /:id/details (supprime l'ancien type si changement, puis UPSERT)
+  const request$ = isEdit
+    ? this.baseService.updateClientDetails(part_id, payload)
+    : this.baseService.saveClientDetails(part_id, payload);
+
+  request$.subscribe({
     next: () => {
-      const table: any = $('#identifiantTable').DataTable();
-
-      const rowData = [
-        '<input type="checkbox" />',
-        identifObj ? identifObj.nom : '',
-        this.selectedIdentifiant.identifiant,
-        `<button class="btn btn-warning btn-round"><i class="fas fa-edit"></i></button>`
-      ];
-
-      if (isEdit) {
-        // 🔁 Modifier la ligne existante
-        const rowIndex = table
-          .rows()
-          .indexes()
-          .filter((idx: number) => {
-            const row = table.row(idx).node();
-            return $(row).hasClass('editing'); // ligne marquée à modifier
-          })[0];
-
-        table.row(rowIndex).data(rowData).draw(false);
-        table.row(rowIndex).node().classList.remove('editing');
-
-        this.showSuccess('Identifiant modifié avec succès.');
-      } else {
-        // ➕ Ajouter une nouvelle ligne
-        const rowNode = table.row.add(rowData).draw(false).node();
-        if (rowNode) {
-          $(rowNode).find('td').css('text-align', 'center');
-          $(rowNode).addClass('ligne-surbrillance');
-        }
-
-        // Ajouter à ton tableau local Angular si nécessaire
-        this.identifiants.push(payload.identifiants[0]);
-
-        this.showSuccess('Identifiant ajouté avec succès.');
-      }
-
-      // Fermer la modale
       ($('#identifiantModal') as any).modal('hide');
-
-      // Réinitialiser le champ
-      this.selectedIdentifiant = {
-        identifiant: '',
-        identifiant_type: null
-      };
+      this.showSuccess(isEdit ? 'Identifiant modifié avec succès.' : 'Identifiant ajouté avec succès.');
+      // Recharger depuis le serveur pour refléter l'UPSERT et éviter les incohérences DataTables
+      this.getClientDetails(part_id);
+      this.selectedIdentifiant = { identifiant: '', identifiant_type: null };
     },
     error: (err) => {
       console.error('❌ Erreur:', err);
@@ -412,39 +561,33 @@ onCheckboxChange(row: any): void {
 
 /////// Pour la suppression
 onDeleteIdentifiants(): void {
-    if (this.checkedIdentifiants.length === 0) {
+    const selected = (this.identifiants || []).filter((x: any) => x?.checked);
+    if (selected.length === 0) {
     this.showError('Veuillez sélectionner au moins un identifiant à supprimer ');
     return;
   }
-
-  const table: any = $('#identifiantTable').DataTable();
-
-  const identifiantsToDelete = this.checkedIdentifiants.map(item => ({ id: item.id }));
-
-  this.checkedIdentifiants.forEach(item => {
-    table.rows().every((rowIdx: any) => {
-      const data = table.row(rowIdx).data();
-      const identifiant = data[2];
-      if (identifiant === item.identifiant) {
-        table.row(rowIdx).remove();
-      }
-    });
-    this.identifiants = this.identifiants.filter(c => c.id !== item.id);
-  });
-
-  table.draw(false);
-  this.checkedIdentifiants = [];
+  
+  const identifiantsToDelete = selected.map((item: any) => ({
+    // PK = (part_id, identifiant_type)
+    // @ts-ignore
+    identifiant_type: item.identifiant_type
+  }));
 
   this.baseService.deleteClientDetails({
-    identifiants: identifiantsToDelete,
+    part_id: this.part_id,
+    // on garde le champ "identifiants" (backend sait traiter identifiant_type)
+    // @ts-ignore
+    identifiants: identifiantsToDelete as any,
     adresses: [],
     contacts: []
   }).subscribe({
-    next: res => {
+    next: () => {
       this.showSuccess('Les identifiants sélectionnés ont été supprimés avec succès ');
+      this.getClientDetails(this.part_id);
     },
     error: err => {
       console.error('❌ Erreur suppression', err);
+      this.showError(err?.error?.message || '❌ Erreur suppression identifiants');
     }
   });
 }
@@ -580,7 +723,195 @@ onEditContact(row: any, index: number): void {
 
 onEditIdentifiant(identifiant: any): void {
   this.editMode.identifiant = true;
-  this.selectedIdentifiant = { ...identifiant }; // Pour pré-remplir le modal
+  this.selectedIdentifiant = {
+    ...identifiant,
+    original_identifiant_type: identifiant.identifiant_type,
+    original_identifiant: identifiant.identifiant
+  }; // Pour pré-remplir le modal + permettre update (PK)
   $('#identifiantModal').modal('show');      // Ouvre le modal (jQuery Bootstrap)
 }
+
+  // ✅ EXONERATION
+  loadExoneration(reset: boolean = false): void {
+    if (!this.part_id) {
+      // Si pas de part_id, juste réinitialiser les champs
+      if (reset) {
+        this.exonerationData = {
+          identifiant: '',
+          motif: 'Exonération TVA',
+          reference: '',
+          date_debut: null,
+          date_fin: null
+        };
+        this.hasExoneration = false;
+        this.cdr.detectChanges();
+      }
+      return;
+    }
+
+    // Si reset est true, vider les champs sans charger depuis le serveur
+    if (reset) {
+      this.exonerationData = {
+        identifiant: '',
+        motif: 'Exonération TVA',
+        reference: '',
+        date_debut: null,
+        date_fin: null
+      };
+      this.hasExoneration = false;
+      this.cdr.detectChanges();
+      return;
+    }
+
+    // Sinon, charger depuis le serveur
+    this.baseService.getExoneration(this.part_id).subscribe({
+      next: (response: any) => {
+        const data = response?.data || response;
+        if (data && (data.identifiant || data.motif || data.reference || data.date_debut || data.date_fin)) {
+          // Une exonération existe
+          this.hasExoneration = true;
+          this.exonerationData = {
+            identifiant: data.identifiant || '',
+            motif: data.motif || 'Exonération TVA',
+            reference: data.reference || '',
+            date_debut: data.date_debut || null,
+            date_fin: data.date_fin || null
+          };
+        } else {
+          // Aucune exonération
+          this.hasExoneration = false;
+          this.exonerationData = {
+            identifiant: '',
+            motif: 'Exonération TVA',
+            reference: '',
+            date_debut: null,
+            date_fin: null
+          };
+        }
+        // Pas besoin de detectChanges si appelé depuis loadClientData
+        if (!this.adresses.length && !this.contacts.length && !this.identifiants.length) {
+          this.cdr.detectChanges();
+        }
+      },
+      error: (err: any) => {
+        console.error('[EditClientComponent] ❌ Erreur chargement exonération:', err);
+        // En cas d'erreur (ex: 404), aucune exonération n'existe
+        this.hasExoneration = false;
+        this.exonerationData = {
+          identifiant: '',
+          motif: 'Exonération TVA',
+          reference: '',
+          date_debut: null,
+          date_fin: null
+        };
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  onSaveExoneration(): void {
+    if (!this.part_id) {
+      this.showError('❌ Identifiant client introuvable.');
+      return;
+    }
+
+    const payload = {
+      identifiant: this.exonerationData.identifiant || null,
+      motif: this.exonerationData.motif || 'Exonération TVA',
+      reference: this.exonerationData.reference || null,
+      date_debut: this.exonerationData.date_debut || null,
+      date_fin: this.exonerationData.date_fin || null,
+      type: null,
+      etat: null,
+      user_id: null // À remplir si vous avez un système d'authentification
+    };
+
+    this.baseService.saveOrUpdateExoneration(this.part_id, payload).subscribe({
+      next: (response: any) => {
+        this.showSuccess(response?.message || 'Lettre d\'exonération ajoutée avec succès.');
+        // Vider les champs après ajout pour permettre l'ajout d'une nouvelle lettre
+        this.exonerationData = {
+          identifiant: '',
+          motif: 'Exonération TVA',
+          reference: '',
+          date_debut: null,
+          date_fin: null
+        };
+        this.loadExoneration(); // Recharger pour s'assurer que les données sont à jour et mettre à jour hasExoneration
+      },
+      error: (err: any) => {
+        console.error('[EditClientComponent] ❌ Erreur sauvegarde exonération:', err);
+        this.showError(err?.error?.message || 'Erreur lors de la sauvegarde de l\'exonération.');
+      }
+    });
+  }
+
+  // Calculer les jours restants avant expiration
+  getDaysRemaining(dateFin: string | null): number | null {
+    if (!dateFin) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const finDate = new Date(dateFin);
+    finDate.setHours(0, 0, 0, 0);
+    const diffTime = finDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  }
+
+  // Vérifier si la lettre est périmée
+  isExpired(dateFin: string | null): boolean {
+    if (!dateFin) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const finDate = new Date(dateFin);
+    finDate.setHours(0, 0, 0, 0);
+    return finDate < today;
+  }
+
+  // Obtenir le statut de la lettre
+  getStatus(dateFin: string | null): string {
+    if (!dateFin) return 'Non défini';
+    if (this.isExpired(dateFin)) {
+      return 'Périmé';
+    }
+    return 'Valide';
+  }
+
+  // Ouvrir la modale pour afficher toutes les lettres d'exonération
+  openAllExonerationsModal(): void {
+    if (!this.part_id) {
+      this.showError('❌ Identifiant client introuvable.');
+      return;
+    }
+
+    // Charger toutes les exonérations
+    this.baseService.getAllExonerations(this.part_id).subscribe({
+      next: (response: any) => {
+        // Gérer différentes structures de réponse
+        if (response && response.success !== undefined) {
+          this.allExonerations = response.data || [];
+        } else if (Array.isArray(response)) {
+          this.allExonerations = response;
+        } else if (response && response.data) {
+          this.allExonerations = Array.isArray(response.data) ? response.data : [];
+        } else {
+          this.allExonerations = [];
+        }
+        // Ouvrir la modale
+        ($('#allExonerationsModal') as any).modal('show');
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        console.error('[EditClientComponent] ❌ Erreur chargement toutes les exonérations:', err);
+        // Ne pas afficher d'erreur si c'est juste une 404 (pas d'exonérations)
+        if (err.status !== 404) {
+          this.showError('Erreur lors du chargement des lettres d\'exonération.');
+        }
+        this.allExonerations = [];
+        // Ouvrir quand même la modale pour afficher le message "Aucune lettre"
+        ($('#allExonerationsModal') as any).modal('show');
+        this.cdr.detectChanges();
+      }
+    });
+  }
 }

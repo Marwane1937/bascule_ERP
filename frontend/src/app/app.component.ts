@@ -120,7 +120,38 @@ export class AppComponent implements OnInit {
       return;
     }
     
-    this.filteredMenuCategories = this.permissionsService.filterMenuCategories(this.menuCategories);
+    const filtered = this.permissionsService.filterMenuCategories(this.menuCategories);
+
+    // Masquer uniquement les sous-menus Generation: Calibration / Aperçu / Impression (demande utilisateur)
+    const bannedRoutes = new Set([
+      '/generation/calibration',
+      '/generation/apercu',
+      '/generation/preview',
+      '/generation/impression'
+    ]);
+    const bannedNames = ['calibration', 'aperçu', 'apercu', 'impression'];
+
+    this.filteredMenuCategories = (filtered || [])
+      .filter((cat) => {
+        // Masquer la catégorie "Permissions Notifications" du menu de gauche
+        const categoryName = (cat.category || '').toString().toLowerCase();
+        if (categoryName.includes('permissions notifications')) {
+          return false;
+        }
+        return true;
+      })
+      .map((cat) => ({
+        ...cat,
+        items: (cat.items || []).filter((item) => {
+          const route = (item.route || '').toString();
+          const name = (item.name || '').toString().toLowerCase();
+
+          if (bannedRoutes.has(route)) return false;
+          if (route.startsWith('/generation/') && bannedNames.some((x) => name.includes(x))) return false;
+          return true;
+        })
+      }))
+      .filter((cat) => (cat.items || []).length > 0);
   }
 
   hasAccessToRoute(route: string): boolean {

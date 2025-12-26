@@ -10,6 +10,8 @@ import { EmployeComponent } from './base/employe/employe.component';
 import { EditClientComponent } from './base/edit/edit-client/edit-client.component';
 import { EditFournisseurComponent } from './base/edit/edit-fournisseur/edit-fournisseur.component';
 import { EditProduitComponent } from './base/edit/edit-produit/edit-produit.component';
+import { VehiculeComponent } from './base/vehicule/vehicule.component';
+import { EditVehiculeComponent } from './base/edit/edit-vehicule/edit-vehicule.component';
 import { DevisComponent } from './vente/devis/devis.component';
 import { EditDevisComponent } from './vente/edit/edit-devis/edit-devis.component';
 import { EditcommandeComponent } from './vente/edit/editcommande/editcommande.component';
@@ -31,11 +33,7 @@ import { CaisseRecettesComponent } from './vente/caisse/caisse-recettes.componen
 import { CaisseDepensesComponent } from './vente/caisse/caisse-depenses.component';
 import { BonCommandeComponent } from './achat/bon-commande/bon-commande.component';
 import { EditBonCommandeComponent } from './achat/edit/edit-bon-commande/edit-bon-commande.component';
-import { ChequeListComponent } from './generation/cheque-list/cheque-list.component';
-import { ChequeEditorComponent } from './generation/cheque-editor/cheque-editor.component';
-import { ChequePreviewComponent } from './generation/cheque-preview/cheque-preview.component';
-import { CalibrationComponent } from './generation/calibration/calibration.component';
-import { PdfPrintComponent } from './generation/pdf-print/pdf-print.component';
+import { NotificationComponent } from './notification/notification.component';
 
 const routes: Routes = [
   {
@@ -57,6 +55,10 @@ const routes: Routes = [
   {
     path: 'Fournisseur',
     component: FournisseurComponent,
+  },
+  {
+    path: 'Vehicule',
+    component: VehiculeComponent,
   },
   {
     path: 'Commercial',
@@ -127,6 +129,10 @@ const routes: Routes = [
     component: ListesComponent,
   },
   {
+    path: 'Notifications',
+    component: NotificationComponent,
+  },
+  {
     path: 'Edit-Client/:part_id',
     component: EditClientComponent,
   },
@@ -134,7 +140,11 @@ const routes: Routes = [
     path: 'Edit-Fournisseur/:part_id',
     component: EditFournisseurComponent,
   },
-   {
+  {
+    path: 'Edit-Vehicule/:vehicule_id',
+    component: EditVehiculeComponent,
+  },
+  {
     path: 'Edit-Produit/:article_id',
     component: EditProduitComponent,
   },
@@ -163,24 +173,8 @@ const routes: Routes = [
     component: EditBonCommandeComponent,
   },
   {
-    path: 'generation/cheques',
-    component: ChequeListComponent,
-  },
-  {
-    path: 'generation/cheque-editor',
-    component: ChequeEditorComponent,
-  },
-  {
-    path: 'generation/cheque-preview',
-    component: ChequePreviewComponent,
-  },
-  {
-    path: 'generation/calibration',
-    component: CalibrationComponent,
-  },
-  {
-    path: 'generation/pdf-print',
-    component: PdfPrintComponent,
+    path: 'generation',
+    loadChildren: () => import('./generation/generation.module').then(m => m.GenerationModule)
   },
 
   {

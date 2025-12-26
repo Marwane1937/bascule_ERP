@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { BaseService } from 'src/app/service/base.service';
@@ -6,7 +6,8 @@ import { VentesService } from 'src/app/service/ventes.service';
 import Quill from 'quill';
 import Swal from 'sweetalert2';
 import { EmailService } from 'src/app/service/email.service';
-import { forkJoin } from 'rxjs';
+import { forkJoin, of } from 'rxjs';
+import { catchError, retry } from 'rxjs/operators';
 const QuillMention = require('quill-mention');
 declare var bootstrap: any;
 Quill.register('modules/mention', QuillMention.default); // 👈 ajoute .default ici
@@ -102,9 +103,12 @@ export class EditcommandeComponent implements OnInit {
   taxeTotal = 0;
   reducTotal = 0;
   totalGeneral = 0;
+  isClientExonerated = false; // même logique que edit-devis
+  private exoCheckToken = 0;
 
   constructor(private baseService: BaseService, private fb: FormBuilder, private route: ActivatedRoute,
-    private venteSerivce: VentesService, private emailService: EmailService
+    private venteSerivce: VentesService, private emailService: EmailService,
+    private cdr: ChangeDetectorRef
   ) {
     this.emailForm = this.fb.group({
       to: ['', [Validators.required, Validators.email]],
@@ -219,6 +223,13 @@ export class EditcommandeComponent implements OnInit {
             clientSearch: clientTrouve ? clientTrouve.nom : '',
             commercialSearch: commercialTrouve ? commercialTrouve.nom : ''
           });
+
+    // Vérifier l'exonération TVA au chargement (même que edit-devis)
+    if (data.part_id) {
+      this.checkClientExoneration(+data.part_id);
+    } else {
+      this.isClientExonerated = false;
+    }
 
     // Traitement des détails
         if (!data.details || !Array.isArray(data.details)) {
@@ -468,19 +479,48 @@ export class EditcommandeComponent implements OnInit {
 
     const baseApresReduc = this.sousTotal - this.reducTotal;
 
-    this.taxeTotal = this.produits.reduce((acc, p, index) => {
+    // TVA: 0% si client exonéré valide, sinon 20%
+    this.taxeTotal = this.produits.reduce((acc, p) => {
       const base = p.pu * p.qte;
       const reduc = p.reducMode === 'pourcentage'
         ? (p.reduc / 100) * base
         : p.reduc;
       const baseApresReduc = Math.max(base - reduc, 0);
-      // TVA fixée à 20% (0.2) pour toutes les commandes
-      const tva = 0.2 * baseApresReduc;
+      const taux = this.isClientExonerated ? 0 : 0.2;
+      const tva = taux * baseApresReduc;
       return acc + tva;
     }, 0);
 
 
     this.totalGeneral = baseApresReduc + this.taxeTotal + this.fraisPort;
+  }
+
+  // Vérifier si le client a une exonération TVA valide (même que edit-devis + fiabilisation)
+  checkClientExoneration(part_id: number): void {
+    const token = ++this.exoCheckToken;
+    this.baseService.getAllExonerations(part_id).pipe(
+      retry({ count: 2, delay: 300 }),
+      catchError(() => of({ success: true, data: [] }))
+    ).subscribe((response: any) => {
+      if (token !== this.exoCheckToken) return;
+
+      const exonerations = response?.data || response || [];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const validExoneration = (Array.isArray(exonerations) ? exonerations : []).find((exon: any) => {
+        if (!exon?.date_debut || !exon?.date_fin) return false;
+        const dateDebut = new Date(exon.date_debut);
+        dateDebut.setHours(0, 0, 0, 0);
+        const dateFin = new Date(exon.date_fin);
+        dateFin.setHours(0, 0, 0, 0);
+        return today >= dateDebut && today <= dateFin;
+      });
+
+      this.isClientExonerated = !!validExoneration;
+      this.calculerTotaux();
+      this.cdr.detectChanges();
+    });
   }
 
 
@@ -648,6 +688,12 @@ export class EditcommandeComponent implements OnInit {
     });
     this.filteredClients = [];
     this.searchTerm = client.nom; // facultatif si tu veux garder cette variable
+    if (client.part_id) {
+      this.checkClientExoneration(+client.part_id);
+    } else {
+      this.isClientExonerated = false;
+      this.calculerTotaux();
+    }
   }
   get clientSearchControl() {
     return this.CommandeForm.get('clientSearch') as FormControl;
@@ -707,6 +753,7 @@ export class EditcommandeComponent implements OnInit {
     const document_id = +this.route.snapshot.paramMap.get('document_id')!;
     for (let i = 0; i < this.produits.length; i++) {
       const p = this.produits[i];
+      const desiredTax = this.isClientExonerated ? 0 : 0.2;
 
       // Vérifie si la ligne est incomplète
       if (!p.article_id || !p.pu || !p.qte) {
@@ -728,7 +775,7 @@ export class EditcommandeComponent implements OnInit {
           designation: p.designation,
           pu: p.pu,
           qte: p.qte,
-          taxe: '0.2',
+          taxe: String(desiredTax),
           document_id,
           update_mode: 'I'
         };
@@ -756,7 +803,7 @@ export class EditcommandeComponent implements OnInit {
         p.pu !== pOriginal.pu ||
         p.qte !== pOriginal.qte ||
         p.reduc !== pOriginal.reduc ||
-        p.taxe !== pOriginal.taxe
+        desiredTax !== pOriginal.taxe
       );
 
       if (modifie) {
@@ -767,7 +814,7 @@ export class EditcommandeComponent implements OnInit {
           designation: p.designation,
           pu: p.pu,
           qte: p.qte,
-          taxe: '0.2',
+          taxe: String(desiredTax),
           document_id,
           update_mode: 'U',
         };

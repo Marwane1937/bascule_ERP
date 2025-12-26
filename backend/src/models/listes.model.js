@@ -1,12 +1,22 @@
 const { getConnection } = require('../config/database');
 
 
-// Récupérer tous les group_id distincts
+// Récupérer tous les group_id distincts avec group_nom
 const getAllGroupIds = async (sequelizeConnection = null) => {
   try {
     const sequelize = sequelizeConnection || getConnection();
     const results = await sequelize.query(
-      `SELECT DISTINCT group_id FROM listes ORDER BY group_id ASC`,
+      `SELECT 
+        l.group_id,
+        CASE 
+          WHEN l.group_id = 2000 THEN 'Recette'
+          WHEN l.group_id = 3000 THEN 'Dépense'
+          WHEN l.group_id = 4000 THEN 'Charge Véhicule'
+        END AS group_nom
+      FROM listes l
+      WHERE l.etat = 1
+      GROUP BY l.group_id
+      ORDER BY l.group_id ASC`,
       {
         type: sequelize.QueryTypes.SELECT
       }

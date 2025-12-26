@@ -1,0 +1,173 @@
+<div class="container-fluid py-4">
+    <div class="page-inner">
+        <!-- En-tête -->
+        <div class="page-header">
+            <h3 class="fw-bold mb-3">Véhicule</h3>
+            <ul class="breadcrumbs mb-3">
+                <li class="nav-home">
+                    <a href="#"><i class="icon-home"></i></a>
+                </li>
+                <li class="separator"><i class="icon-arrow-right"></i></li>
+                <li class="nav-item"><a href="#">Base</a></li>
+                <li class="separator"><i class="icon-arrow-right"></i></li>
+                <li class="nav-item"><a href="#">Modifier Véhicule</a></li>
+            </ul>
+        </div>
+
+        <!-- Bouton Collapse -->
+        <div class="text-end mb-3">
+            <span data-bs-toggle="collapse" data-bs-target="#collapseVehicule" aria-expanded="true"
+                aria-controls="collapseVehicule" class="text-primary fw-bold" style="cursor: pointer;">
+                <i class="bi bi-chevron-double-down"></i> Détails du Véhicule
+            </span>
+        </div>
+
+        <!-- Collapse Stylisé -->
+        <div class="collapse show" id="collapseVehicule">
+            <div class="p-4 bg-white rounded-4 shadow-sm border border-light">
+                <h5 class="mb-4 text-primary fw-semibold">🚗 Informations du véhicule</h5>
+
+                <!-- Informations du véhicule -->
+                <div class="row mb-3" *ngIf="vehicule">
+                    <div class="col-md-3">
+                        <label class="form-label">Numéro:</label>
+                        <input type="text" class="form-control" [value]="vehicule.numero" readonly />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Matricule:</label>
+                        <input type="text" class="form-control" [value]="vehicule.matricule" readonly />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Marque:</label>
+                        <input type="text" class="form-control" [value]="vehicule.marque" readonly />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Modèle:</label>
+                        <input type="text" class="form-control" [value]="vehicule.modele" readonly />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-12">
+      <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-header bg-white border-0">
+          <h4 class="card-title mb-0 text-primary">🧾 Gestion des Charges</h4>
+        </div>
+
+        <div class="card-body">
+          <h5 class="fw-semibold text-primary mb-3">Charges déjà existantes</h5>
+
+          <div class="row g-3">
+            <div class="col-md-4" *ngFor="let charge of charges">
+              <div class="card charge-card shadow-sm border-0 h-100 position-relative">
+                <div class="position-absolute top-0 end-0 p-2">
+                  <button class="btn btn-link text-danger p-0" (click)="onDeleteExistingCharge(charge)" title="Supprimer">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+
+                <div class="card-body">
+                  <div class="d-flex align-items-center mb-2">
+                    <i class="fas fa-check-circle text-success me-2"></i>
+                    <span class="badge bg-primary text-uppercase">{{ getChargeTypeLabel(charge.type) }}</span>
+                  </div>
+
+                  <div class="mb-1">
+                    <span class="fw-semibold">Date Début :</span>
+                    <span>{{ charge.date_debut ? (charge.date_debut | date:'mediumDate') : '-' }}</span>
+                  </div>
+                  <div class="mb-1">
+                    <span class="fw-semibold">Date Fin :</span>
+                    <span>{{ charge.date_fin ? (charge.date_fin | date:'mediumDate') : '-' }}</span>
+                  </div>
+                  <div class="mb-1">
+                    <span class="fw-semibold">Montant :</span>
+                    <span>{{ charge.montant || 0 }} dh</span>
+                  </div>
+                  <div class="mb-1">
+                    <span class="fw-semibold">Libellé :</span>
+                    <span>{{ charge.libelle || '-' }}</span>
+                  </div>
+
+                  <div class="mt-2 small">
+                    <span class="fw-semibold">⏳ Reste :</span>
+                    <span
+                      [ngClass]="{ 'text-danger': (remainingDays(charge.date_fin) ?? 0) <= 0 }"
+                    >
+                      {{ remainingDays(charge.date_fin) ?? '-' }} jours
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-12" *ngIf="!charges || charges.length === 0">
+              <div class="text-muted">Aucune charge.</div>
+            </div>
+          </div>
+
+          <hr class="my-4" />
+
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <button class="btn btn-outline-success" type="button" (click)="addChargeRow()">
+              <i class="fas fa-plus me-2"></i> Ajouter une charge
+            </button>
+
+            <button
+              class="btn btn-primary"
+              type="button"
+              (click)="saveNewCharges()"
+              [disabled]="savingNewCharges || newCharges.length === 0"
+            >
+              <i class="fas fa-save me-2"></i> Enregistrer les charges
+            </button>
+          </div>
+
+          <div *ngFor="let row of newCharges; let i = index" class="charge-row p-3 mb-3 rounded-4 border">
+            <div class="row g-3 align-items-end">
+              <div class="col-md-3">
+                <label class="form-label">Type</label>
+                <select class="form-select" [(ngModel)]="row.type" name="type{{ i }}">
+                  <option [ngValue]="null">Choisir</option>
+                  <option *ngFor="let t of chargeTypes" [ngValue]="t.id">{{ t.nom }}</option>
+                </select>
+                <small class="text-muted" *ngIf="loadingChargeTypes">Chargement des types...</small>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Date Début</label>
+                <input type="date" class="form-control" [(ngModel)]="row.date_debut" name="date_debut{{ i }}" />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Date Fin</label>
+                <input type="date" class="form-control" [(ngModel)]="row.date_fin" name="date_fin{{ i }}" />
+              </div>
+
+              <div class="col-md-2">
+                <label class="form-label">Montant (dh)</label>
+                <input type="number" class="form-control" [(ngModel)]="row.montant" name="montant{{ i }}" />
+              </div>
+
+              <div class="col-md-1 text-end">
+                <button class="btn btn-outline-danger" type="button" (click)="removeChargeRow(i)" title="Supprimer la ligne">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="row mt-3">
+              <div class="col-12">
+                <label class="form-label">Libellé</label>
+                <input type="text" class="form-control" [(ngModel)]="row.libelle" name="libelle{{ i }}" />
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+

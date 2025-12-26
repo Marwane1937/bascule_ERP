@@ -197,7 +197,7 @@
                             </div>
                         </td>
 
-                        <td>{{ (p.taxe || 0.2) * 100 }}%</td>
+                        <td>{{ ((isClientExonerated ? 0 : (p.taxe || 0.2)) * 100) }}%</td>
 
                         <td class="text-end"><strong>{{ p.total | number:'1.2-2' }}</strong> dh</td>
 
@@ -232,7 +232,8 @@
                     <strong>Réduction</strong> <span>{{ reducTotal | number:'1.2-2' }} dh</span>
                 </li>
                 <li class="list-group-item d-flex justify-content-between">
-                    <strong>TVA</strong> <span>20%</span>
+                    <strong>TVA</strong>
+                    <span>{{ isClientExonerated ? '0%' : '20%' }}</span>
                 </li>
                 <li class="list-group-item bg-light d-flex justify-content-between">
                     <strong>Total général</strong> <strong>{{ totalGeneral | number:'1.2-2' }} dh</strong>

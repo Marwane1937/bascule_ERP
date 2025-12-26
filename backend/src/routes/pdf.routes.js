@@ -66,7 +66,8 @@ router.post('/generate', async (req, res) => {
 
     const pdfPath = await emailService.genererPDF(devisData, { 
       withStamp: !!withStamp,
-      documentSociete: documentSociete 
+      documentSociete: documentSociete,
+      sequelize
     });
     
     // Déterminer le dossier selon le type de document

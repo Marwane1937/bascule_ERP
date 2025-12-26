@@ -5,6 +5,8 @@ import * as $ from 'jquery';
 import 'datatables.net';
 import Swal from 'sweetalert2';
 
+declare var bootstrap: any;
+
 @Component({
   selector: 'app-listes',
   templateUrl: './listes.component.html',
@@ -20,6 +22,8 @@ export class ListesComponent implements OnInit, AfterViewInit {
   editListeForm!: FormGroup;
   selectedListe: Liste | null = null;
   isEditMode: boolean = false;
+  private editListesModal: any = null;
+  private editListeModal: any = null;
 
   constructor(
     private listesService: ListesService,
@@ -128,11 +132,10 @@ export class ListesComponent implements OnInit, AfterViewInit {
     setTimeout(() => {
       const modalElement = document.getElementById('editListeModal');
       if (modalElement) {
-        const anyWindow = window as any;
-        if (anyWindow.bootstrap) {
-          const modal = new anyWindow.bootstrap.Modal(modalElement);
-          modal.show();
+        if (!this.editListeModal) {
+          this.editListeModal = new bootstrap.Modal(modalElement);
         }
+        this.editListeModal.show();
       }
     }, 100);
   }
@@ -166,11 +169,10 @@ export class ListesComponent implements OnInit, AfterViewInit {
         setTimeout(() => {
           const modalElement = document.getElementById('editListesModal');
           if (modalElement) {
-            const anyWindow = window as any;
-            if (anyWindow.bootstrap) {
-              const modal = new anyWindow.bootstrap.Modal(modalElement);
-              modal.show();
+            if (!this.editListesModal) {
+              this.editListesModal = new bootstrap.Modal(modalElement);
             }
+            this.editListesModal.show();
           }
         }, 100);
       },
@@ -301,6 +303,17 @@ export class ListesComponent implements OnInit, AfterViewInit {
   }
 
   closeEditListeModal(): void {
+    if (this.editListeModal) {
+      this.editListeModal.hide();
+    } else {
+      const modalElement = document.getElementById('editListeModal');
+      if (modalElement) {
+        const modal = bootstrap.Modal.getInstance(modalElement);
+        if (modal) {
+          modal.hide();
+        }
+      }
+    }
     this.selectedListe = null;
     this.isEditMode = false;
     this.editListeForm.reset();
@@ -308,6 +321,17 @@ export class ListesComponent implements OnInit, AfterViewInit {
   }
 
   closeModal(): void {
+    if (this.editListesModal) {
+      this.editListesModal.hide();
+    } else {
+      const modalElement = document.getElementById('editListesModal');
+      if (modalElement) {
+        const modal = bootstrap.Modal.getInstance(modalElement);
+        if (modal) {
+          modal.hide();
+        }
+      }
+    }
     this.selectedGroupId = null;
     this.listes = []; // S'assurer que listes est toujours un tableau
     this.listeForm.reset();
