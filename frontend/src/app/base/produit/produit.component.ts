@@ -159,6 +159,15 @@ export class ProduitComponent implements OnInit {
     }
   }
 
+  // Ouvrir l'interface dédiée d'édition produit (avec onglet article_nomenclature)
+  goToEditProduit(article_id: number): void {
+    if (!article_id) {
+      this.showError('❌ Identifiant produit introuvable.');
+      return;
+    }
+    this.router.navigate(['/Edit-Produit', article_id]);
+  }
+
   onDelete(id: string): void {
     Swal.fire({
       title: 'Êtes-vous sûr ?',

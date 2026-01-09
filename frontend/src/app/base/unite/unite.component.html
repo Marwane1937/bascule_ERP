@@ -1,0 +1,254 @@
+<div class="container py-4">
+  <div class="page-inner">
+
+    <!-- En-tête -->
+    <div class="page-header mb-4">
+      <h3 class="fw-bold text-dark">Base</h3>
+      <ul class="breadcrumbs d-flex align-items-center">
+        <li class="nav-home me-2"><a href="#"><i class="fas fa-home text-primary"></i></a></li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item me-2"><a href="#" class="text-muted">Unité</a></li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item fw-semibold text-muted">Liste Unité</li>
+      </ul>
+    </div>
+
+    <!-- Bouton Ajouter Unité -->
+    <div class="row mb-4">
+      <div class="col-12 text-end">
+        <button
+          type="button"
+          class="btn btn-gradient px-4 py-2 shadow-sm"
+          data-bs-toggle="modal"
+          data-bs-target="#uniteModal"
+        >
+          <i class="fas fa-balance-scale me-2"></i> Ajouter une unité
+        </button>
+      </div>
+    </div>
+
+    <!-- Modal Formulaire d'ajout unité -->
+    <div
+      class="modal fade"
+      id="uniteModal"
+      tabindex="-1"
+      aria-labelledby="uniteModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content modal-elegant shadow">
+          <div class="modal-header modal-header-custom">
+            <h5 class="modal-title text-white" id="uniteModalLabel">
+              <i class="fas fa-balance-scale me-2"></i>
+              {{ isEditMode ? 'Modifier l\'unité' : 'Nouvelle unité' }}
+            </h5>
+            <button
+              type="button"
+              class="btn-close btn-close-white"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <form>
+              <div class="row">
+                <div class="col-md-4 mb-3">
+                  <label for="code" class="form-label">Code *</label>
+                  <input type="text" class="form-control" id="code"
+                         [(ngModel)]="currentUnite.code" name="code" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                  <label for="nom" class="form-label">Nom *</label>
+                  <input type="text" class="form-control" id="nom"
+                         [(ngModel)]="currentUnite.nom" name="nom" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                  <label for="type" class="form-label">Type</label>
+                  <input type="text" class="form-control" id="type"
+                         [(ngModel)]="currentUnite.type" name="type">
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label for="etat" class="form-label">État</label>
+                  <select class="form-select" id="etat" [(ngModel)]="currentUnite.etat" name="etat">
+                    <option [value]="1">Actif</option>
+                    <option [value]="0">Inactif</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="base" [(ngModel)]="currentUnite.base" name="base">
+                    <label class="form-check-label" for="base">
+                      Unité de base
+                    </label>
+                  </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="fact" [(ngModel)]="currentUnite.fact" name="fact">
+                    <label class="form-check-label" for="fact">
+                      Unité de facturation
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="modal-footer bg-light border-top">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-success" (click)="saveUnite()">
+                  <i class="fas fa-save me-1"></i>
+                  {{ isEditMode ? 'Modifier' : 'Enregistrer' }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Barre de recherche et taille page -->
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-search"></i></span>
+          <input
+            type="text"
+            class="form-control"
+            placeholder="Rechercher par code, nom..."
+            [(ngModel)]="searchTerm"
+            (keyup.enter)="onSearch()"
+          />
+          <button class="btn btn-primary" type="button" (click)="onSearch()">
+            <i class="fas fa-search"></i> Rechercher
+          </button>
+        </div>
+      </div>
+      <div class="col-md-2">
+        <select class="form-select" [(ngModel)]="pageSize" (change)="getUnites()">
+          <option [value]="10">10 par page</option>
+          <option [value]="25">25 par page</option>
+          <option [value]="50">50 par page</option>
+          <option [value]="100">100 par page</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Tableau Unité -->
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card border-0 shadow-sm rounded-3">
+
+          <div class="card-body">
+            <div class="table-responsive" style="position: relative; min-height: 300px;">
+              <!-- Loader overlay -->
+              <div
+                *ngIf="loading"
+                class="text-center my-4"
+                style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"
+              >
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                  <span class="visually-hidden">Chargement...</span>
+                </div>
+                <p class="mt-3 mb-0 text-muted fw-semibold">Chargement des unités...</p>
+              </div>
+
+              <table
+                id="uniteTable"
+                class="table table-bordered table-striped table-hover"
+                width="100%"
+                [style.opacity]="loading ? '0.5' : '1'"
+              >
+                <thead class="table-light">
+                  <tr>
+                    <th (click)="onSort('code')" class="sortable" style="cursor: pointer; width: 120px;">
+                      Code <i class="fas ms-1" [ngClass]="getSortIcon('code')"></i>
+                    </th>
+                    <th (click)="onSort('nom')" class="sortable" style="cursor: pointer;">
+                      Nom <i class="fas ms-1" [ngClass]="getSortIcon('nom')"></i>
+                    </th>
+                    <th (click)="onSort('type')" class="sortable" style="cursor: pointer; width: 120px;">
+                      Type <i class="fas ms-1" [ngClass]="getSortIcon('type')"></i>
+                    </th>
+                    <th style="width: 120px;" class="text-center">Base</th>
+                    <th style="width: 120px;" class="text-center">Facturation</th>
+                    <th style="width: 100px;" class="text-center">État</th>
+                    <th style="width: 150px;" class="text-center">Actions</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  <tr *ngIf="!loading && unites.length === 0">
+                    <td colspan="7" class="text-center py-4">
+                      <p class="text-muted mb-0">Aucune unité trouvée</p>
+                    </td>
+                  </tr>
+
+                  <tr *ngFor="let unite of unites">
+                    <td>{{ unite.code }}</td>
+                    <td>{{ unite.nom }}</td>
+                    <td>{{ unite.type || '-' }}</td>
+                    <td class="text-center">
+                      <span class="badge" [class]="unite.base ? 'bg-success' : 'bg-secondary'">
+                        {{ unite.base ? 'Oui' : 'Non' }}
+                      </span>
+                    </td>
+                    <td class="text-center">
+                      <span class="badge" [class]="unite.fact ? 'bg-success' : 'bg-secondary'">
+                        {{ unite.fact ? 'Oui' : 'Non' }}
+                      </span>
+                    </td>
+                    <td class="text-center">
+                      <span class="badge" [class]="unite.etat === 1 ? 'bg-success' : 'bg-danger'">
+                        {{ unite.etat === 1 ? 'Actif' : 'Inactif' }}
+                      </span>
+                    </td>
+                    <td class="text-center">
+                      <button class="btn btn-sm btn-outline-info me-1" (click)="openModal(unite)" data-bs-toggle="modal" data-bs-target="#uniteModal" title="Modifier">
+                        <i class="fas fa-edit"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-danger me-1" (click)="deleteUnite(unite)" title="Supprimer">
+                        <i class="fas fa-trash-alt"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="d-flex justify-content-between align-items-center mt-3" *ngIf="unites.length > 0">
+              <div class="text-muted">
+                Affichage de {{ getDisplayRange() }} sur {{ totalRecords }} unités
+              </div>
+              <nav aria-label="Pagination unités">
+                <ul class="pagination pagination-sm mb-0">
+                  <li class="page-item" [class.disabled]="currentPage === 1">
+                    <a class="page-link" href="#" (click)="onPageChange(currentPage - 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-left"></i>
+                    </a>
+                  </li>
+                  <li class="page-item" [class.active]="page === currentPage"
+                      *ngFor="let page of getPageNumbers()">
+                    <a class="page-link" href="#" (click)="onPageChange(page); $event.preventDefault()">
+                      {{ page }}
+                    </a>
+                  </li>
+                  <li class="page-item" [class.disabled]="currentPage === totalPages">
+                    <a class="page-link" href="#" (click)="onPageChange(currentPage + 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-right"></i>
+                    </a>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -123,61 +123,128 @@ const getAllBonCommande = async (options = {}, sequelizeConnection = null) => {
 // Récupérer un bon de commande par ID
 const getBonCommandeById = async (id) => {
   const sequelize = getConnection();
-  // Récupérer les infos principales du bon de commande
-  const [bonCommande] = await sequelize.query(
-    'SELECT document_id, numero, date, description, part_id, contact_id, type FROM achat_document WHERE document_id = :id',
-    {
-      replacements: { id },
-      type: sequelize.QueryTypes.SELECT,
+  
+  try {
+    // Récupérer les infos principales du bon de commande
+    const bonCommandeResult = await sequelize.query(
+      'SELECT document_id, numero, date, description, part_id, contact_id, type FROM achat_document WHERE document_id = :id',
+      {
+        replacements: { id },
+        type: sequelize.QueryTypes.SELECT,
+      }
+    );
+
+    const bonCommande = Array.isArray(bonCommandeResult) ? bonCommandeResult[0] : bonCommandeResult;
+
+    if (!bonCommande) return null;
+
+    const partId = bonCommande.part_id;
+
+    // Récupérer les détails du bon de commande (sans JOIN sur quill pour éviter les erreurs)
+    let details = [];
+    try {
+      details = await sequelize.query(
+        `SELECT d.id, d.article_id, d.quantite, d.prix, d.taux_tva, d.remise, d.description, d.remise_montant
+         FROM achat_document_detail d
+         WHERE d.document_id = :id
+         ORDER BY d.id DESC`,
+        {
+          replacements: { id },
+          type: sequelize.QueryTypes.SELECT,
+        }
+      );
+      
+      // Essayer de récupérer les désignations quill séparément
+      try {
+        const quillData = await sequelize.query(
+          `SELECT quill_id, designation FROM achat_document_quill WHERE quill_id IN (
+            SELECT id FROM achat_document_detail WHERE document_id = :id
+          )`,
+          {
+            replacements: { id },
+            type: sequelize.QueryTypes.SELECT,
+          }
+        );
+        
+        // Fusionner les désignations quill avec les détails
+        if (Array.isArray(quillData) && quillData.length > 0) {
+          const quillMap = new Map(quillData.map(q => [q.quill_id, q.designation]));
+          details = details.map(d => ({
+            ...d,
+            designation: quillMap.get(d.id) || d.description || ''
+          }));
+        }
+      } catch (quillError) {
+        console.warn('[getBonCommandeById] Table achat_document_quill non accessible:', quillError.message);
+        // Continuer sans les données quill
+        details = details.map(d => ({
+          ...d,
+          designation: d.description || ''
+        }));
+      }
+    } catch (detailError) {
+      console.error('[getBonCommandeById] Erreur récupération détails:', detailError.message);
+      details = [];
     }
-  );
 
-  if (!bonCommande) return null;
-
-  const partId = bonCommande.part_id;
-
-  // Récupérer les détails du bon de commande
-  const details = await sequelize.query(
-    `SELECT d.id, d.article_id, d.quantite, d.prix, d.taux_tva, d.remise, d.description, d.remise_montant,
-      q.designation 
-     FROM achat_document_detail d
-     LEFT JOIN achat_document_quill q ON d.id = q.quill_id
-     WHERE d.document_id = :id
-     ORDER BY d.id DESC`,
-    {
-      replacements: { id },
-      type: sequelize.QueryTypes.SELECT,
+    // Récupérer les infos du partenaire (fournisseur)
+    let Infos = [];
+    try {
+      Infos = await sequelize.query(
+        `SELECT nom, telephone, email, adresse, ice, cin, rc, IF_, PATENTE, cnss 
+         FROM v_partenaire_infos
+         WHERE part_id = :partId`,
+        {
+          replacements: { partId },
+          type: sequelize.QueryTypes.SELECT,
+        }
+      );
+    } catch (infoError) {
+      console.warn('[getBonCommandeById] Vue v_partenaire_infos non accessible, utilisation de partenaire:', infoError.message);
+      // Fallback: requête directe sur la table partenaire
+      try {
+        Infos = await sequelize.query(
+          `SELECT nom, telephone, email, adresse, ice, cin, rc, IF_, PATENTE, cnss 
+           FROM partenaire
+           WHERE part_id = :partId`,
+          {
+            replacements: { partId },
+            type: sequelize.QueryTypes.SELECT,
+          }
+        );
+      } catch (partenaireError) {
+        console.error('[getBonCommandeById] Erreur récupération partenaire:', partenaireError.message);
+        Infos = [];
+      }
     }
-  );
 
-  // Récupérer les infos du partenaire (fournisseur)
-  const Infos = await sequelize.query(
-    `SELECT nom, telephone, email, adresse, ice, cin, rc, IF_, PATENTE, cnss 
-     FROM v_partenaire_infos
-     WHERE part_id = :partId`,
-    {
-      replacements: { partId },
-      type: sequelize.QueryTypes.SELECT,
+    // Récupérer les infos de condition
+    let condition = [];
+    try {
+      condition = await sequelize.query(
+        `SELECT document_id, date, condition, expedition, transporteur, type, etat
+         FROM achat_document_info
+         WHERE document_id = :id`,
+        {
+          replacements: { id },
+          type: sequelize.QueryTypes.SELECT,
+        }
+      );
+    } catch (conditionError) {
+      console.warn('[getBonCommandeById] Table achat_document_info non accessible:', conditionError.message);
+      condition = [];
     }
-  );
 
-  // Récupérer les infos de condition
-  const condition = await sequelize.query(
-    `SELECT document_id, date, condition, expedition, transporteur, type, etat
-     FROM achat_document_info
-     WHERE document_id = :id`,
-    {
-      replacements: { id },
-      type: sequelize.QueryTypes.SELECT,
-    }
-  );
-
-  return {
-    ...bonCommande,
-    details,
-    Infos,
-    condition
-  };
+    return {
+      ...bonCommande,
+      details: details || [],
+      Infos: Infos || [],
+      condition: condition || []
+    };
+  } catch (error) {
+    console.error('[getBonCommandeById] Erreur générale:', error);
+    throw error;
+  }
 };
 
 // Ajouter un bon de commande (type = 2)
@@ -209,14 +276,14 @@ const addBonCommande = async ({ numero, date, description, part_id, contact_id, 
       // Forcer type = 2 pour bon de commande
       const typeFinal = 2;
       
-      let query = `INSERT INTO achat_document (numero, date, description, part_id, contact_id, etat, type`;
-      let values = `:numero, :date, :description, :part_id, :contact_id, :etat, :type`;
+      let query = `INSERT INTO achat_document (numero, date, description, part_id, etat, type`;
+      let values = `:numero, :date, :description, :part_id, :etat, :type`;
       let replacements = { 
         numero: numeroFinal, 
         date, 
         description, 
         part_id, 
-        contact_id, 
+       // contact_id: contact_id || null, 
         etat: etat || 1,
         type: typeFinal
       };
@@ -284,32 +351,79 @@ const addBonCommande = async ({ numero, date, description, part_id, contact_id, 
   });
 };
 
-// Sauvegarder un détail de bon de commande
+// Sauvegarder un détail de bon de commande (Insert ou Update)
 const saveDetail = async (detailData) => {
   const sequelize = getConnection();
-  const { document_id, article_id, quantite, prix, taux_tva, remise, description, remise_montant } = detailData;
+  const { 
+    id, 
+    document_id, 
+    article_id, 
+    designation,
+    qte, 
+    pu, 
+    taxe, 
+    remise, 
+    remise_montant,
+    update_mode 
+  } = detailData;
   
-  const query = `
-    INSERT INTO achat_document_detail (document_id, article_id, quantite, prix, taux_tva, remise, description, remise_montant)
+  // Mode Update
+  if (update_mode === 'U' && id) {
+    const updateQuery = `
+      UPDATE achat_document_detail 
+      SET article_id = :article_id, 
+          quantite = :quantite, 
+          prix = :prix, 
+          taux_tva = :taux_tva, 
+          remise = :remise, 
+          remise_montant = :remise_montant
+      WHERE id = :id
+    `;
+    
+    await sequelize.query(updateQuery, {
+      replacements: {
+        id,
+        article_id: article_id || null,
+        quantite: qte || 0,
+        prix: pu || 0,
+        taux_tva: taxe || 0.2,
+        remise: remise || null,
+        remise_montant: remise_montant || null
+      },
+      type: sequelize.QueryTypes.UPDATE
+    });
+    
+    return { id, status: 'updated' };
+  }
+  
+  // Mode Insert
+  const insertQuery = `
+    INSERT INTO achat_document_detail (document_id, article_id, quantite, prix, taux_tva, remise, remise_montant)
     OUTPUT INSERTED.id
-    VALUES (:document_id, :article_id, :quantite, :prix, :taux_tva, :remise, :description, :remise_montant)
+    VALUES (:document_id, :article_id, :quantite, :prix, :taux_tva, :remise, :remise_montant)
   `;
   
-  const [result] = await sequelize.query(query, {
+  const [result] = await sequelize.query(insertQuery, {
     replacements: {
       document_id,
       article_id: article_id || null,
-      quantite: quantite || 0,
-      prix: prix || 0,
-      taux_tva: taux_tva || 0,
-      remise: remise || 0,
-      description: description || '',
-      remise_montant: remise_montant || 0
+      quantite: qte || 0,
+      prix: pu || 0,
+      taux_tva: taxe || 0.2,
+      remise: remise || null,
+      remise_montant: remise_montant || null
     },
     type: sequelize.QueryTypes.INSERT
   });
   
-  return result;
+  let newId = null;
+  if (result && result.id) {
+    newId = result.id;
+  } else if (Array.isArray(result) && result.length > 0 && result[0].id) {
+    newId = result[0].id;
+  }
+  
+  return { id: newId, status: 'inserted' };
 };
 
 // Sauvegarder les infos de bon de commande
@@ -355,7 +469,7 @@ const updateBonCommande = async (id, bonCommandeData) => {
   `;
   
   await sequelize.query(query, {
-    replacements: { id, date, description, part_id, contact_id },
+    replacements: { id, date, description, part_id, contact_id: contact_id || null },
     type: sequelize.QueryTypes.UPDATE
   });
   
@@ -367,17 +481,30 @@ const deleteBonCommande = async (id) => {
   const sequelize = getConnection();
   
   return await sequelize.transaction(async (t) => {
+    // Récupérer les IDs des détails pour supprimer les quill associés
+    const details = await sequelize.query(
+      'SELECT id FROM achat_document_detail WHERE document_id = :id',
+      { replacements: { id }, type: sequelize.QueryTypes.SELECT, transaction: t }
+    );
+    
+    // Supprimer les quill associés aux détails
+    if (details && details.length > 0) {
+      const detailIds = details.map(d => d.id);
+      const placeholders = detailIds.map((_, index) => `:id${index}`).join(',');
+      const quillReplacements = {};
+      detailIds.forEach((detailId, index) => {
+        quillReplacements[`id${index}`] = detailId;
+      });
+      
+    }
+    
     // Supprimer les détails
     await sequelize.query(
       'DELETE FROM achat_document_detail WHERE document_id = :id',
       { replacements: { id }, transaction: t }
     );
     
-    // Supprimer les infos
-    await sequelize.query(
-      'DELETE FROM achat_document_info WHERE document_id = :id',
-      { replacements: { id }, transaction: t }
-    );
+  
     
     // Supprimer le document
     await sequelize.query(
@@ -411,9 +538,103 @@ const deleteLignesParIds = async (ids) => {
   return { success: true, deletedCount: ids.length };
 };
 
+// Récupérer les données du bon de commande pour génération PDF
+const getBonCommandeForPDF = async (id) => {
+  const sequelize = getConnection();
+  
+  // S'assurer que l'ID est un nombre
+  const numericId = parseInt(id, 10);
+  if (isNaN(numericId)) {
+    throw new Error(`ID invalide: ${id}`);
+  }
+  
+  try {
+    // Requête principale pour récupérer les infos du bon de commande
+    const mainQuery = `
+      SELECT  
+        a.document_id, 
+        a.numero, 
+        a.date, 
+        a.description, 
+        p.nom as fournisseur, 
+        aa.nom as adresse,
+        pi.identifiant as ice
+      FROM achat_document a 
+      INNER JOIN achat_document_detail ad ON ad.document_id = a.document_id
+      INNER JOIN partenaire p ON p.part_id = a.part_id 
+      LEFT OUTER JOIN adresse aa ON aa.part_id = p.part_id
+      LEFT OUTER JOIN partenaire_identifiant pi ON pi.part_id = p.part_id AND pi.identifiant_type = 8
+      WHERE a.document_id = :id
+    `;
+    
+    const mainResult = await sequelize.query(mainQuery, {
+      replacements: { id: numericId },
+      type: sequelize.QueryTypes.SELECT
+    });
+    
+    if (!mainResult || mainResult.length === 0) {
+      console.log(`[getBonCommandeForPDF] Aucun bon de commande trouvé pour ID: ${numericId}`);
+      return [];
+    }
+    
+    const bonCommande = mainResult[0];
+    
+    // Récupérer les détails des articles
+    const detailsQuery = `
+      SELECT 
+        d.id,
+        ISNULL(ar.article_cod, '') as article_cod,
+        ISNULL(ar.article_nom, '') as article,
+        ISNULL(d.quantite, 0) as quantite,
+        ISNULL(d.prix, 0) as prix,
+        ISNULL(d.taux_tva, 0.2) as taux_tva,
+        ISNULL(d.remise, 0) as remise,
+        ISNULL(d.remise_montant, 0) as remise_montant
+      FROM achat_document_detail d
+      LEFT JOIN article ar ON ar.article_id = d.article_id
+      WHERE d.document_id = :id
+      ORDER BY d.id
+    `;
+    
+    const details = await sequelize.query(detailsQuery, {
+      replacements: { id: numericId },
+      type: sequelize.QueryTypes.SELECT
+    });
+    
+    // Combiner les données
+    if (details.length === 0) {
+      console.log(`[getBonCommandeForPDF] Bon de commande ${numericId} sans détails`);
+      return [{
+        ...bonCommande,
+        article_cod: '',
+        article: 'Aucun article',
+        quantite: 0,
+        prix: 0,
+        taux_tva: 0.2,
+        remise: 0,
+        remise_montant: 0
+      }];
+    }
+    
+    // Fusionner les infos du bon de commande avec chaque ligne de détail
+    const results = details.map(detail => ({
+      ...bonCommande,
+      ...detail
+    }));
+    
+    console.log(`[getBonCommandeForPDF] ${results.length} ligne(s) trouvée(s) pour document_id: ${numericId}`);
+    
+    return results;
+  } catch (error) {
+    console.error('[getBonCommandeForPDF] Erreur:', error.message);
+    throw error;
+  }
+};
+
 module.exports = {
   getAllBonCommande,
   getBonCommandeById,
+  getBonCommandeForPDF,
   addBonCommande,
   saveDetail,
   saveInfo,

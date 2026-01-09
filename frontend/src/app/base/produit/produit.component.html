@@ -164,7 +164,7 @@
                     <td>{{ produit.unite_nom || '-' }}</td>
 
                     <td class="text-center">
-                      <button class="btn btn-sm btn-outline-info me-1" (click)="onEdit(produit)" title="Modifier">
+                      <button class="btn btn-sm btn-outline-info me-1" (click)="goToEditProduit(produit.article_id)" title="Modifier">
                         <i class="fas fa-edit"></i>
                       </button>
                       <button class="btn btn-sm btn-outline-danger me-1" (click)="onDelete(produit.article_id)" title="Supprimer">

@@ -408,4 +408,88 @@ RemoveDevis(ids: any[]): Observable<any> {
       headers: { 'Content-Type': 'application/json' }
     });
   }
+
+  // ========== CONTRATS ==========
+  
+  // Récupérer tous les contrats
+  getContrats(options: any = {}): Observable<any> {
+    const params = new URLSearchParams();
+    if (options.page) params.append('page', options.page.toString());
+    if (options.pageSize) params.append('pageSize', options.pageSize.toString());
+    if (options.orderBy) params.append('orderBy', options.orderBy);
+    if (options.orderDirection) params.append('orderDirection', options.orderDirection);
+    if (options.search) params.append('search', options.search);
+    if (options.dateFrom) params.append('dateFrom', options.dateFrom);
+    if (options.dateTo) params.append('dateTo', options.dateTo);
+    
+    return this.http.get(`${this.apiUrl}/contrats?${params.toString()}`, {
+      headers: this.httpHeaders
+    });
+  }
+
+  // Récupérer un contrat par ID
+  getContrat(id: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/contrats/${id}`, {
+      headers: this.httpHeaders
+    });
+  }
+
+  // Créer un nouveau contrat
+  createContrat(data: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/contrats`, data, {
+      headers: this.httpHeaders
+    });
+  }
+
+  // Mettre à jour un contrat
+  updateContrat(id: number, data: any): Observable<any> {
+    return this.http.put(`${this.apiUrl}/contrats/${id}`, data, {
+      headers: this.httpHeaders
+    });
+  }
+
+  // Supprimer un contrat
+  deleteContrat(id: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/contrats/${id}`, {
+      headers: this.httpHeaders
+    });
+  }
+
+  // Récupérer les conditions de paiement
+  getConditionsPaiement(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/contrats/conditions-paiement`, {
+      headers: this.httpHeaders
+    });
+  }
+
+  // Récupérer les données d'un contrat pour transfert vers facturation
+  getContratDataForTransfer(contratId: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/contrats/${contratId}`, {
+      headers: this.httpHeaders
+    });
+  }
+
+  // Transférer un contrat vers facturation
+  transfererContratVersFacturation(contratId: number, factureDate: string, partId: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}/contrats/${contratId}/facturer`, {
+      factureDate,
+      partId
+    }, {
+      headers: this.httpHeaders
+    });
+  }
+
+  // Sauvegarder les lignes de détails d'un contrat
+  SaveLignesDetailContrat(lignes: any[]): Observable<any> {
+    return this.http.post(`${this.apiUrl}/contrats/save-detail`, { lignes }, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  // Supprimer des lignes de détail d'un contrat
+  RemoveDetailLigneContrat(ids: any[]): Observable<any> {
+    return this.http.post(`${this.apiUrl}/contrats/delete-lignes`, { ligneIds: ids }, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 }

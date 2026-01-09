@@ -33,8 +33,13 @@ export class EmailService {
     window.open(whatsappUrl, '_blank');
   }
 
-  generateDevisPDF(document_id: string) {
-    return this.http.post<any>('http://localhost:3500/api/pdf/generate', { document_id });
+  generateDevisPDF(document_id: string, options?: { withStamp?: boolean; printMode?: 'normal' | 'nomenclature'; composeArticle?: any }) {
+    return this.http.post<any>('http://localhost:3500/api/pdf/generate', {
+      document_id,
+      withStamp: !!options?.withStamp,
+      printMode: options?.printMode || 'normal',
+      composeArticle: options?.composeArticle || null
+    });
   }
 
   sendDevisWhatsAppPDF(document_id: string, phone: string, message?: string) {
@@ -61,6 +66,11 @@ export class EmailService {
   // Méthode pour générer le PDF de facturation
   generateFacturePDF(facture_id: string) {
     return this.http.post<any>('http://localhost:3500/api/facturation-pdf/generate', { facture_id });
+  }
+
+  // Méthode pour générer le PDF de facture contrat
+  generateFactureContratPDF(facture_id: string) {
+    return this.http.post<any>('http://localhost:3500/api/facturation-pdf/generate-contrat', { facture_id });
   }
 
   // Méthodes pour les retours

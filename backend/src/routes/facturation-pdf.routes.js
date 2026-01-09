@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const facturationPdfService = require('../services/facturation-pdf.service');
-const { getFactureReportById } = require('../models/ventes/facturation.model');
+const { getFactureReportById, getFactureContratById } = require('../models/ventes/facturation.model');
 const documentSocieteService = require('../services/document_societe.service');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const databaseInjector = require('../middleware/database-injector.middleware');
@@ -63,6 +63,55 @@ router.post('/generate', async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Erreur génération PDF facture',
+      error: error.message
+    });
+  }
+});
+
+// Générer un PDF de facture contrat
+router.post('/generate-contrat', async (req, res) => {
+  try {
+    const { facture_id, withStamp } = req.body;
+    
+    if (!facture_id) {
+      return res.status(400).json({ success: false, message: 'facture_id est requis' });
+    }
+
+    // Récupérer les données de la facture depuis v_facture_contrat
+    const factureData = await getFactureContratById(facture_id, req.sequelize);
+
+    if (!factureData || (Array.isArray(factureData) && factureData.length === 0)) {
+      console.error('[facturation-pdf/generate-contrat] ❌ Aucune donnée trouvée pour facture_id:', facture_id);
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Facture contrat introuvable ou aucune ligne de détail trouvée',
+        facture_id: facture_id
+      });
+    }
+
+    // Récupérer les informations du document_societe si disponibles
+    let documentSociete = null;
+    try {
+      const societeId = req.user?.societe_id || 1;
+      documentSociete = await documentSocieteService.getDocumentSociete(societeId);
+    } catch (error) {
+      console.warn('Impossible de récupérer documentSociete:', error.message);
+    }
+
+    const pdfPath = await facturationPdfService.genererPDFContrat(factureData, {
+      withStamp: !!withStamp,
+      documentSociete: documentSociete,
+      sequelize: req.sequelize
+    });
+    
+    const pdfUrl = `http://localhost:3500/factures/${path.basename(pdfPath)}`;
+
+    return res.json({ success: true, pdfUrl });
+  } catch (error) {
+    console.error('Erreur génération PDF facture contrat :', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur génération PDF facture contrat',
       error: error.message
     });
   }

@@ -1,13 +1,242 @@
-<div class="container-fluid py-4 px-3">
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 border-bottom pb-3">
-        <div>
-            <h4 class="mb-1">🧾 Bon de Commande Achat <span class="text-muted">#{{documentId}}</span></h4>
-            <div class="small text-muted">/ Bon de Commande / Formulaire</div>
+<div class="commande-container" style="margin-top: 0 !important; padding-top: 0 !important;">
+    <!-- En-tête du bon de commande -->
+    <div class="mb-2">
+        <div class="d-flex align-items-center mb-1">
+            <div class="flex-grow-1">
+                <h3 class="mb-0 fw-bold text-primary">📦 Bon de Commande Achat <span class="text-dark">#{{numeroBonCommande}}</span></h3>
+                <p class="mb-0 small text-muted mt-1">Achats / Bon de Commande</p>
+            </div>
+        </div>
+        <div class="border-bottom"></div>
+    </div>
+
+    <div *ngIf="successMessage" class="modern-toast" [ngClass]="{ 'toast-success': !isError, 'toast-error': isError }">
+        <span class="toast-icon">
+            <i *ngIf="!isError" class="bi bi-check-circle-fill"></i>
+            <i *ngIf="isError" class="bi bi-exclamation-triangle-fill"></i>
+        </span>
+        <span class="toast-message">{{ successMessage }}</span>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <!-- Première colonne -->
+        <div class="col-md-6">
+            <div class="p-3 bg-white rounded shadow-sm h-100" [formGroup]="BonCommandeForm">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="mb-0">📝 Informations du Bon de Commande</h6>
+                    <button class="btn btn-sm btn-outline-primary" (click)="toggleEdit()">
+                        {{ editInfos ? '✅ Terminé' : '✏️ Modifier' }}
+                    </button>
+                </div>
+
+                <!-- AFFICHAGE NORMAL -->
+                <ng-container *ngIf="!editInfos">
+                    <p><strong>Fournisseur :</strong> {{ BonCommandeForm.get('fournisseurSearch')?.value }}</p>
+                    <p><strong>Date :</strong> {{ BonCommandeForm.get('date')?.value | date: 'dd/MM/yyyy' }}</p>
+                    <p><strong>Description :</strong> {{ BonCommandeForm.get('description')?.value }}</p>
+                </ng-container>
+
+                <!-- MODE ÉDITION -->
+                <ng-container *ngIf="editInfos">
+                    <div class="mb-2 position-relative">
+                        <label for="FournisseurSearch" class="form-label">Fournisseur</label>
+                        <input id="FournisseurSearch" type="text" class="form-control" placeholder="Commencez à écrire..."
+                            formControlName="fournisseurSearch" autocomplete="off" />
+                        <ul *ngIf="BonCommandeForm.get('fournisseurSearch')?.value && filteredFournisseurs.length > 0"
+                            class="list-group position-absolute w-100 shadow"
+                            style="max-height: 150px; overflow-y: auto; z-index: 1050;">
+                            <li class="list-group-item list-group-item-action" *ngFor="let fournisseur of filteredFournisseurs"
+                                (click)="selectFournisseur(fournisseur)">
+                                {{ fournisseur.nom }}
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label">Date</label>
+                        <input type="date" class="form-control form-control-sm" formControlName="date">
+                    </div>
+
+                    <div>
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control form-control-sm" rows="3" formControlName="description"
+                            placeholder="Description"></textarea>
+                    </div>
+                </ng-container>
+            </div>
+        </div>
+
+        <!-- Deuxième colonne -->
+        <div class="col-md-6" *ngIf="info">
+            <div class="p-3 bg-white rounded shadow-sm h-100">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="mb-0">🏢 Infos du Fournisseur</h6>
+                </div>
+
+                <p><strong>Fournisseur :</strong> {{ info.nom }}</p>
+                <p><strong>Adresse :</strong> {{ info.adresse }}</p>
+                <p><strong>Téléphone :</strong> {{ info.telephone || '(non renseigné)' }}</p>
+                <p><strong>Email :</strong> {{ info.email || '(non renseigné)' }}</p>
+                <p><strong>ICE :</strong> {{ info.ice || '(non renseigné)' }}</p>
+            </div>
         </div>
     </div>
-    
-    <div class="alert alert-info">
-        <i class="fas fa-info-circle"></i> Page d'édition du bon de commande - En cours de développement
+
+    <!-- Produits -->
+    <div class="bg-white rounded shadow-sm p-4 mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="mb-0">📦 Liste des Articles</h6>
+            <button class="btn btn-success" (click)="addProduit()">➕ Ajouter article</button>
+        </div>
+
+
+        <!-- Tableau -->
+        <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+            <table class="table table-striped align-middle text-center">
+                <thead class="table-light">
+                    <tr>
+                        <th style="min-width: 300px;">Détails</th>
+                        <th class="text-end" style="min-width: 80px;">PU</th>
+                        <th class="text-end" style="min-width: 70px;">Qté</th>
+                        <th style="min-width: 120px;">Réduc</th>
+                        <th style="min-width: 70px;">TVA (%)</th>
+                        <th class="text-end" style="min-width: 110px;">Total</th>
+                        <th style="width: 40px; padding: 2px;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr *ngFor="let p of produits; let i = index">
+                        <td>
+                            <div class="position-relative">
+                                <input 
+                                    type="text" 
+                                    class="form-control form-control-sm" 
+                                    style="min-width: 280px; width: 100%;"
+                                    [(ngModel)]="p.articleSearch"
+                                    (input)="onArticleSearchChange(i, $any($event.target).value)"
+                                    placeholder="Rechercher un article..."
+                                    autocomplete="off" />
+                                <ul *ngIf="p.articleSearch && filteredArticles[i] && filteredArticles[i].length > 0" 
+                                    class="list-group position-absolute w-100 shadow"
+                                    style="max-height: 600px; overflow-y: auto; z-index: 1050; font-size: 14px;">
+                                    <li class="list-group-item list-group-item-action" 
+                                        *ngFor="let article of filteredArticles[i]"
+                                        (click)="selectArticle(i, article)"
+                                        style="padding: 10px 15px; cursor: pointer; font-size: 14px; line-height: 1.5;">
+                                        {{ article.article_nom }}
+                                    </li>
+                                </ul>
+                            </div>
+                        </td>
+
+                        <td>
+                            <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="p.pu"
+                                (input)="recalculateTotal(i)" />
+                        </td>
+
+                        <td>
+                            <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="p.qte"
+                                (input)="recalculateTotal(i)" />
+                        </td>
+
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="p.reduc" (ngModelChange)="recalculateTotal(i)" style="width: 80px;" />
+                                <select class="form-select form-select-sm" [(ngModel)]="p.reducMode" (change)="recalculateTotal(i)" style="width: 90px;">
+                                    <option value="pourcentage">%</option>
+                                    <option value="montant">dh</option>
+                                </select>
+                            </div>
+                        </td>
+
+                        <td>{{ ((isFournisseurExonerated ? 0 : (p.taxe || 0.2)) * 100) }}%</td>
+
+                        <td class="text-end"><strong>{{ p.total | number:'1.2-2' }}</strong> dh</td>
+
+                        <td style="padding: 2px;">
+                            <button class="btn btn-danger" style="padding: 1px 4px; font-size: 0.7rem;" (click)="removeProduit(i)" title="Supprimer">🗑️</button>
+                        </td>
+                    </tr>
+
+                    <!-- Bouton enregistrer -->
+                    <tr *ngIf="produits.length > 0">
+                        <td colspan="100" class="text-end pt-3">
+                            <button class="btn btn-success btn-sm" (click)="enregistrerTout()">
+                                💾 Enregistrer tout
+                            </button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Résumé financier -->
+    <div class="row mb-3">
+        <div class="col-md-5 offset-md-7">
+            <ul class="list-group shadow-sm rounded">
+                <li class="list-group-item d-flex justify-content-between">
+                    <strong>Sous-total</strong> <span>{{ sousTotal | number:'1.2-2' }} dh</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <strong>Réduction</strong> <span>{{ reducTotal | number:'1.2-2' }} dh</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <strong>TVA ({{ isFournisseurExonerated ? '0' : '20' }}%)</strong> <span>{{ taxeTotal | number:'1.2-2' }} dh</span>
+                </li>
+                <li class="list-group-item bg-light d-flex justify-content-between">
+                    <strong>Total général</strong> <strong>{{ totalGeneral | number:'1.2-2' }} dh</strong>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Boutons d'action -->
+    <div class="d-flex justify-content-end gap-3 mb-3">
+        <button class="btn btn-info text-white" (click)="ouvrirPopupEmail()">
+            <i class="bi bi-envelope"></i> Envoyer par e-mail
+        </button>
+        <button class="btn btn-outline-primary" (click)="voirBonCommande()">📄 Voir bon de commande</button>
     </div>
 </div>
 
+<!-- Pop up pour l'email -->
+<div class="modal fade" id="emailModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content p-3">
+            <div class="modal-header">
+                <h5 class="modal-title">📧 Envoyer le bon de commande par e-mail</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form [formGroup]="emailForm">
+                    <div class="mb-2">
+                        <label>À :</label>
+                        <input formControlName="to" type="email" class="form-control" placeholder="exemple@gmail.com">
+                    </div>
+                    <div class="mb-2">
+                        <label>CC :</label>
+                        <input formControlName="cc" type="email" class="form-control">
+                    </div>
+                    <div class="mb-2">
+                        <label>Objet :</label>
+                        <input formControlName="subject" type="text" class="form-control" placeholder="Objet de l'e-mail">
+                    </div>
+                    <div class="mb-2">
+                        <label>Message :</label>
+                        <textarea formControlName="body" class="form-control" rows="5" placeholder="Rédigez votre message ici..."></textarea>
+                    </div>
+                    <div class="mb-2">
+                        <strong>📎 Pièce jointe : </strong> bon-commande.pdf
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button (click)="envoyerEmail()" class="btn btn-success" [disabled]="emailForm.invalid">
+                    <i class="bi bi-send"></i> Envoyer
+                </button>
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,229 @@
+<div class="container py-4">
+  <div class="page-inner">
+
+    <!-- En-tête -->
+    <div class="page-header mb-4">
+      <h3 class="fw-bold text-dark">Base</h3>
+      <ul class="breadcrumbs d-flex align-items-center">
+        <li class="nav-home me-2"><a href="#"><i class="fas fa-home text-primary"></i></a></li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item me-2"><a href="#" class="text-muted">Département</a></li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item fw-semibold text-muted">Liste Département</li>
+      </ul>
+    </div>
+
+    <!-- Bouton Ajouter Département -->
+    <div class="row mb-4">
+      <div class="col-12 text-end">
+        <button
+          type="button"
+          class="btn btn-gradient px-4 py-2 shadow-sm"
+          data-bs-toggle="modal"
+          data-bs-target="#departementModal"
+        >
+          <i class="fas fa-sitemap me-2"></i> Ajouter un département
+        </button>
+      </div>
+    </div>
+
+    <!-- Modal Formulaire d'ajout département -->
+    <div
+      class="modal fade"
+      id="departementModal"
+      tabindex="-1"
+      aria-labelledby="departementModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content modal-elegant shadow">
+          <div class="modal-header modal-header-custom">
+            <h5 class="modal-title text-white" id="departementModalLabel">
+              <i class="fas fa-sitemap me-2"></i>
+              {{ isEditMode ? 'Modifier le département' : 'Nouveau département' }}
+            </h5>
+            <button
+              type="button"
+              class="btn-close btn-close-white"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <form>
+              <div class="row">
+                <div class="col-md-4 mb-3">
+                  <label for="code" class="form-label">Code *</label>
+                  <input type="text" class="form-control" id="code"
+                         [(ngModel)]="currentDepartement.code" name="code" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                  <label for="nom" class="form-label">Nom *</label>
+                  <input type="text" class="form-control" id="nom"
+                         [(ngModel)]="currentDepartement.nom" name="nom" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                  <label for="etat" class="form-label">État</label>
+                  <select class="form-select" id="etat" [(ngModel)]="currentDepartement.etat" name="etat">
+                    <option [value]="1">Actif</option>
+                    <option [value]="0">Inactif</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label for="manager" class="form-label">Manager</label>
+                  <input type="text" class="form-control" id="manager"
+                         [(ngModel)]="currentDepartement.manager" name="manager">
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label for="parent" class="form-label">Parent</label>
+                  <input type="number" class="form-control" id="parent"
+                         [(ngModel)]="currentDepartement.parent" name="parent"
+                         placeholder="ID du département parent">
+                </div>
+              </div>
+
+              <div class="modal-footer bg-light border-top">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-success" (click)="saveDepartement()">
+                  <i class="fas fa-save me-1"></i>
+                  {{ isEditMode ? 'Modifier' : 'Enregistrer' }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Barre de recherche et taille page -->
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-search"></i></span>
+          <input
+            type="text"
+            class="form-control"
+            placeholder="Rechercher par code, nom..."
+            [(ngModel)]="searchTerm"
+            (keyup.enter)="onSearch()"
+          />
+          <button class="btn btn-primary" type="button" (click)="onSearch()">
+            <i class="fas fa-search"></i> Rechercher
+          </button>
+        </div>
+      </div>
+      <div class="col-md-2">
+        <select class="form-select" [(ngModel)]="pageSize" (change)="getDepartements()">
+          <option [value]="10">10 par page</option>
+          <option [value]="25">25 par page</option>
+          <option [value]="50">50 par page</option>
+          <option [value]="100">100 par page</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Tableau Département -->
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card border-0 shadow-sm rounded-3">
+
+          <div class="card-body">
+            <div class="table-responsive" style="position: relative; min-height: 300px;">
+              <!-- Loader overlay -->
+              <div
+                *ngIf="loading"
+                class="text-center my-4"
+                style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"
+              >
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                  <span class="visually-hidden">Chargement...</span>
+                </div>
+                <p class="mt-3 mb-0 text-muted fw-semibold">Chargement des départements...</p>
+              </div>
+
+              <table
+                id="departementTable"
+                class="table table-bordered table-striped table-hover"
+                width="100%"
+                [style.opacity]="loading ? '0.5' : '1'"
+              >
+                <thead class="table-light">
+                  <tr>
+                    <th (click)="onSort('code')" class="sortable" style="cursor: pointer; width: 120px;">
+                      Code <i class="fas ms-1" [ngClass]="getSortIcon('code')"></i>
+                    </th>
+                    <th (click)="onSort('nom')" class="sortable" style="cursor: pointer;">
+                      Nom <i class="fas ms-1" [ngClass]="getSortIcon('nom')"></i>
+                    </th>
+                    <th style="width: 150px;">Manager</th>
+                    <th style="width: 150px;">Parent</th>
+                    <th style="width: 100px;" class="text-center">État</th>
+                    <th style="width: 150px;" class="text-center">Actions</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  <tr *ngIf="!loading && departements.length === 0">
+                    <td colspan="6" class="text-center py-4">
+                      <p class="text-muted mb-0">Aucun département trouvé</p>
+                    </td>
+                  </tr>
+
+                  <tr *ngFor="let departement of departements">
+                    <td>{{ departement.code }}</td>
+                    <td>{{ departement.nom }}</td>
+                    <td>{{ departement.manager || '-' }}</td>
+                    <td>{{ departement.parent_nom || '-' }}</td>
+                    <td class="text-center">
+                      <span class="badge" [class]="departement.etat === 1 ? 'bg-success' : 'bg-danger'">
+                        {{ departement.etat === 1 ? 'Actif' : 'Inactif' }}
+                      </span>
+                    </td>
+                    <td class="text-center">
+                      <button class="btn btn-sm btn-outline-info me-1" (click)="openModal(departement)" data-bs-toggle="modal" data-bs-target="#departementModal" title="Modifier">
+                        <i class="fas fa-edit"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-danger me-1" (click)="deleteDepartement(departement)" title="Supprimer">
+                        <i class="fas fa-trash-alt"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="d-flex justify-content-between align-items-center mt-3" *ngIf="departements.length > 0">
+              <div class="text-muted">
+                Affichage de {{ getDisplayRange() }} sur {{ totalRecords }} départements
+              </div>
+              <nav aria-label="Pagination départements">
+                <ul class="pagination pagination-sm mb-0">
+                  <li class="page-item" [class.disabled]="currentPage === 1">
+                    <a class="page-link" href="#" (click)="onPageChange(currentPage - 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-left"></i>
+                    </a>
+                  </li>
+                  <li class="page-item" [class.active]="page === currentPage"
+                      *ngFor="let page of getPageNumbers()">
+                    <a class="page-link" href="#" (click)="onPageChange(page); $event.preventDefault()">
+                      {{ page }}
+                    </a>
+                  </li>
+                  <li class="page-item" [class.disabled]="currentPage === totalPages">
+                    <a class="page-link" href="#" (click)="onPageChange(currentPage + 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-right"></i>
+                    </a>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

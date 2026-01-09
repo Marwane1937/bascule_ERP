@@ -6,7 +6,23 @@
             <div class="small text-muted">/ Devis / Formulaire</div>
         </div>
         <div class="d-flex gap-2">
-            <button class="btn btn-success" (click)="voirCommande(true)"><i class="bi bi-printer-fill me-1"></i> Impression</button>
+            <div class="btn-group">
+                <button type="button" class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-printer-fill me-1"></i> Impression
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li>
+                        <button class="dropdown-item" type="button" (click)="imprimerPdfNormal()">
+                            Normal
+                        </button>
+                    </li>
+                    <li>
+                        <button class="dropdown-item" type="button" (click)="imprimerPdfNomenclature()">
+                            Nomenclature
+                        </button>
+                    </li>
+                </ul>
+            </div>
         </div>
     </div>
       <div
@@ -126,6 +142,9 @@
                     Éditeur</button>
                 <button class="btn btn-outline-secondary" [class.active]="mode === 'table'" (click)="mode = 'table'">📋
                     Liste produits</button>
+                <button class="btn btn-outline-secondary" [class.active]="mode === 'nomenclature'" (click)="activerModeNomenclature()">
+                    🧩 Produits nomenclature
+                </button>
             </div>
         </div>
 
@@ -169,6 +188,29 @@
                                         <li class="list-group-item list-group-item-action" 
                                             *ngFor="let article of filteredArticles[i]"
                                             (click)="selectArticle(i, article)"
+                                            style="padding: 10px 15px; cursor: pointer; font-size: 14px; line-height: 1.5;">
+                                            {{ article.article_nom }}
+                                        </li>
+                                    </ul>
+                                </div>
+                            </ng-container>
+
+                            <ng-container *ngIf="mode === 'nomenclature'">
+                                <div class="position-relative">
+                                    <input 
+                                        type="text" 
+                                        class="form-control form-control-sm" 
+                                        style="min-width: 280px; width: 100%;"
+                                        [(ngModel)]="p.articleSearch"
+                                        (input)="onNomenclatureSearchChange(i, $any($event.target).value)"
+                                        placeholder="Rechercher un produit avec nomenclature..."
+                                        autocomplete="off" />
+                                    <ul *ngIf="p.articleSearch && filteredNomenclatureArticles[i] && filteredNomenclatureArticles[i].length > 0" 
+                                        class="list-group position-absolute w-100 shadow"
+                                        style="max-height: 600px; overflow-y: auto; z-index: 1050; font-size: 14px;">
+                                        <li class="list-group-item list-group-item-action" 
+                                            *ngFor="let article of filteredNomenclatureArticles[i]"
+                                            (click)="selectNomenclatureArticle(i, article)"
                                             style="padding: 10px 15px; cursor: pointer; font-size: 14px; line-height: 1.5;">
                                             {{ article.article_nom }}
                                         </li>
@@ -248,7 +290,23 @@
   <i class="bi bi-envelope"></i> Envoyer par e-mail</button>
 
         <button class="btn btn-success" (click)="envoyerWhatsApp(devis)" disabled><i class="bi bi-whatsapp"></i> WhatsApp</button>
-        <button class="btn btn-outline-primary" (click)="voirCommande()">📄 Voir commande</button>
+        <div class="btn-group">
+            <button type="button" class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                📄 PDF
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li>
+                    <button class="dropdown-item" type="button" (click)="imprimerPdfNormal()">
+                        Normal
+                    </button>
+                </li>
+                <li>
+                    <button class="dropdown-item" type="button" (click)="imprimerPdfNomenclature()">
+                        Nomenclature
+                    </button>
+                </li>
+            </ul>
+        </div>
     </div>
 
    <!-- Infos complémentaires -->

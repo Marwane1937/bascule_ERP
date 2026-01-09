@@ -287,7 +287,7 @@ export class FacturationComponent implements OnInit, AfterViewInit {
   }
 
 
-  onPrintFacture(facture_id: any) {
+  onPrintFacture(facture_id: any, type: 'standard' | 'contrat' = 'standard') {
     if (!facture_id) {
       Swal.fire({ icon: 'error', title: 'Erreur', text: 'ID de facture introuvable.' });
       return;
@@ -301,7 +301,11 @@ export class FacturationComponent implements OnInit, AfterViewInit {
       }
     });
     
-    this.emailService.generateFacturePDF(facture_id.toString()).subscribe({
+    const serviceCall = type === 'contrat' 
+      ? this.emailService.generateFactureContratPDF(facture_id.toString())
+      : this.emailService.generateFacturePDF(facture_id.toString());
+    
+    serviceCall.subscribe({
       next: (res: any) => {
         Swal.close();
         const url = res?.pdfUrl;

@@ -9,16 +9,10 @@
                 <i class="fas fa-arrow-down me-2"></i>
                 Caisse - Recettes
               </h4>
-              <!-- Toggle Mode Caisse -->
-              <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" id="toggleCaisseMode" 
-                       [checked]="caisseMode === 'black'"
-                       (change)="toggleCaisseMode()">
-                <label class="form-check-label text-white" for="toggleCaisseMode">
-                  <span *ngIf="caisseMode === 'declaree'">Caisse Déclarée</span>
-                  <span *ngIf="caisseMode === 'black'"><strong>CAISSE BLACK</strong></span>
-                </label>
-              </div>
+              <!-- Badge Mode Caisse Black -->
+              <span *ngIf="caisseMode === 'black'" class="badge bg-warning text-dark">
+                <i class="fas fa-moon me-1"></i><strong>CAISSE BLACK</strong>
+              </span>
             </div>
             <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#addRecetteModal">
               <i class="fas fa-plus me-2"></i>

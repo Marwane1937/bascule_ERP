@@ -170,6 +170,11 @@ class EmailService {
     }
     return new Promise(async (resolve, reject) => {
       try {
+        // === MODE D'IMPRESSION (NORMAL / NOMENCLATURE) ===
+        // printMode = 'normal' (par défaut) -> comportement existant
+        // printMode = 'nomenclature' -> PDF basé sur le même modèle, mais avec 1 seule ligne "article composé"
+        const printMode = (options.printMode || 'normal').toLowerCase();
+
         // === EXONÉRATION TVA (DEVIS + BON DE LIVRAISON) ===
         let isClientExonerated = false;
         const part_id = devisData?.[0]?.part_id;
@@ -178,6 +183,156 @@ class EmailService {
         const isRetour0 = documentKind0 === 'RETOUR CLIENT' || documentType0 === 5;
         const isLivraison0 = documentKind0 === 'LIVRAISON' || documentType0 === 2;
         const isDevis0 = !isRetour0 && !isLivraison0;
+
+        // === Impression NOMENCLATURE (DEVIS uniquement, sans popup côté UI) ===
+        // On garde exactement le même template, mais on remplace les lignes par une seule ligne basée sur l'article composé.
+        if (printMode === 'nomenclature' && isDevis0) {
+          const sequelizeConn = options.sequelize || require('../config/database');
+          const compose = options.composeArticle || {};
+          let composeId = compose.article_id ? parseInt(compose.article_id, 10) : null;
+          let nomLines = [];
+
+          // Auto-détection: trouver le Compose_id le plus probable à partir des lignes composants du devis
+          if (!composeId) {
+            const componentIds = Array.from(new Set((devisData || [])
+              .map(l => l.article_id)
+              .filter(id => id !== null && id !== undefined)
+              .map(id => parseInt(id, 10))
+              .filter(id => !isNaN(id))));
+
+            if (componentIds.length > 0) {
+              const candidates = await sequelizeConn.query(
+                `
+                  SELECT TOP 1
+                    n.Compose_id,
+                    SUM(CASE WHEN n.Composant_id IN (:componentIds) THEN 1 ELSE 0 END) AS present_count,
+                    COUNT(*) AS total_count
+                  FROM article_Nomenclature n
+                  GROUP BY n.Compose_id
+                  ORDER BY
+                    CASE WHEN SUM(CASE WHEN n.Composant_id IN (:componentIds) THEN 1 ELSE 0 END) = COUNT(*) THEN 0 ELSE 1 END,
+                    SUM(CASE WHEN n.Composant_id IN (:componentIds) THEN 1 ELSE 0 END) DESC,
+                    COUNT(*) ASC
+                `,
+                {
+                  replacements: { componentIds },
+                  type: sequelizeConn.QueryTypes.SELECT
+                }
+              );
+              if (candidates && candidates.length > 0) {
+                composeId = parseInt(candidates[0].Compose_id, 10);
+              }
+            }
+          }
+
+          // Charger les infos de l'article composé
+          let composeArticleDb = null;
+          if (composeId) {
+            const rows = await sequelizeConn.query(
+              `
+                SELECT TOP 1 article_id, article_cod, article_nom, prix_vente, quill_editor, quantite
+                FROM article
+                WHERE article_id = :composeId
+              `,
+              {
+                replacements: { composeId },
+                type: sequelizeConn.QueryTypes.SELECT
+              }
+            );
+            composeArticleDb = rows?.[0] || null;
+          }
+
+          // ============================================================
+          // MODIFICATION: Récupérer les composants avec leurs quantités
+          // ============================================================
+          let composantsData = [];
+          if (composeId) {
+            composantsData = await sequelizeConn.query(
+              `
+                SELECT 
+                  n.Composant_id,
+                  n.Quantite AS composant_qte,
+                  a.article_cod AS composant_cod,
+                  a.article_nom AS composant_nom
+                FROM article_Nomenclature n
+                LEFT JOIN article a ON a.article_id = n.Composant_id
+                WHERE n.Compose_id = :composeId
+                ORDER BY a.article_nom ASC
+              `,
+              {
+                replacements: { composeId },
+                type: sequelizeConn.QueryTypes.SELECT
+              }
+            );
+            console.log('[PDF Nomenclature] Composants récupérés:', composantsData.length);
+          }
+
+          // ============================================================
+          // PRIX: Priorité au prix du composé depuis le devis (edit-devis)
+          // ============================================================
+          const composePrix = !isNaN(Number(compose.prix)) && Number(compose.prix) > 0
+            ? Number(compose.prix)
+            : (!isNaN(Number(composeArticleDb?.prix_vente)) ? Number(composeArticleDb?.prix_vente) : 0);
+
+          // Quantité du composé depuis le devis
+          const composeQte = !isNaN(Number(compose.quantite)) && Number(compose.quantite) > 0
+            ? Number(compose.quantite)
+            : (!isNaN(Number(composeArticleDb?.quantite)) && Number(composeArticleDb?.quantite) > 0
+              ? Number(composeArticleDb?.quantite)
+              : 1);
+
+          const composeNom = compose.article_nom || composeArticleDb?.article_nom || '';
+          const composeCod = compose.article_cod || composeArticleDb?.article_cod || '';
+
+          const base = devisData[0] || {};
+          const tauxTva = isNaN(Number(base.taux_tva)) ? 0.2 : Number(base.taux_tva);
+          const ht = composePrix * composeQte;
+
+          // ============================================================
+          // DÉSIGNATION: Construire avec les composants et leurs quantités
+          // ============================================================
+          let designationHtml = '';
+          
+          // Titre du composé
+          designationHtml = `<h3 style="color: #046ba7;"><strong>Composé</strong></h3>`;
+          designationHtml += `<p><strong>- ${composeNom}</strong></p>`;
+          
+          // Ajouter la section Composants avec quantités
+          if (composantsData && composantsData.length > 0) {
+            designationHtml += `<h3 style="color: #046ba7;"><strong>Composants</strong></h3>`;
+            designationHtml += '<ul>';
+            composantsData.forEach((comp) => {
+              const qte = !isNaN(Number(comp.composant_qte)) ? Number(comp.composant_qte) : 1;
+              const nom = comp.composant_nom || comp.composant_cod || 'Composant';
+              const cod = comp.composant_cod || '';
+              // Afficher: Code - Nom (Qté: X)
+              designationHtml += `<li><strong style="color: #c00000;">${cod}</strong> - ${nom} <span style="color: #7030a0;">(Qté: ${qte})</span></li>`;
+            });
+            designationHtml += '</ul>';
+          }
+          
+          console.log('[EmailService][PDF Nomenclature] Désignation construite:', {
+            composeId,
+            composeNom,
+            composantsCount: composantsData.length,
+            designationLength: designationHtml.length,
+            designationPreview: designationHtml.substring(0, 200)
+          });
+
+          devisData = [{
+            ...base,
+            article_id: composeId || null,
+            article_cod: composeCod,
+            article_nom: composeNom,
+            designation: designationHtml,
+            article: designationHtml,
+            prix: composePrix,
+            quantite: composeQte,
+            remise: ht,
+            taux_tva: tauxTva,
+            ligne_id: null
+          }];
+        }
 
         if (part_id && (isDevis0 || isLivraison0)) {
           try {
@@ -420,15 +575,15 @@ class EmailService {
             // Pied de page par défaut
             doc.font('Helvetica').fontSize(7).fillColor('#000');
             doc.text(
-              'SARL au capital 500 000.00 DHS - allée des orangers Derb Najat Rue 4 N°67 RDC Ain Sebaa Casablanca',
+              'SARL au capital 500 000.00 DHS - N 67 Rue 04 Lotissement Najat Residence Kanza RDC Ain Sebaa-Casablanca',
               50, footerStartY, { width: 495, align: 'center', lineBreak: false }
             );
             doc.text(
-              'Tel : 0522672135 - Fax 0522672143 - RC120431TP37951465 IF : 1680027 Email : info@lesbasculesmondial.com',
+              'Tel : 0522672135 - Fax 0522672143 - RC: 703691 - IF : 68642896 Email : info@lesbasculesmondial.com',
               50, footerStartY + footerLineSpacing * 2, { width: 495, align: 'center', lineBreak: false }
             );
             doc.text(
-              'RIB 007 780 000368400000157019 - CNSS : 6463814 ICE : 000079494000078',
+              'RIB 007 780 000368400000157019 - CNSS : 6463814 ICE : 003801680000040',
               50, footerStartY + (footerLineSpacing * 4), { width: 495, align: 'center', lineBreak: false }
             );
           }
@@ -484,71 +639,432 @@ class EmailService {
         function renderInlineHtml(doc, html, x, y, width, maxHeight) {
           if (!html) return;
 
-          // Pre-process HTML for lists and headers
-          let processedHtml = html
-            .replace(/<h[1-6][^>]*>/gi, '<br><b>').replace(/<\/h[1-6]>/gi, '</b><br>')
-            .replace(/<ul[^>]*>/gi, '<br>').replace(/<\/ul>/gi, '<br>')
-            .replace(/<li[^>]*>/gi, '<br>  • ').replace(/<\/li>/gi, '')
-            .replace(/<p[^>]*>/gi, '<br>').replace(/<\/p>/gi, '<br>')
-            .replace(/(<br\s*\/?>\s*)+/gi, '<br>')
-            .trim();
+          // Structure pour stocker les lignes avec leurs segments de texte stylisés
+          const lines = [];
 
-          const tokens = processedHtml.split(/(<[^>]+>)/g).filter(t => t !== '');
-          const state = { bold: false, italic: false, color: '#000000' };
+          // Fonction pour parser le HTML et extraire les segments de texte avec leurs styles
+          function parseHtmlSegments(htmlStr) {
+            const segments = [];
+            let workingHtml = String(htmlStr || '');
+            const processedRanges = [];
 
+            // Trouver tous les éléments structurés dans l'ordre d'apparition
+            const allMatches = [];
+            
+            // Trouver tous les titres
+            let hMatch;
+            const hRegex = /<h([1-6])[^>]*>([\s\S]*?)<\/h[1-6]>/gi;
+            while ((hMatch = hRegex.exec(workingHtml)) !== null) {
+              allMatches.push({
+                index: hMatch.index,
+                length: hMatch[0].length,
+                type: 'heading',
+                level: hMatch[1],
+                content: hMatch[2],
+                fullMatch: hMatch[0]
+              });
+            }
+            
+            // Trouver toutes les listes
+            let ulMatch;
+            const ulRegex = /<ul[^>]*>([\s\S]*?)<\/ul>/gi;
+            while ((ulMatch = ulRegex.exec(workingHtml)) !== null) {
+              allMatches.push({
+                index: ulMatch.index,
+                length: ulMatch[0].length,
+                type: 'list',
+                content: ulMatch[1],
+                fullMatch: ulMatch[0]
+              });
+            }
+            
+            // Trouver tous les paragraphes
+            let pMatch;
+            const pRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+            while ((pMatch = pRegex.exec(workingHtml)) !== null) {
+              allMatches.push({
+                index: pMatch.index,
+                length: pMatch[0].length,
+                type: 'paragraph',
+                content: pMatch[1],
+                fullMatch: pMatch[0]
+              });
+            }
+            
+            // Trier par index pour traiter dans l'ordre d'apparition
+            allMatches.sort((a, b) => a.index - b.index);
+            
+            // Traiter chaque élément dans l'ordre
+            let lastProcessedEnd = 0;
+            allMatches.forEach((match) => {
+              // Traiter le texte entre les éléments
+              if (match.index > lastProcessedEnd) {
+                const textBetween = workingHtml.substring(lastProcessedEnd, match.index);
+                const textWithoutTags = textBetween.replace(/<[^>]+>/g, '').trim();
+                if (textWithoutTags.length > 0) {
+                  const contentSegments = parseInlineHtml(textBetween);
+                  if (contentSegments.length > 0) {
+                    segments.push({ type: 'paragraph', segments: contentSegments });
+                  }
+                }
+              }
+              
+              // Traiter l'élément structuré
+              if (match.type === 'heading') {
+                const contentSegments = parseInlineHtml(match.content);
+                if (contentSegments.length > 0) {
+                  segments.push({ type: 'heading', segments: contentSegments, bold: true });
+                }
+              } else if (match.type === 'list') {
+                // Utiliser une regex globale pour trouver tous les <li>...</li>
+                const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+                let liMatch;
+                while ((liMatch = liRegex.exec(match.content)) !== null) {
+                  const liContent = liMatch[1];
+                  if (liContent && liContent.trim()) {
+                    const contentSegments = parseInlineHtml(liContent);
+                    if (contentSegments.length > 0) {
+                      segments.push({ type: 'listitem', segments: contentSegments, prefix: '  • ' });
+                    }
+                  }
+                }
+              } else if (match.type === 'paragraph') {
+                const contentSegments = parseInlineHtml(match.content);
+                if (contentSegments.length > 0) {
+                  segments.push({ type: 'paragraph', segments: contentSegments });
+                }
+              }
+              
+              lastProcessedEnd = match.index + match.length;
+            });
+            
+            // Traiter le texte après le dernier élément
+            if (lastProcessedEnd < workingHtml.length) {
+              const textAfter = workingHtml.substring(lastProcessedEnd);
+              const textWithoutTags = textAfter.replace(/<[^>]+>/g, '').trim();
+              if (textWithoutTags.length > 0) {
+                const contentSegments = parseInlineHtml(textAfter);
+                if (contentSegments.length > 0) {
+                  segments.push({ type: 'paragraph', segments: contentSegments });
+                }
+              }
+            }
+
+            return segments;
+          }
+
+          // Fonction pour parser le HTML inline et extraire les segments avec styles
+          function parseInlineHtml(htmlContent) {
+            const result = [];
+            const tokens = String(htmlContent || '').split(/(<[^>]+>)/g).filter(t => t !== '');
+            let currentText = '';
+            let currentState = { bold: false, italic: false, color: '#000000' };
+
+            tokens.forEach((tok) => {
+              if (typeof tok !== 'string') return;
+
+              if (tok.startsWith('<')) {
+                const tag = String(tok).toLowerCase();
+                
+                // Si on a du texte accumulé, l'ajouter avant de changer l'état
+                if (currentText.trim()) {
+                  result.push({ text: currentText.trim(), bold: currentState.bold, italic: currentState.italic, color: currentState.color });
+                  currentText = '';
+                }
+
+                // Gérer les balises de style
+                if (tag.startsWith('<strong') || tag.startsWith('<b')) {
+                  currentState.bold = true;
+                  // Extraire la couleur du style si présente dans <strong>
+                  const colorMatch = tag.match(/style=["'][^"']*color\s*:\s*([^;"']+)/i);
+                  if (colorMatch && colorMatch[1]) {
+                    try {
+                      currentState.color = parseColor(colorMatch[1].trim());
+                    } catch (e) {
+                      currentState.color = '#000000';
+                    }
+                  }
+                } else if (tag.startsWith('</strong') || tag.startsWith('</b')) {
+                  currentState.bold = false;
+                  // Réinitialiser la couleur si elle était définie dans <strong>
+                  currentState.color = '#000000';
+                } else if (tag.startsWith('<em') || tag.startsWith('<i')) {
+                  currentState.italic = true;
+                } else if (tag.startsWith('</em') || tag.startsWith('</i')) {
+                  currentState.italic = false;
+                } else if (tag.startsWith('<span')) {
+                  // Extraire la couleur du style
+                  const colorMatch = tag.match(/style=["'][^"']*color\s*:\s*([^;"']+)/i);
+                  if (colorMatch && colorMatch[1]) {
+                    try {
+                      currentState.color = parseColor(colorMatch[1].trim());
+                    } catch (e) {
+                      currentState.color = '#000000';
+                    }
+                  }
+                } else if (tag.startsWith('</span')) {
+                  currentState.color = '#000000';
+                } else if (tag === '<br>' || tag.startsWith('<br')) {
+                  // Saut de ligne: ajouter le texte actuel et créer une nouvelle ligne
+                  if (currentText.trim()) {
+                    result.push({ text: currentText.trim(), bold: currentState.bold, italic: currentState.italic, color: currentState.color });
+                    currentText = '';
+                  }
+                  result.push({ text: '\n', bold: false, italic: false, color: '#000000' });
+                }
+                return;
+              }
+
+              // Ajouter le texte
+              currentText += String(tok);
+            });
+
+            // Ajouter le texte restant
+            if (currentText.trim()) {
+              result.push({ text: currentText.trim(), bold: currentState.bold, italic: currentState.italic, color: currentState.color });
+            }
+
+            return result;
+          }
+
+          // Parser le HTML complet
+          const htmlSegments = parseHtmlSegments(html);
+
+          // Convertir en lignes pour le rendu
+          htmlSegments.forEach((block) => {
+            if (block.type === 'heading') {
+              // Titre: tous les segments en gras
+              const lineText = block.segments.map(s => s.text).join(' ');
+              if (lineText.trim()) {
+                lines.push({ text: lineText.trim(), bold: true, italic: false, color: '#000000' });
+              }
+            } else if (block.type === 'listitem') {
+              // Élément de liste: préfixe + segments avec leurs styles
+              const prefix = block.prefix || '';
+              // Pour les listes, on doit rendre chaque segment avec son style
+              lines.push({ type: 'listitem', prefix: prefix, segments: block.segments });
+            } else if (block.type === 'paragraph') {
+              // Paragraphe: préserver les segments avec leurs styles (couleur, gras, etc.)
+              if (block.segments && block.segments.length > 0) {
+                lines.push({ type: 'text', segments: block.segments });
+              }
+            } else {
+              // Texte: segments avec leurs styles
+              if (block.segments && block.segments.length > 0) {
+                lines.push({ type: 'text', segments: block.segments });
+              }
+            }
+          });
+
+          // Rendre dans le PDF
           doc.save();
 
           const padding = 8;
           const drawX = x + padding;
           const drawY = y + padding;
           const drawWidth = width - (padding * 2);
+          const baseLineHeight = 12; // Hauteur de base pour une ligne
 
           if (maxHeight) doc.rect(x, y, width, maxHeight).clip();
 
-          let lastTextIdx = -1;
-          for (let i = tokens.length - 1; i >= 0; i--) {
-            if (!tokens[i].startsWith('<')) {
-              lastTextIdx = i;
-              break;
+          let currentY = drawY;
+
+          // Fonction pour calculer la hauteur réelle d'un texte
+          function calculateTextHeight(text, availableWidth, fontSize = 9) {
+            try {
+              const currentFont = doc._font;
+              doc.fontSize(fontSize);
+              const height = doc.heightOfString(text, { width: availableWidth, align: 'left' });
+              if (currentFont) doc.font(currentFont);
+              return Math.max(height, baseLineHeight);
+            } catch (e) {
+              return baseLineHeight;
             }
           }
 
-          let firstText = true;
-          tokens.forEach((tok, idx) => {
-            if (tok.startsWith('<')) {
-              const tag = tok.toLowerCase();
-              if (tag === '<br>') {
-                if (firstText) {
-                  doc.text(' ', drawX, drawY, { width: drawWidth, continued: true });
-                  doc.text('\n', { width: drawWidth, continued: idx < lastTextIdx });
-                  firstText = false;
-                } else {
-                  doc.text('\n', { width: drawWidth, continued: idx < lastTextIdx });
-                }
-                return;
-              }
-              if (tag.startsWith('<strong') || tag.startsWith('<b')) state.bold = true;
-              else if (tag.startsWith('</strong') || tag.startsWith('</b')) state.bold = false;
-              else if (tag.startsWith('<em') || tag.startsWith('<i')) state.italic = true;
-              else if (tag.startsWith('</em') || tag.startsWith('</i')) state.italic = false;
-              else if (tag.startsWith('<span')) {
-                const m = tag.match(/style=["'][^"']*color\s*:\s*([^;"']+)/);
-                if (m) state.color = parseColor(m[1]);
-              } else if (tag.startsWith('</span')) {
-                state.color = '#000000';
-              }
-              return;
-            }
+          // Fonction pour obtenir la position Y réelle après un rendu
+          function getActualY() {
+            return doc.y || currentY;
+          }
 
-            setFont(doc, state.bold, state.italic);
-            doc.fillColor(state.color);
-            const isLastText = (idx === lastTextIdx);
+          lines.forEach((line, idx) => {
+            // Note: Le clipping gère visuellement les dépassements
+            // La pagination pour les contenus longs est gérée au niveau supérieur (mode nomenclature)
+            try {
+              if (line.type === 'listitem' && line.segments) {
+                // Rendre une liste avec segments stylisés
+                // Construire le texte complet pour calculer la hauteur
+                let fullLineText = '';
+                line.segments.forEach((segment) => {
+                  if (segment.text !== '\n' && segment.text && segment.text.trim()) {
+                    fullLineText += segment.text + ' ';
+                  }
+                });
 
-            if (firstText) {
-              doc.text(tok, drawX, drawY, { width: drawWidth, continued: !isLastText, align: 'left' });
-              firstText = false;
-            } else {
-              doc.text(tok, { width: drawWidth, continued: !isLastText, align: 'left' });
+                const prefixText = line.prefix || '';
+                const prefixWidth = doc.widthOfString(prefixText, { fontSize: 9 });
+                const contentWidth = drawWidth - prefixWidth;
+                
+                // Calculer la hauteur totale de cette ligne (préfixe + contenu)
+                const prefixHeight = calculateTextHeight(prefixText, drawWidth);
+                const contentHeight = calculateTextHeight(fullLineText.trim(), contentWidth);
+                const lineHeight = Math.max(prefixHeight, contentHeight);
+
+                // Rendre le préfixe
+                setFont(doc, false, false);
+                doc.fontSize(9);
+                doc.fillColor('#000000');
+                doc.text(prefixText, drawX, currentY, { width: drawWidth, align: 'left' });
+
+                // Rendre chaque segment avec son style
+                let segmentX = drawX + prefixWidth;
+                let segmentY = currentY;
+                let currentLineY = currentY;
+                let currentLineHeight = lineHeight;
+
+                line.segments.forEach((segment) => {
+                  if (segment.text === '\n') {
+                    // Saut de ligne explicite: passer à la ligne suivante
+                    currentY += currentLineHeight;
+                    segmentX = drawX + prefixWidth;
+                    segmentY = currentY;
+                    currentLineY = currentY;
+                    currentLineHeight = baseLineHeight;
+                    return;
+                  }
+
+                  if (!segment.text || !segment.text.trim()) return;
+
+                  setFont(doc, segment.bold, segment.italic);
+                  doc.fontSize(9);
+                  doc.fillColor(segment.color);
+
+                  // Utiliser la largeur totale disponible pour le contenu (drawWidth moins le préfixe)
+                  // Le texte reviendra automatiquement à la ligne dans cette largeur
+                  const totalContentWidth = drawWidth - prefixWidth;
+                  
+                  // Vérifier si on est au début d'une nouvelle ligne
+                  const relativeX = segmentX - (drawX + prefixWidth);
+                  if (relativeX <= 0 || relativeX >= totalContentWidth) {
+                    // Nouvelle ligne si on dépasse ou si on est au début
+                    currentY += currentLineHeight;
+                    segmentX = drawX + prefixWidth;
+                    segmentY = currentY;
+                    currentLineY = currentY;
+                    currentLineHeight = baseLineHeight;
+                  }
+
+                  // Rendre le segment avec la largeur totale disponible (le texte reviendra automatiquement à la ligne)
+                  const yBefore = segmentY;
+                  doc.text(segment.text, segmentX, segmentY, { width: totalContentWidth, align: 'left' });
+                  
+                  // Vérifier la position Y réelle après le rendu (pour détecter les retours à la ligne automatiques)
+                  const yAfter = getActualY();
+                  const actualHeight = yAfter - yBefore;
+                  
+                  if (actualHeight > 0) {
+                    // Le texte est revenu à la ligne automatiquement
+                    currentLineHeight = Math.max(currentLineHeight, actualHeight);
+                    segmentY = yAfter;
+                    segmentX = drawX + prefixWidth; // Réinitialiser X pour la nouvelle ligne
+                  } else {
+                    // Le texte tient sur une seule ligne
+                    const segmentWidth = doc.widthOfString(segment.text, { fontSize: 9 });
+                    const renderedHeight = calculateTextHeight(segment.text, totalContentWidth);
+                    currentLineHeight = Math.max(currentLineHeight, renderedHeight);
+                    
+                    // Mettre à jour la position X (mais ne pas dépasser la largeur disponible)
+                    const newSegmentX = segmentX + Math.min(segmentWidth, totalContentWidth);
+                    segmentX = Math.min(newSegmentX, drawX + prefixWidth + totalContentWidth);
+                  }
+                });
+
+                // Passer à la ligne suivante après avoir rendu tous les segments
+                currentY += currentLineHeight;
+              } else if (line.type === 'text' && line.segments) {
+                // Rendre du texte avec segments stylisés
+                let segmentX = drawX;
+                let segmentY = currentY;
+                let currentLineY = currentY;
+                let currentLineHeight = baseLineHeight;
+
+                line.segments.forEach((segment) => {
+                  if (segment.text === '\n') {
+                    // Saut de ligne explicite
+                    currentY += currentLineHeight;
+                    segmentX = drawX;
+                    segmentY = currentY;
+                    currentLineY = currentY;
+                    currentLineHeight = baseLineHeight;
+                    return;
+                  }
+
+                  if (!segment.text || !segment.text.trim()) return;
+
+                  setFont(doc, segment.bold, segment.italic);
+                  doc.fontSize(9);
+                  doc.fillColor(segment.color);
+
+                  // Utiliser la largeur totale disponible (drawWidth)
+                  // Le texte reviendra automatiquement à la ligne dans cette largeur
+                  const totalContentWidth = drawWidth;
+                  
+                  // Vérifier si on est au début d'une nouvelle ligne
+                  const relativeX = segmentX - drawX;
+                  if (relativeX <= 0 || relativeX >= totalContentWidth) {
+                    // Nouvelle ligne si on dépasse ou si on est au début
+                    currentY += currentLineHeight;
+                    segmentX = drawX;
+                    segmentY = currentY;
+                    currentLineY = currentY;
+                    currentLineHeight = baseLineHeight;
+                  }
+
+                  // Rendre le segment avec la largeur totale disponible (le texte reviendra automatiquement à la ligne)
+                  const yBefore = segmentY;
+                  doc.text(segment.text, segmentX, segmentY, { width: totalContentWidth, align: 'left' });
+                  
+                  // Vérifier la position Y réelle après le rendu (pour détecter les retours à la ligne automatiques)
+                  const yAfter = getActualY();
+                  const actualHeight = yAfter - yBefore;
+                  
+                  if (actualHeight > 0) {
+                    // Le texte est revenu à la ligne automatiquement
+                    currentLineHeight = Math.max(currentLineHeight, actualHeight);
+                    segmentY = yAfter;
+                    segmentX = drawX; // Réinitialiser X pour la nouvelle ligne
+                  } else {
+                    // Le texte tient sur une seule ligne
+                    const segmentWidth = doc.widthOfString(segment.text, { fontSize: 9 });
+                    const renderedHeight = calculateTextHeight(segment.text, totalContentWidth);
+                    currentLineHeight = Math.max(currentLineHeight, renderedHeight);
+                    
+                    // Mettre à jour la position X (mais ne pas dépasser la largeur disponible)
+                    const newSegmentX = segmentX + Math.min(segmentWidth, totalContentWidth);
+                    segmentX = Math.min(newSegmentX, drawX + totalContentWidth);
+                  }
+                });
+
+                // Passer à la ligne suivante après avoir rendu tous les segments
+                currentY += currentLineHeight;
+              } else {
+                // Ligne simple avec texte uniforme
+                setFont(doc, line.bold || false, line.italic || false);
+                doc.fontSize(9);
+                doc.fillColor(line.color || '#000000');
+
+                // Calculer la hauteur réelle du texte
+                const textHeight = calculateTextHeight(line.text, drawWidth);
+
+                // Rendre le texte
+                doc.text(line.text, drawX, currentY, { width: drawWidth, align: 'left' });
+                
+                // Mettre à jour Y avec la hauteur réelle
+                currentY += textHeight;
+              }
+            } catch (e) {
+              console.error('[EmailService] Error rendering line:', e.message, line);
+              currentY += baseLineHeight;
             }
           });
 
@@ -597,7 +1113,8 @@ class EmailService {
               .trim();
 
             const baseRowHeight = 20; // one line
-            const maxRowHeight = 500; // Augmenté pour permettre l'affichage complet des descriptions longues
+            // Limite de hauteur par page - le contenu sera paginé si nécessaire
+            const maxRowHeight = 500;
 
             // Calculer la hauteur du texte en utilisant une méthode plus robuste
             let textHeight = baseRowHeight;
@@ -690,6 +1207,429 @@ class EmailService {
             // Le bloc récapitulatif (totaux, signatures) n'est que sur la dernière page
             const pageLimit = 700; // Limite avant d'ajouter une nouvelle page
 
+            // === MODE NOMENCLATURE : Pagination spéciale pour afficher TOUS les composants ===
+            if (printMode === 'nomenclature') {
+              console.log('[PDF Nomenclature] 📝 Début rendu nomenclature');
+              console.log('[PDF Nomenclature] - Réf:', ref);
+              console.log('[PDF Nomenclature] - Contenu HTML longueur:', (designationHtml || '').length);
+              
+              // Constantes pour le rendu
+              // CRITIQUE : La largeur doit respecter la marge avant colQteX (350)
+              // Désignation commence à 105, donc largeur max = 350 - 105 - 10 (marge) = 235
+              const contentWidth = colQteX - 105 - 10; // = 235
+              const padding = 8;
+              const minLineHeight = 14; // Hauteur minimale par ligne de texte
+              
+              // Fonction pour convertir rgb() en hex
+              const rgbToHex = (color) => {
+                if (!color) return '#000000';
+                const rgbMatch = color.match(/^rgb\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i);
+                if (rgbMatch) {
+                  const r = parseInt(rgbMatch[1], 10);
+                  const g = parseInt(rgbMatch[2], 10);
+                  const b = parseInt(rgbMatch[3], 10);
+                  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+                }
+                return color;
+              };
+              
+              // Parser le HTML en segments avec styles inline
+              const htmlContent = designationHtml || '';
+              
+              // Fonction pour parser une ligne HTML et retourner des segments avec styles
+              const parseLineSegments = (lineHtml) => {
+                const segments = [];
+                let remaining = lineHtml;
+                
+                // Pattern pour trouver les tags de style
+                const tagPattern = /<(strong|b|em|i|span)([^>]*)>([\s\S]*?)<\/\1>/gi;
+                let lastIndex = 0;
+                let match;
+                
+                // Réinitialiser le pattern
+                const tempDiv = remaining;
+                const allMatches = [];
+                
+                // Trouver tous les tags de style
+                while ((match = tagPattern.exec(tempDiv)) !== null) {
+                  allMatches.push({
+                    index: match.index,
+                    length: match[0].length,
+                    tag: match[1].toLowerCase(),
+                    attrs: match[2],
+                    content: match[3],
+                    fullMatch: match[0]
+                  });
+                }
+                
+                // Trier par index
+                allMatches.sort((a, b) => a.index - b.index);
+                
+                // Traiter les segments
+                let currentPos = 0;
+                allMatches.forEach((m) => {
+                  // Texte avant ce tag
+                  if (m.index > currentPos) {
+                    const textBefore = tempDiv.substring(currentPos, m.index).replace(/<[^>]+>/g, '');
+                    if (textBefore.trim()) {
+                      segments.push({ text: textBefore, bold: false, italic: false, color: null });
+                    }
+                  }
+                  
+                  // Extraire les styles du tag
+                  const isBold = m.tag === 'strong' || m.tag === 'b';
+                  const isItalic = m.tag === 'em' || m.tag === 'i';
+                  let color = null;
+                  
+                  // Extraire la couleur du style
+                  const colorMatch = m.attrs.match(/style=["'][^"']*color\s*:\s*([^;"']+)/i);
+                  if (colorMatch) {
+                    color = rgbToHex(colorMatch[1].trim());
+                  }
+                  
+                  // Nettoyer le contenu (enlever les tags imbriqués mais garder le texte)
+                  const cleanContent = m.content.replace(/<[^>]+>/g, '').trim();
+                  if (cleanContent) {
+                    segments.push({ text: cleanContent, bold: isBold, italic: isItalic, color: color });
+                  }
+                  
+                  currentPos = m.index + m.length;
+                });
+                
+                // Texte après le dernier tag
+                if (currentPos < tempDiv.length) {
+                  const textAfter = tempDiv.substring(currentPos).replace(/<[^>]+>/g, '');
+                  if (textAfter.trim()) {
+                    segments.push({ text: textAfter, bold: false, italic: false, color: null });
+                  }
+                }
+                
+                // Si aucun segment trouvé, retourner le texte brut
+                if (segments.length === 0) {
+                  const plainText = lineHtml.replace(/<[^>]+>/g, '').trim();
+                  if (plainText) {
+                    segments.push({ text: plainText, bold: false, italic: false, color: null });
+                  }
+                }
+                
+                return segments;
+              };
+              
+              // Séparer le HTML en lignes (par <p>, <li>, <br>, <h1-6>)
+              let tempHtml = htmlContent
+                .replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h[1-6]>/gi, '\n[H$1]$2[/H]\n')
+                .replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '\n[LI]$1[/LI]\n')
+                .replace(/<ul[^>]*>/gi, '').replace(/<\/ul>/gi, '')
+                .replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '\n[P]$1[/P]\n')
+                .replace(/<br\s*\/?>/gi, '\n');
+              
+              const rawLines = tempHtml.split('\n').filter(line => line.trim());
+              console.log('[PDF Nomenclature] Lignes parsées:', rawLines.length);
+              
+              // Calculer la hauteur de chaque ligne et parser les segments
+              // IMPORTANT: Utiliser la même largeur que contentWidth pour cohérence
+              const lineHeights = [];
+              const lineSpacing = 12; // Espacement entre les lignes de texte (taille police 9 + marge)
+              
+              rawLines.forEach((line, idx) => {
+                const isHeading = line.match(/^\[H([1-6])\]/);
+                const isLi = line.includes('[LI]');
+                const isP = line.includes('[P]');
+                
+                // Extraire le contenu HTML de la ligne
+                let innerHtml = line
+                  .replace(/^\[H[1-6]\]/, '').replace(/\[\/H\]$/, '')
+                  .replace(/^\[LI\]/, '').replace(/\[\/LI\]$/, '')
+                  .replace(/^\[P\]/, '').replace(/\[\/P\]$/, '')
+                  .trim();
+                
+                if (!innerHtml) return;
+                
+                // Parser les segments avec styles
+                const segments = parseLineSegments(innerHtml);
+                if (segments.length === 0) return;
+                
+                // Calculer le texte complet pour la hauteur
+                const prefix = isLi ? '• ' : '';
+                const fullText = prefix + segments.map(s => s.text).join('');
+                
+                // Utiliser la bonne police pour le calcul de hauteur
+                const fontSize = isHeading ? 10 : 9;
+                doc.fontSize(fontSize);
+                doc.font(isHeading ? 'Helvetica-Bold' : 'Helvetica');
+                
+                // Calculer avec la largeur réelle de la colonne moins le préfixe si liste
+                const effectiveWidth = contentWidth - (isLi ? 15 : 0);
+                
+                // MÉTHODE FIABLE : Calculer le nombre de lignes wrappées manuellement
+                // Largeur de chaque caractère moyen ≈ 5.5 pour fontSize 9
+                const avgCharWidth = fontSize * 0.55;
+                const charsPerLine = Math.floor(effectiveWidth / avgCharWidth);
+                const numLines = Math.ceil(fullText.length / charsPerLine);
+                
+                // Hauteur = nombre de lignes * espacement
+                const calculatedHeight = numLines * lineSpacing;
+                
+                // Vérifier aussi avec heightOfString pour plus de précision
+                let textHeight;
+                try {
+                  textHeight = doc.heightOfString(fullText, { width: effectiveWidth, align: 'left' });
+                  if (isNaN(textHeight) || textHeight <= 0) {
+                    textHeight = calculatedHeight;
+                  }
+                } catch (e) {
+                  textHeight = calculatedHeight;
+                }
+                
+                // Prendre le maximum des deux méthodes + marge de sécurité
+                const finalHeight = Math.max(minLineHeight, Math.max(textHeight, calculatedHeight) + 6);
+                
+                console.log(`[PDF] Ligne ${idx}: "${fullText.substring(0, 30)}..." - Largeur: ${effectiveWidth}, Chars: ${fullText.length}, Lignes: ${numLines}, Hauteur: ${finalHeight}`);
+                
+                lineHeights.push({
+                  segments: segments,
+                  height: finalHeight,
+                  isHeading: !!isHeading,
+                  isLi: isLi,
+                  fullText: fullText
+                });
+              });
+              
+              console.log('[PDF Nomenclature] Lignes avec hauteurs calculées:', lineHeights.length);
+              
+              // Calculer la hauteur totale nécessaire
+              let totalContentHeight = padding * 2;
+              lineHeights.forEach(lh => { totalContentHeight += lh.height; });
+              console.log('[PDF Nomenclature] Hauteur totale du contenu:', totalContentHeight);
+              
+              // Valeurs formatées
+              const qteFormatted = isNaN(qte) ? '0,00' : qte.toFixed(2).replace('.', ',');
+              const puFormatted = isNaN(pu) ? '0,00' : pu.toFixed(2).replace('.', ',');
+              const remiseFormatted = isNaN(montantRemise) ? '0,00' : montantRemise.toFixed(2).replace('.', ',');
+              const htFormatted = isNaN(ht) ? '0,00' : ht.toFixed(2).replace('.', ',');
+              
+              // Variables pour le rendu paginé
+              let currentLineIdx = 0;
+              let currentY = y;
+              let isFirstBlock = true;
+              let pageNum = 1;
+              
+              while (currentLineIdx < lineHeights.length) {
+                // Calculer combien de lignes on peut mettre sur cette page
+                const availableHeight = pageLimit - currentY - padding * 2;
+                console.log('[PDF Nomenclature] Page', pageNum, '- Y:', currentY, 'Disponible:', availableHeight);
+                
+                // Si pas assez d'espace pour au moins une ligne, nouvelle page
+                if (availableHeight < minLineHeight + padding * 2) {
+                  console.log('[PDF Nomenclature] Espace insuffisant, nouvelle page');
+                  drawPageFooter();
+                  doc.addPage();
+                  pageNum++;
+                  currentY = drawDocumentHeader(false);
+                  currentY = drawTableHeader(currentY);
+                  continue;
+                }
+                
+                // Collecter les lignes qui tiennent sur cette page
+                let blockHeight = padding * 2;
+                let linesToRender = [];
+                let tempIdx = currentLineIdx;
+                
+                while (tempIdx < lineHeights.length) {
+                  const lineData = lineHeights[tempIdx];
+                  if (blockHeight + lineData.height <= availableHeight) {
+                    linesToRender.push(lineData);
+                    blockHeight += lineData.height;
+                    tempIdx++;
+                  } else {
+                    break;
+                  }
+                }
+                
+                // S'assurer qu'on a au moins une ligne (même si elle dépasse)
+                if (linesToRender.length === 0 && tempIdx < lineHeights.length) {
+                  linesToRender.push(lineHeights[tempIdx]);
+                  blockHeight = padding * 2 + lineHeights[tempIdx].height;
+                  tempIdx++;
+                }
+                
+                console.log('[PDF Nomenclature] Bloc:', linesToRender.length, 'lignes, hauteur:', blockHeight);
+                
+                // Dessiner le bloc de tableau
+                const blockY = currentY;
+                const rowHeight = Math.max(baseRowHeight, blockHeight);
+                
+                // Bordure du bloc
+                doc.roundedRect(50, blockY, 510, rowHeight, tableBorderRadius).stroke('#000');
+                
+                // Réf (seulement sur le premier bloc)
+                if (isFirstBlock) {
+                  doc.save();
+                  doc.font('Helvetica').fontSize(9).fillColor('#000');
+                  doc.text(ref || '', 55, blockY + padding, { width: 45, align: 'left' });
+                  doc.restore();
+                }
+                
+                // Désignation - rendre les lignes UNE PAR UNE
+                // CRITIQUE : Chaque ligne doit être rendue à sa propre position Y
+                let textY = blockY + padding;
+                const textStartX = 105;
+                const textMaxWidth = colQteX - textStartX - 10; // Marge de sécurité de 10px
+                
+                linesToRender.forEach((lineData) => {
+                  doc.save();
+                  
+                  // Clipper pour empêcher tout débordement horizontal
+                  doc.rect(textStartX, textY, textMaxWidth, lineData.height).clip();
+                  
+                  let currentX = textStartX;
+                  
+                  // Préfixe pour les listes
+                  if (lineData.isLi) {
+                    doc.font('Helvetica').fontSize(9).fillColor('#000');
+                    doc.text('• ', currentX, textY, { lineBreak: false, continued: false });
+                    currentX += 15;
+                  }
+                  
+                  // Largeur disponible pour le texte
+                  const availableWidth = textMaxWidth - (currentX - textStartX);
+                  
+                  // Si c'est un titre, rendre tout en gras bleu
+                  if (lineData.isHeading) {
+                    doc.font('Helvetica-Bold').fontSize(10).fillColor('#046ba7');
+                    const headingText = lineData.segments.map(s => s.text).join('');
+                    doc.text(headingText, currentX, textY, { 
+                      width: availableWidth, 
+                      align: 'left',
+                      lineBreak: true
+                    });
+                  } else {
+                    // Vérifier s'il y a des styles différents
+                    const hasStyles = lineData.segments.some(s => s.bold || s.italic || s.color);
+                    
+                    if (!hasStyles || lineData.segments.length === 1) {
+                      // Pas de styles spéciaux ou un seul segment
+                      const segment = lineData.segments[0] || { text: '', bold: false, italic: false, color: null };
+                      
+                      // Appliquer la police
+                      if (segment.bold && segment.italic) {
+                        doc.font('Helvetica-BoldOblique');
+                      } else if (segment.bold) {
+                        doc.font('Helvetica-Bold');
+                      } else if (segment.italic) {
+                        doc.font('Helvetica-Oblique');
+                      } else {
+                        doc.font('Helvetica');
+                      }
+                      
+                      doc.fontSize(9);
+                      doc.fillColor(segment.color || '#000');
+                      
+                      const fullText = lineData.segments.map(s => s.text).join('');
+                      doc.text(fullText, currentX, textY, { 
+                        width: availableWidth, 
+                        align: 'left',
+                        lineBreak: true
+                      });
+                    } else {
+                      // Plusieurs segments avec styles différents
+                      // Rendre chaque segment sur la même ligne Y
+                      let segmentX = currentX;
+                      let segmentY = textY;
+                      
+                      lineData.segments.forEach((segment, segIdx) => {
+                        // Appliquer la police
+                        if (segment.bold && segment.italic) {
+                          doc.font('Helvetica-BoldOblique');
+                        } else if (segment.bold) {
+                          doc.font('Helvetica-Bold');
+                        } else if (segment.italic) {
+                          doc.font('Helvetica-Oblique');
+                        } else {
+                          doc.font('Helvetica');
+                        }
+                        
+                        doc.fontSize(9);
+                        doc.fillColor(segment.color || '#000');
+                        
+                        // Calculer la largeur du segment
+                        const segmentWidth = doc.widthOfString(segment.text);
+                        const remainingWidth = textStartX + textMaxWidth - segmentX;
+                        
+                        if (segmentWidth <= remainingWidth) {
+                          // Le segment tient sur la ligne courante
+                          doc.text(segment.text, segmentX, segmentY, { 
+                            lineBreak: false,
+                            continued: false
+                          });
+                          segmentX += segmentWidth;
+                        } else {
+                          // Le segment doit être wrappé
+                          doc.text(segment.text, segmentX, segmentY, { 
+                            width: remainingWidth,
+                            align: 'left',
+                            lineBreak: true
+                          });
+                          // Après wrapping, le prochain texte sera sur la nouvelle ligne
+                          segmentY = doc.y;
+                          segmentX = currentX;
+                        }
+                      });
+                    }
+                  }
+                  
+                  doc.restore();
+                  
+                  // Incrémenter Y avec la hauteur calculée de cette ligne
+                  textY += lineData.height;
+                });
+                
+                // Valeurs numériques (seulement sur le premier bloc)
+                if (isFirstBlock) {
+                  const centerY = blockY + padding + 3;
+                  doc.save();
+                  doc.font('Helvetica').fontSize(9).fillColor('#000');
+                  doc.text(qteFormatted, colQteX, centerY, { width: colQteWidth, align: 'right' });
+                  doc.text(puFormatted, colPUX, centerY, { width: colPUWidth, align: 'right' });
+                  doc.text(remiseFormatted, colRX, centerY, { width: colRWidth, align: 'right' });
+                  doc.text(htFormatted, colHTX + 5, centerY, { width: colHTWidth - 5, align: 'right' });
+                  doc.restore();
+                }
+                
+                // Lignes verticales
+                [100, colQteX, colPUX, colRX, colHTX].forEach(xPos => {
+                  doc.moveTo(xPos, blockY).lineTo(xPos, blockY + rowHeight).stroke('#000');
+                });
+                
+                // Mettre à jour les variables
+                currentY = blockY + rowHeight;
+                currentLineIdx = tempIdx;
+                isFirstBlock = false;
+                
+                console.log('[PDF Nomenclature] Bloc rendu, nouveau Y:', currentY, 'Lignes restantes:', lineHeights.length - currentLineIdx);
+                
+                // Si il reste des lignes, passer à une nouvelle page
+                if (currentLineIdx < lineHeights.length) {
+                  drawPageFooter();
+                  doc.addPage();
+                  pageNum++;
+                  currentY = drawDocumentHeader(false);
+                  currentY = drawTableHeader(currentY);
+                }
+              }
+              
+              y = currentY;
+              console.log('[PDF Nomenclature] ✅ Rendu terminé. Y final:', y, 'Pages:', pageNum);
+              
+              // Réinitialiser les positions
+              doc.x = undefined;
+              doc.y = undefined;
+              
+              // Sauter le rendu standard
+              return;
+            }
+            
+            // === MODE NORMAL (pas nomenclature) ===
             if (estimatedNextY > pageLimit && !isNaN(estimatedNextY)) {
               // La ligne va dépasser la limite, ajouter une nouvelle page AVANT de la rendre
               // 1. D'abord, dessiner le pied de page sur la page COURANTE
@@ -858,7 +1798,10 @@ class EmailService {
             // Afficher la désignation en texte clair (sans HTML) - utiliser designationPlain
             // Désignation avec rendu HTML pour supporter le gras, les couleurs et les sauts de ligne
             if (!isNaN(validColDesignationX) && !isNaN(validYForDesignation) && !isNaN(validEffectiveWidth) && designationHtml) {
-              renderInlineHtml(doc, designationHtml, validColDesignationX, validYForDesignation + 6, validEffectiveWidth, validRowHeight - 8);
+              // TOUJOURS utiliser une hauteur maximale pour le clipping (évite que le texte déborde du tableau)
+              // En mode nomenclature, on utilise validRowHeight calculé dynamiquement
+              const maxHeightForRender = validRowHeight - 8;
+              renderInlineHtml(doc, designationHtml, validColDesignationX, validYForDesignation + 6, validEffectiveWidth, maxHeightForRender);
             }
             doc.restore();
 

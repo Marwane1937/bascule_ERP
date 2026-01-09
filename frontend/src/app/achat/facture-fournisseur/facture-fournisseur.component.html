@@ -1,0 +1,361 @@
+<div class="container py-4">
+    <div class="page-inner">
+
+        <!-- En-tête -->
+        <div class="page-header mb-4">
+            <h3 class="fw-bold text-dark">Achats</h3>
+            <ul class="breadcrumbs d-flex align-items-center">
+                <li class="nav-home me-2"><a href="#"><i class="fas fa-home text-primary"></i></a></li>
+                <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+                <li class="nav-item me-2"><a href="#" class="text-muted">Facturation Fournisseur</a></li>
+                <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+                <li class="nav-item fw-semibold text-muted">Liste Factures</li>
+            </ul>
+        </div>
+
+        <!-- Toast notification -->
+        <div
+            *ngIf="successMessage"
+            class="modern-toast"
+            [ngClass]="{ 'toast-success': !isError, 'toast-error': isError }"
+        >
+            <span class="toast-icon">
+                <i *ngIf="!isError" class="bi bi-check-circle-fill"></i>
+                <i *ngIf="isError" class="bi bi-exclamation-triangle-fill"></i>
+            </span>
+            <span class="toast-message">{{ successMessage }}</span>
+        </div>
+
+        <!-- Barre de recherche et actions -->
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input 
+                        type="text" 
+                        class="form-control" 
+                        placeholder="Rechercher par numéro ou fournisseur..." 
+                        [(ngModel)]="searchTerm"
+                        (keyup.enter)="onSearch()">
+                    <button class="btn btn-primary" type="button" (click)="onSearch()">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" (change)="onPageSizeChange($event)">
+                    <option [value]="10" [selected]="pageSize === 10">10 par page</option>
+                    <option [value]="25" [selected]="pageSize === 25">25 par page</option>
+                    <option [value]="50" [selected]="pageSize === 50">50 par page</option>
+                    <option [value]="100" [selected]="pageSize === 100">100 par page</option>
+                </select>
+            </div>
+            <div class="col-md-6 text-end">
+                <!-- Bouton Transfert Commande → Facture -->
+                <button class="btn btn-warning me-2" (click)="openTransfertModal()">
+                    <i class="fas fa-exchange-alt"></i> Commande → Facture
+                </button>
+                <button class="btn btn-outline-secondary me-2" (click)="toggleAdvancedFilters()">
+                    <i class="fas fa-filter"></i> Filtres
+                    <i class="fas" [class.fa-chevron-down]="!showAdvancedFilters" [class.fa-chevron-up]="showAdvancedFilters"></i>
+                </button>
+                <button class="btn btn-outline-success" (click)="exportToCSV()" title="Exporter en CSV">
+                    <i class="fas fa-file-excel"></i> Exporter
+                </button>
+            </div>
+        </div>
+
+        <!-- Filtres avancés -->
+        <div class="row mb-3" *ngIf="showAdvancedFilters">
+            <div class="col-md-12">
+                <div class="card border-warning">
+                    <div class="card-header bg-warning text-dark">
+                        <i class="fas fa-filter"></i> Filtres avancés
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label"><i class="fas fa-calendar-alt"></i> Date de début</label>
+                                <input type="date" class="form-control" [(ngModel)]="filterDateFrom" (change)="onFilterChange()">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label"><i class="fas fa-calendar-alt"></i> Date de fin</label>
+                                <input type="date" class="form-control" [(ngModel)]="filterDateTo" (change)="onFilterChange()">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label"><i class="fas fa-truck"></i> Fournisseur</label>
+                                <input type="text" class="form-control" [(ngModel)]="filterFournisseur" (input)="onFilterChange()" placeholder="Nom du fournisseur...">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label"><i class="fas fa-money-bill-wave"></i> Montant TTC</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" [(ngModel)]="filterMontantMin" (change)="onFilterChange()" placeholder="Min">
+                                    <span class="input-group-text">-</span>
+                                    <input type="number" class="form-control" [(ngModel)]="filterMontantMax" (change)="onFilterChange()" placeholder="Max">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-12 text-end">
+                                <button class="btn btn-outline-danger" (click)="resetFilters()">
+                                    <i class="fas fa-times"></i> Réinitialiser
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tableau Factures Fournisseur -->
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card border-0 shadow-sm rounded-3">
+                    <div class="card-body">
+                        <div class="table-responsive" style="position: relative; min-height: 400px;">
+                            <!-- Loader -->
+                            <div *ngIf="loading" 
+                                class="text-center my-4" 
+                                style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                                <div class="spinner-border text-warning" role="status" style="width: 3rem; height: 3rem;">
+                                    <span class="visually-hidden">Chargement...</span>
+                                </div>
+                                <p class="mt-3 mb-0 text-muted fw-semibold">Chargement des factures fournisseur...</p>
+                            </div>
+
+                            <table 
+                                class="table table-bordered table-striped table-hover" 
+                                width="100%"
+                                [style.opacity]="loading ? '0.5' : '1'">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th (click)="onSort('facture_num')" class="sortable" style="cursor: pointer;">
+                                            Numéro
+                                            <i class="fas ms-1" [ngClass]="getSortIcon('facture_num')"></i>
+                                        </th>
+                                        <th (click)="onSort('facture_dat')" class="sortable" style="cursor: pointer;">
+                                            Date
+                                            <i class="fas ms-1" [ngClass]="getSortIcon('facture_dat')"></i>
+                                        </th>
+                                        <th (click)="onSort('fournisseur')" class="sortable" style="cursor: pointer;">
+                                            Fournisseur
+                                            <i class="fas ms-1" [ngClass]="getSortIcon('fournisseur')"></i>
+                                        </th>
+                                        <th (click)="onSort('facture_ht')" class="sortable text-end" style="cursor: pointer;">
+                                            HT
+                                            <i class="fas ms-1" [ngClass]="getSortIcon('facture_ht')"></i>
+                                        </th>
+                                        <th (click)="onSort('facture_tva')" class="sortable text-end" style="cursor: pointer;">
+                                            TVA
+                                            <i class="fas ms-1" [ngClass]="getSortIcon('facture_tva')"></i>
+                                        </th>
+                                        <th class="text-end">TTC</th>
+                                        <th style="width: 100px;" class="text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngIf="!loading && factures.length === 0">
+                                        <td colspan="7" class="text-center py-4">
+                                            <p class="text-muted mb-0">Aucune facture fournisseur trouvée</p>
+                                        </td>
+                                    </tr>
+                                    <tr *ngFor="let f of factures; let i = index">
+                                        <td>{{ f.facture_num }}</td>
+                                        <td>{{ f.facture_dat ? (f.facture_dat | date:'dd/MM/yyyy') : '-' }}</td>
+                                        <td>{{ f.fournisseur || '-' }}</td>
+                                        <td class="text-end">{{ f.facture_ht | number:'1.2-2' }} dh</td>
+                                        <td class="text-end">{{ f.facture_tva | number:'1.2-2' }} dh</td>
+                                        <td class="text-end fw-bold">{{ (f.facture_ht + f.facture_tva) | number:'1.2-2' }} dh</td>
+                                        <td class="text-center">
+                                            <button class="btn btn-sm btn-outline-warning" (click)="onPrintFacture(f.facture_id)" title="Imprimer">
+                                                <i class="fas fa-print"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        <div *ngIf="!loading && totalPages > 1" class="d-flex justify-content-between align-items-center mt-3">
+                            <div class="text-muted">
+                                Affichage de {{ getDisplayRange() }} sur {{ totalRecords }} factures
+                            </div>
+                            <nav>
+                                <ul class="pagination mb-0">
+                                    <li class="page-item" [class.disabled]="currentPage === 1">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onPageChange(1)">
+                                            <i class="fas fa-angle-double-left"></i>
+                                        </a>
+                                    </li>
+                                    <li class="page-item" [class.disabled]="currentPage === 1">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onPageChange(currentPage - 1)">
+                                            <i class="fas fa-angle-left"></i>
+                                        </a>
+                                    </li>
+                                    <li *ngFor="let page of getPageNumbers()" class="page-item" [class.active]="page === currentPage">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onPageChange(page)">{{ page }}</a>
+                                    </li>
+                                    <li class="page-item" [class.disabled]="currentPage === totalPages">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onPageChange(currentPage + 1)">
+                                            <i class="fas fa-angle-right"></i>
+                                        </a>
+                                    </li>
+                                    <li class="page-item" [class.disabled]="currentPage === totalPages">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onPageChange(totalPages)">
+                                            <i class="fas fa-angle-double-right"></i>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Modal Transfert Commande → Facture -->
+<div class="modal-backdrop fade show" *ngIf="showTransfertModal" (click)="closeTransfertModal()"></div>
+<div class="modal fade show d-block" tabindex="-1" *ngIf="showTransfertModal">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">
+                    <i class="fas fa-exchange-alt me-2"></i>
+                    Transfert Commande → Facture Fournisseur
+                    <span class="badge bg-dark ms-2" *ngIf="!loadingCommandes">{{ getTotalCommandesCount() }} commande(s)</span>
+                </h5>
+                <button type="button" class="btn-close" (click)="closeTransfertModal()"></button>
+            </div>
+            <div class="modal-body" style="min-height: 500px;">
+                <!-- Loader -->
+                <div *ngIf="loadingCommandes" class="text-center py-5">
+                    <div class="spinner-border text-warning" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Chargement...</span>
+                    </div>
+                    <p class="mt-3 text-muted">Chargement des commandes non facturées...</p>
+                </div>
+
+                <!-- Liste des commandes -->
+                <div *ngIf="!loadingCommandes">
+                    <div *ngIf="commandesNonFacturees.length === 0" class="text-center py-5">
+                        <i class="fas fa-check-circle fa-4x text-success mb-3"></i>
+                        <h5 class="text-muted">Toutes les commandes ont été facturées !</h5>
+                        <p class="text-muted">Aucune commande en attente de facturation.</p>
+                    </div>
+
+                    <div *ngIf="commandesNonFacturees.length > 0">
+                        <!-- Barre de recherche -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                    <input 
+                                        type="text" 
+                                        class="form-control" 
+                                        placeholder="Rechercher par numéro, fournisseur..." 
+                                        [(ngModel)]="modalSearchTerm"
+                                        (keyup.enter)="onModalSearch()"
+                                        (input)="onModalSearch()">
+                                </div>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <span class="text-muted">
+                                    {{ commandesNonFactureesFiltered.length }} résultat(s) sur {{ getTotalCommandesCount() }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Tableau -->
+                        <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                            <table class="table table-hover table-striped">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th (click)="onModalSort('numero')" class="sortable-modal" style="cursor: pointer;">
+                                            N° Commande
+                                            <i class="fas ms-1" [ngClass]="getModalSortIcon('numero')"></i>
+                                        </th>
+                                        <th (click)="onModalSort('date')" class="sortable-modal" style="cursor: pointer;">
+                                            Date
+                                            <i class="fas ms-1" [ngClass]="getModalSortIcon('date')"></i>
+                                        </th>
+                                        <th (click)="onModalSort('fournisseur')" class="sortable-modal" style="cursor: pointer;">
+                                            Fournisseur
+                                            <i class="fas ms-1" [ngClass]="getModalSortIcon('fournisseur')"></i>
+                                        </th>
+                                        <th (click)="onModalSort('total_ht')" class="sortable-modal text-end" style="cursor: pointer;">
+                                            Total HT
+                                            <i class="fas ms-1" [ngClass]="getModalSortIcon('total_ht')"></i>
+                                        </th>
+                                        <th class="text-center" style="width: 120px;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngIf="commandesNonFactureesFiltered.length === 0">
+                                        <td colspan="5" class="text-center py-3 text-muted">
+                                            <i class="fas fa-search me-2"></i>Aucun résultat trouvé
+                                        </td>
+                                    </tr>
+                                    <tr *ngFor="let cmd of commandesNonFactureesFiltered">
+                                        <td><strong class="text-primary">{{ cmd.numero }}</strong></td>
+                                        <td>{{ cmd.date | date:'dd/MM/yyyy' }}</td>
+                                        <td>{{ cmd.fournisseur }}</td>
+                                        <td class="text-end fw-bold">{{ cmd.total_ht | number:'1.2-2' }} dh</td>
+                                        <td class="text-center">
+                                            <button class="btn btn-sm btn-success" (click)="transfererCommande(cmd.document_id)" title="Créer la facture">
+                                                <i class="fas fa-file-invoice me-1"></i> Facturer
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        <div class="d-flex justify-content-between align-items-center mt-3" *ngIf="modalTotalPages > 1">
+                            <div class="text-muted small">
+                                Page {{ modalCurrentPage }} sur {{ modalTotalPages }}
+                            </div>
+                            <nav>
+                                <ul class="pagination pagination-sm mb-0">
+                                    <li class="page-item" [class.disabled]="modalCurrentPage === 1">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onModalPageChange(1)">
+                                            <i class="fas fa-angle-double-left"></i>
+                                        </a>
+                                    </li>
+                                    <li class="page-item" [class.disabled]="modalCurrentPage === 1">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onModalPageChange(modalCurrentPage - 1)">
+                                            <i class="fas fa-angle-left"></i>
+                                        </a>
+                                    </li>
+                                    <li *ngFor="let page of getModalPageNumbers()" class="page-item" [class.active]="page === modalCurrentPage">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onModalPageChange(page)">{{ page }}</a>
+                                    </li>
+                                    <li class="page-item" [class.disabled]="modalCurrentPage === modalTotalPages">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onModalPageChange(modalCurrentPage + 1)">
+                                            <i class="fas fa-angle-right"></i>
+                                        </a>
+                                    </li>
+                                    <li class="page-item" [class.disabled]="modalCurrentPage === modalTotalPages">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onModalPageChange(modalTotalPages)">
+                                            <i class="fas fa-angle-double-right"></i>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" (click)="closeTransfertModal()">
+                    <i class="fas fa-times me-1"></i> Fermer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+

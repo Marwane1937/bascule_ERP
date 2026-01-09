@@ -42,6 +42,9 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
   BonCommandesSupprimes: number[] = [];
   successMessage: string | null = null;
   isError: boolean = false;
+  
+  // Numéro de bon de commande
+  nextBonCommandeNumero: string = 'BCF25-0001';
 
   constructor(
     private achatsService: AchatsService, 
@@ -52,19 +55,37 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
   ) {}
 
   ngOnInit(): void {
+    this.initForm();
     this.getBonCommandes();
     this.AllFournisseurs();
-    this.initForm();
+    this.loadNextBonCommandeNumero();
 
     // Abonnements sur les changements de texte
     this.BonCommandeForm.get('fournisseurSearch')?.valueChanges.subscribe(value => {
       this.onSearchChange(value);
     });
   }
+  
+  loadNextBonCommandeNumero(): void {
+    this.achatsService.getNextBonCommandeNumero().subscribe({
+      next: (response: any) => {
+        this.nextBonCommandeNumero = response?.numero || 'BCF25-0001';
+      },
+      error: (error) => {
+        console.error('Erreur lors du chargement du numéro de bon de commande:', error);
+        // Fallback: utiliser la méthode locale
+        this.nextBonCommandeNumero = this.getNextLigne();
+      }
+    });
+  }
 
   initForm(): void {
+    // Initialiser la date avec la date du jour au format YYYY-MM-DD
+    const today = new Date();
+    const todayString = today.toISOString().split('T')[0];
+    
     this.BonCommandeForm = this.fb.group({
-      date: ['', Validators.required],
+      date: [todayString, Validators.required],
       description: [''],
       part_id: [0],
       fournisseurSearch: [''],   // le texte visible pour fournisseur
@@ -216,7 +237,8 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
   AllFournisseurs(): void {
     this.baseService.getFournisseur().subscribe({
       next: (response: any) => {
-        this.fournisseurs = response || [];
+        // La réponse du backend est { success: true, data: [...] }
+        this.fournisseurs = response?.data || response || [];
         this.filteredFournisseurs = [...this.fournisseurs];
       },
       error: (error) => {
@@ -252,10 +274,17 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
   onSubmit(): void {
     if (this.BonCommandeForm.valid) {
       const formValue = this.BonCommandeForm.value;
+      
+      // Vérifier que le fournisseur est sélectionné
+      if (!formValue.part_id || formValue.part_id === 0) {
+        Swal.fire('Erreur', 'Veuillez sélectionner un fournisseur', 'error');
+        return;
+      }
+      
       const bonCommandeData = {
         date: formValue.date,
         description: formValue.description || '',
-        part_id: formValue.part_id || 0,
+        part_id: formValue.part_id,
         type: 2  // type = 2 pour bon de commande
       };
 
@@ -263,8 +292,10 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
         next: (response: any) => {
           Swal.fire('Succès', 'Bon de commande créé avec succès', 'success');
           this.BonCommandeForm.reset();
+          this.selectedFournisseur = null;
           this.initForm();
           this.getBonCommandes();
+          this.loadNextBonCommandeNumero(); // Recharger le prochain numéro
           this.closeModal();
         },
         error: (error) => {
@@ -282,6 +313,9 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
   }
 
   deleteBonCommande(id: number): void {
+    console.log('🗑️ Début de deleteBonCommande()');
+    console.log('📋 ID du bon de commande à supprimer:', id);
+
     Swal.fire({
       title: 'Êtes-vous sûr?',
       text: 'Vous ne pourrez pas annuler cette action!',
@@ -291,16 +325,71 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
       cancelButtonColor: '#d33',
       confirmButtonText: 'Oui, supprimer!'
     }).then((result) => {
+      console.log('🔍 Résultat de la confirmation:', result);
       if (result.isConfirmed) {
+        console.log('✅ Suppression confirmée, appel du service deleteBonCommande avec id:', id);
+
         this.achatsService.deleteBonCommande(id).subscribe({
-          next: () => {
+          next: (response) => {
+            console.log('✅ Suppression réussie, réponse du serveur:', response);
             Swal.fire('Supprimé!', 'Le bon de commande a été supprimé.', 'success');
             this.getBonCommandes();
           },
           error: (error) => {
-            console.error('Erreur lors de la suppression:', error);
+            console.error('❌ Erreur lors de la suppression:', error);
+            console.error('❌ Détails de l\'erreur:', error.error);
+            console.error('❌ Statut HTTP:', error.status);
+            console.error('❌ Message d\'erreur:', error.message);
             Swal.fire('Erreur', 'Erreur lors de la suppression', 'error');
           }
+        });
+      } else {
+        console.log('❌ Suppression annulée par l\'utilisateur');
+      }
+    });
+  }
+
+  telechargerPDF(id: number): void {
+    console.log('🚀 Début de telechargerPDF()');
+    console.log('📋 ID du bon de commande:', id);
+
+    Swal.fire({
+      title: 'Génération du PDF...',
+      html: '<div class="loading-spinner"></div><p>Veuillez patienter</p>',
+      showConfirmButton: false,
+      allowOutsideClick: false
+    });
+
+    console.log('📡 Appel du service telechargerPDF avec id:', id);
+    this.achatsService.telechargerPDF(id).subscribe({
+      next: (blob: Blob) => {
+        console.log('✅ PDF généré avec succès, taille du blob:', blob.size, 'bytes');
+        console.log('📎 Type du blob:', blob.type);
+
+        Swal.close();
+
+        // Créer un URL pour le blob et l'ouvrir dans un nouvel onglet
+        const url = window.URL.createObjectURL(blob);
+        console.log('🔗 URL créée pour le blob:', url);
+
+        window.open(url, '_blank');
+
+        // Libérer l'URL après un délai
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          console.log('🧹 URL du blob libérée');
+        }, 10000);
+      },
+      error: (err) => {
+        console.error('❌ Erreur lors du téléchargement du PDF:', err);
+        console.error('❌ Détails de l\'erreur:', err.error);
+        console.error('❌ Statut HTTP:', err.status);
+        console.error('❌ Message d\'erreur:', err.message);
+
+        Swal.fire({
+          icon: 'error',
+          title: 'Erreur',
+          text: 'Impossible de générer le PDF.'
         });
       }
     });

@@ -19,7 +19,7 @@ router.use(databaseInjector.injectConnection.bind(databaseInjector));
 
 router.post('/generate', async (req, res) => { 
   try {
-    const { document_id, withStamp } = req.body;
+    const { document_id, withStamp, printMode, composeArticle } = req.body;
     const docId = parseInt(document_id, 10);
     console.log('📄 Génération PDF demandée pour document_id:', docId, '(type:', typeof docId, ')');
     
@@ -67,7 +67,10 @@ router.post('/generate', async (req, res) => {
     const pdfPath = await emailService.genererPDF(devisData, { 
       withStamp: !!withStamp,
       documentSociete: documentSociete,
-      sequelize
+      sequelize,
+      document_id: docId,
+      printMode: printMode || 'normal',
+      composeArticle: composeArticle || null
     });
     
     // Déterminer le dossier selon le type de document

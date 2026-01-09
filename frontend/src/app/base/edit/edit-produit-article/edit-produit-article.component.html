@@ -1,0 +1,237 @@
+<div class="container-fluid py-4">
+  <div class="page-inner">
+    <div class="page-header">
+      <h3 class="fw-bold mb-3">Produit</h3>
+      <ul class="breadcrumbs mb-3">
+        <li class="nav-home">
+          <a href="#"><i class="icon-home"></i></a>
+        </li>
+        <li class="separator"><i class="icon-arrow-right"></i></li>
+        <li class="nav-item"><a href="#">Base</a></li>
+        <li class="separator"><i class="icon-arrow-right"></i></li>
+        <li class="nav-item"><a href="#">Modifier Produit</a></li>
+      </ul>
+    </div>
+
+    <div class="card shadow-sm border-0">
+      <div class="card-body">
+        <div *ngIf="isLoading" class="text-center py-4">
+          Chargement...
+        </div>
+
+        <ng-container *ngIf="!isLoading">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0 text-primary fw-semibold">🧾 Informations Produit</h5>
+            <button class="btn btn-success btn-sm" (click)="saveArticle()" [disabled]="isSavingArticle || !article">
+              💾 Enregistrer
+            </button>
+          </div>
+
+          <div class="row g-3" *ngIf="article">
+            <div class="col-md-3">
+              <label class="form-label">Code</label>
+              <input class="form-control" [(ngModel)]="article.article_cod" />
+            </div>
+            <div class="col-md-5">
+              <label class="form-label">Nom</label>
+              <input class="form-control" [(ngModel)]="article.article_nom" />
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Famille</label>
+              <select class="form-select" [(ngModel)]="article.famille">
+                <option [ngValue]="null">--</option>
+                <option *ngFor="let f of familles" [ngValue]="f.id">{{ f.nom }}</option>
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Unité</label>
+              <select class="form-select" [(ngModel)]="article.unite_id">
+                <option [ngValue]="null">--</option>
+                <option *ngFor="let u of unites" [ngValue]="u.id">{{ u.nom }}</option>
+              </select>
+            </div>
+
+            <div class="col-md-3">
+              <label class="form-label">Prix Achat</label>
+              <input type="number" class="form-control" [(ngModel)]="article.prix_achat" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Prix Vente</label>
+              <input type="number" class="form-control" [(ngModel)]="article.prix_vente" />
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">Quantité <small class="text-muted">(calculée Auto)</small></label>
+              <input type="number" class="form-control" [(ngModel)]="article.quantite" readonly disabled />
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">État</label>
+              <select class="form-select" [(ngModel)]="article.etat">
+                <option [ngValue]="1">Actif</option>
+                <option [ngValue]="0">Archivé</option>
+              </select>
+            </div>
+          </div>
+
+          <hr class="my-4" />
+
+          <ul class="nav nav-pills nav-secondary nav-pills-no-bd" role="tablist">
+            <li class="nav-item">
+              <a class="nav-link active" data-bs-toggle="pill" href="#article_nomenclature">article_nomenclature</a>
+            </li>
+          </ul>
+
+          <div class="tab-content mt-4">
+            <div class="tab-pane fade show active" id="article_nomenclature">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted small">
+                  Affecter des articles composant la nomenclature du produit.
+                </div>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-outline-primary btn-sm" (click)="ouvrirQuillEditor()" [disabled]="!article">
+                    📝 Éditeur Quill
+                  </button>
+                  <button class="btn btn-outline-secondary btn-sm" (click)="refreshNomenclature()" [disabled]="isLoadingNomenclature">
+                    ↻ Rafraîchir
+                  </button>
+                </div>
+              </div>
+
+              <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                  <div class="row g-2 align-items-end mb-3">
+                    <div class="col-md-5">
+                      <label class="form-label">Composant</label>
+                      <div class="position-relative">
+                        <input class="form-control" [value]="composantSearch" (input)="onComposantSearchChange($any($event.target).value)" placeholder="Rechercher un article..." />
+                        <ul *ngIf="filteredComposants.length > 0" class="list-group position-absolute w-100 shadow"
+                            style="max-height: 280px; overflow-y: auto; z-index: 1050;">
+                          <li class="list-group-item list-group-item-action"
+                              *ngFor="let a of filteredComposants"
+                              (click)="selectComposant(a)"
+                              style="cursor: pointer;">
+                            {{ a.article_cod }} - {{ a.article_nom }}
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label">Quantité</label>
+                      <input type="number" class="form-control" [(ngModel)]="newLine.quantite" />
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label">Unité</label>
+                      <select class="form-select" [(ngModel)]="newLine.unite">
+                        <option [ngValue]="null">--</option>
+                        <option *ngFor="let u of unites" [ngValue]="u.id">{{ u.nom }}</option>
+                      </select>
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label">Famille</label>
+                      <select class="form-select" [(ngModel)]="newLine.famille">
+                        <option [ngValue]="null">--</option>
+                        <option *ngFor="let f of familles" [ngValue]="f.id">{{ f.nom }}</option>
+                      </select>
+                    </div>
+                    <div class="col-md-1 text-end">
+                      <button class="btn btn-primary btn-sm" (click)="addNomenclatureLine()">
+                        <i class="fas fa-plus"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="table-responsive">
+                    <table class="table table-bordered table-hover align-middle text-center">
+                      <thead class="table-light">
+                        <tr>
+                          <th>Composant</th>
+                          <th style="width: 120px;">Quantité</th>
+                          <th style="width: 170px;">Unité</th>
+                          <th style="width: 170px;">Famille</th>
+                          <th style="width: 150px;">Poids Std</th>
+                          <th style="width: 150px;">Poids Réel</th>
+                          <th style="width: 120px;">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let n of nomenclature">
+                          <td class="text-start">
+                            <strong>{{ n.composant_cod || '-' }}</strong> - {{ n.composant_nom || '-' }}
+                          </td>
+                          <td>
+                            <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="n.Quantite" />
+                          </td>
+                          <td>
+                            <select class="form-select form-select-sm" [(ngModel)]="n.Unite">
+                              <option [ngValue]="null">--</option>
+                              <option *ngFor="let u of unites" [ngValue]="u.id">{{ u.nom }}</option>
+                            </select>
+                          </td>
+                          <td>
+                            <select class="form-select form-select-sm" [(ngModel)]="n.Famille">
+                              <option [ngValue]="null">--</option>
+                              <option *ngFor="let f of familles" [ngValue]="f.id">{{ f.nom }}</option>
+                            </select>
+                          </td>
+                          <td>
+                            <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="n.Poids_Standard" />
+                          </td>
+                          <td>
+                            <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="n.Poids_reel" />
+                          </td>
+                          <td>
+                            <div class="d-flex justify-content-center gap-2">
+                              <button class="btn btn-success btn-sm" (click)="updateNomenclatureLine(n)" title="Enregistrer">
+                                💾
+                              </button>
+                              <button class="btn btn-danger btn-sm" (click)="deleteNomenclatureLine(n)" title="Supprimer">
+                                🗑️
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr *ngIf="!nomenclature || nomenclature.length === 0">
+                          <td colspan="7" class="text-muted">Aucune nomenclature pour cet article.</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Quill -->
+<div class="modal fade" id="quillModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">📝 Éditeur Quill</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="text-muted small mb-2">
+          L’éditeur affiche l’article composé + la liste des articles composants. Vous pouvez modifier le contenu et le styliser.
+        </div>
+        <quill-editor [(ngModel)]="quillContent" [modules]="quillModules" format="html" theme="snow"
+          [styles]="{ height: '320px' }">
+        </quill-editor>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-success" (click)="validerQuillEditor()" [disabled]="isSavingArticle">
+          ✅ Valider
+        </button>
+        <button class="btn btn-secondary" data-bs-dismiss="modal" [disabled]="isSavingArticle">
+          Annuler
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+

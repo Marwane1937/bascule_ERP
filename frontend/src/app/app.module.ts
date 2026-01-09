@@ -17,6 +17,7 @@ import { EditClientComponent } from './base/edit/edit-client/edit-client.compone
 import { UppercaseDirective } from './uppercase.directive';
 import { EditFournisseurComponent } from './base/edit/edit-fournisseur/edit-fournisseur.component';
 import { EditProduitComponent } from './base/edit/edit-produit/edit-produit.component';
+import { EditProduitArticleComponent } from './base/edit/edit-produit-article/edit-produit-article.component';
 import { VehiculeComponent } from './base/vehicule/vehicule.component';
 import { EditVehiculeComponent } from './base/edit/edit-vehicule/edit-vehicule.component';
 import { DevisComponent } from './vente/devis/devis.component';
@@ -39,18 +40,40 @@ import { AuthService } from './service/auth.service';
 import { EditcommandeComponent } from './vente/edit/editcommande/editcommande.component';
 import { LivraisonComponent } from './vente/livraison/livraison.component';
 import { EditlivraisonComponent } from './vente/edit/editlivraison/editlivraison.component';
+import { EditContratComponent } from './vente/edit/edit-contrat/edit-contrat.component';
 import { FacturationComponent } from './vente/facturation/facturation.component';
 import { ReglementComponent } from './vente/reglement/reglement.component';
 import { EditReglementComponent } from './vente/edit/edit-reglement/edit-reglement.component';
 import { RetourComponent } from './vente/retour/retour.component';
 import { EditRetourComponent } from './vente/edit/edit-retour/edit-retour.component';
 import { AvoirComponent } from './vente/avoir/avoir.component';
+import { ContratComponent } from './vente/contrat/contrat.component';
 import { CaisseComponent } from './vente/caisse/caisse.component';
 import { CaisseRecettesComponent } from './vente/caisse/caisse-recettes.component';
 import { CaisseDepensesComponent } from './vente/caisse/caisse-depenses.component';
 import { BonCommandeComponent } from './achat/bon-commande/bon-commande.component';
 import { EditBonCommandeComponent } from './achat/edit/edit-bon-commande/edit-bon-commande.component';
 import { NotificationComponent } from './notification/notification.component';
+import { FactureFournisseurComponent } from './achat/facture-fournisseur/facture-fournisseur.component';
+
+// Import des composants Stock
+import { StockEntreeComponent } from './stock/stock-entree/stock-entree.component';
+import { StockSortieComponent } from './stock/stock-sortie/stock-sortie.component';
+import { StockInventaireComponent } from './stock/stock-inventaire/stock-inventaire.component';
+import { StockHistoriqueComponent } from './stock/stock-historique/stock-historique.component';
+import { StockReportingComponent } from './stock/stock-reporting/stock-reporting.component';
+
+// Import des composants Interventions
+import { InterventionListComponent } from './interventions/intervention-list.component';
+import { InterventionFormComponent } from './interventions/intervention-form/intervention-form.component';
+
+// Import des nouveaux composants Base
+import { VilleComponent } from './base/ville/ville.component';
+import { BanqueComponent } from './base/banque/banque.component';
+import { BeneficiaireComponent } from './base/beneficiaire/beneficiaire.component';
+import { DepartementComponent } from './base/departement/departement.component';
+import { UniteComponent } from './base/unite/unite.component';
+import { CompteurComponent } from './base/compteur/compteur.component';
 
 @NgModule({
   declarations: [
@@ -68,6 +91,7 @@ import { NotificationComponent } from './notification/notification.component';
     UppercaseDirective,
     EditFournisseurComponent,
     EditProduitComponent,
+    EditProduitArticleComponent,
     VehiculeComponent,
     EditVehiculeComponent,
     DevisComponent,
@@ -83,18 +107,35 @@ import { NotificationComponent } from './notification/notification.component';
     EditcommandeComponent,
     LivraisonComponent,
     EditlivraisonComponent,
+    EditContratComponent,
     FacturationComponent,
     ReglementComponent,
     EditReglementComponent,
     RetourComponent,
     EditRetourComponent,
     AvoirComponent,
+    ContratComponent,
     CaisseComponent,
     CaisseRecettesComponent,
     CaisseDepensesComponent,
     BonCommandeComponent,
     EditBonCommandeComponent,
     NotificationComponent,
+    FactureFournisseurComponent,
+    // Composants Stock
+    StockEntreeComponent,
+    StockSortieComponent,
+    StockInventaireComponent,
+    StockHistoriqueComponent,
+    StockReportingComponent,
+    InterventionListComponent,
+    InterventionFormComponent,
+    VilleComponent,
+    BanqueComponent,
+    BeneficiaireComponent,
+    DepartementComponent,
+    UniteComponent,
+    CompteurComponent,
   ],
   imports: [
     BrowserModule,

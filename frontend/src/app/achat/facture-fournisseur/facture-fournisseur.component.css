@@ -1,0 +1,178 @@
+/* Styles pour le component Facture Fournisseur */
+
+.sortable {
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+.sortable:hover {
+  background-color: #fff3cd !important;
+}
+
+.sortable i {
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.sortable:hover i {
+  opacity: 1;
+}
+
+.table thead th.sortable {
+  position: relative;
+}
+
+.table thead th.sortable i {
+  font-size: 0.85em;
+}
+
+.modern-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  padding: 15px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 300px;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.toast-success {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.toast-error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.toast-icon {
+  font-size: 1.2em;
+}
+
+.card-header.bg-warning {
+  font-weight: 600;
+}
+
+.table-hover tbody tr:hover {
+  background-color: #fff3cd;
+  cursor: pointer;
+}
+
+.btn-outline-orange {
+  color: #fd7e14;
+  border-color: #fd7e14;
+}
+
+.btn-outline-orange:hover {
+  background-color: #fd7e14;
+  border-color: #fd7e14;
+  color: white;
+}
+
+/* Modal styles */
+.modal-backdrop {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal.show {
+  display: block;
+}
+
+.modal-header.bg-warning {
+  background-color: #ffc107 !important;
+  color: #212529;
+}
+
+.modal-dialog-centered {
+  display: flex;
+  align-items: center;
+  min-height: calc(100% - 1rem);
+}
+
+@media (min-width: 576px) {
+  .modal-dialog-centered {
+    min-height: calc(100% - 3.5rem);
+  }
+}
+
+/* Modal XL styles */
+.modal-xl {
+  max-width: 1140px;
+}
+
+.modal-dialog-scrollable .modal-content {
+  max-height: 90vh;
+}
+
+.modal-dialog-scrollable .modal-body {
+  overflow-y: auto;
+}
+
+/* Sortable modal columns */
+.sortable-modal {
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+.sortable-modal:hover {
+  background-color: #fff3cd !important;
+}
+
+.sortable-modal i {
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.sortable-modal:hover i {
+  opacity: 1;
+}
+
+/* Sticky table header */
+.table thead.sticky-top th {
+  position: sticky;
+  top: 0;
+  background-color: #f8f9fa;
+  z-index: 1;
+  box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* Modal table row hover */
+.modal-body .table-hover tbody tr:hover {
+  background-color: #e8f4fd;
+}
+
+/* Pagination in modal */
+.modal-footer .pagination {
+  margin-bottom: 0;
+}
+
+.pagination-sm .page-link {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+}
+
+/* Badge in modal header */
+.modal-header .badge {
+  font-size: 0.75rem;
+  vertical-align: middle;
+}
+

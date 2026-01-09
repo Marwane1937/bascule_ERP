@@ -25,11 +25,8 @@
                   <strong>⚠️ MODE CAISSE BLACK ACTIVÉ</strong>
                 </h5>
                 <p class="mb-0">Vous consultez actuellement les données de la <strong>caisse black</strong> (non
-                  déclarée).</p>
+                  déclarée). Cliquez sur l'icône <i class="fa fa-heart text-danger"></i> dans le footer pour basculer vers la Caisse Déclarée.</p>
               </div>
-              <button type="button" class="btn btn-outline-danger btn-sm" (click)="switchCaisseType('declared')">
-                <i class="fas fa-arrow-left me-2"></i>Retour à la Caisse Déclarée
-              </button>
             </div>
           </div>
 
@@ -97,21 +94,11 @@
               <label class="form-label">Date</label>
               <input type="date" class="form-control" [(ngModel)]="selectedDate" (change)="onDateChange()">
             </div>
-            <div class="col-md-4">
-              <label class="form-label">Type de Caisse</label>
-              <div class="btn-group w-100" role="group">
-                <button type="button" class="btn" [class.btn-primary]="caisseType === 'declared'"
-                  [class.btn-outline-primary]="caisseType !== 'declared'" (click)="switchCaisseType('declared')">
-                  <i class="fas fa-check-circle me-2"></i>Caisse Déclarée
-                </button>
-                <button type="button" class="btn caisse-black-btn" [class.btn-danger]="caisseType === 'black'"
-                  [class.btn-outline-danger]="caisseType !== 'black'" [class.active-black]="caisseType === 'black'"
-                  (click)="switchCaisseType('black')">
-                  <i class="fas fa-moon me-2"></i>Caisse Black
-                  <span *ngIf="caisseType === 'black'" class="badge bg-light text-dark ms-2 badge-pulse-small">
-                    ACTIF
-                  </span>
-                </button>
+            <div class="col-md-4" *ngIf="caisseType === 'black'">
+              <div class="alert alert-danger mb-0 d-flex align-items-center">
+                <i class="fas fa-moon me-2"></i>
+                <strong>Mode Caisse Black Actif</strong>
+                <span class="badge bg-light text-dark ms-2 badge-pulse-small">ACTIF</span>
               </div>
             </div>
           </div>

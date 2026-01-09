@@ -417,11 +417,54 @@ const getFactureMontant = async (factureId, sequelizeConnection = null) => {
   }
 };
 
+// Récupérer les données d'une facture contrat depuis v_facture_contrat
+const getFactureContratById = async (factureId, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  try {
+    const query = `
+      SELECT * 
+      FROM v_facture_contrat 
+      WHERE facture_id = :factureId
+      ORDER BY facture_id
+    `;
+
+    const results = await sequelize.query(query, {
+      replacements: { factureId },
+      type: sequelize.QueryTypes.SELECT
+    });
+
+    // Gérer le format de retour de Sequelize pour SQL Server
+    let dataArray = [];
+    if (Array.isArray(results)) {
+      if (results.length === 2 && Array.isArray(results[0]) && !Array.isArray(results[1])) {
+        dataArray = results[0];
+      } else if (results.length > 0 && typeof results[0] === 'object' && results[0] !== null) {
+        dataArray = results;
+      } else {
+        dataArray = results;
+      }
+    } else if (results && typeof results === 'object') {
+      dataArray = [results];
+    }
+
+    if (dataArray.length === 0) {
+      console.warn('[getFactureContratById] ⚠️ Aucune donnée trouvée pour facture_id:', factureId);
+      return null;
+    }
+
+    return dataArray;
+  } catch (error) {
+    console.error('[getFactureContratById] ❌ Erreur:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   getAllFactures,
   getAllFacturesNoPagination,
   getFactureById,
   getFacturationReport,
   getFactureReportById,
-  getFactureMontant
+  getFactureMontant,
+  getFactureContratById
 };

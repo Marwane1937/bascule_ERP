@@ -1,0 +1,359 @@
+/* === STYLE MODERNE ET CLEAN POUR LE FORMULAIRE D'INTERVENTION === */
+
+/* Container principal avec fond dégradé */
+.container {
+  min-height: calc(100vh - 120px);
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  padding: 0 15px 20px 15px;
+}
+
+.page-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* En-tête élégant */
+.page-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 0;
+  padding: 20px 30px;
+  margin-bottom: 25px;
+  margin-top: 0;
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+  position: relative;
+  overflow: hidden;
+  border-bottom: 4px solid rgba(255, 255, 255, 0.2);
+}
+
+.page-header h3 {
+  color: white !important;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  margin-bottom: 6px;
+  font-size: 1.75rem;
+  letter-spacing: 0.5px;
+  position: relative;
+  z-index: 1;
+}
+
+.breadcrumbs {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.5rem 1rem;
+  border-radius: 25px;
+  backdrop-filter: blur(10px);
+  font-size: 0.875rem;
+}
+
+.breadcrumbs a {
+  color: rgba(255, 255, 255, 0.95) !important;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+
+.breadcrumbs a:hover {
+  opacity: 0.8;
+}
+
+/* Card moderne */
+.card {
+  border: none;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(102, 126, 234, 0.1);
+  background: white;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.card-header {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-bottom: 2px solid #dee2e6;
+  padding: 1.25rem 1.5rem;
+  font-weight: 600;
+}
+
+.card-header h5 {
+  color: #495057;
+  font-weight: 700;
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.card-body {
+  padding: 2rem;
+}
+
+/* Form controls modernes */
+.form-label {
+  color: #495057;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.form-control {
+  border-radius: 8px;
+  border: 2px solid #e9ecef;
+  padding: 0.75rem 1rem;
+  transition: all 0.3s ease;
+  font-size: 0.95rem;
+}
+
+.form-control:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+  outline: none;
+}
+
+.form-control.is-invalid {
+  border-color: #dc3545;
+}
+
+.form-control.is-invalid:focus {
+  box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+/* Autocomplete styles */
+.autocomplete-list {
+  top: 100%;
+  left: 0;
+  right: 0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid #dee2e6;
+  margin-top: 2px;
+}
+
+.autocomplete-item {
+  cursor: pointer;
+  transition: background-color 0.2s;
+  padding: 0.75rem 1rem;
+}
+
+.autocomplete-item:hover {
+  background-color: #f8f9fa !important;
+}
+
+.autocomplete-item:last-child {
+  border-bottom: none;
+}
+
+/* Rubriques - Style moderne et clean */
+.rubriques-simple {
+  border: 2px solid #e9ecef;
+  border-radius: 12px;
+  background: #f8f9fa;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.rubrique-row {
+  padding: 1rem;
+  border-bottom: 1px solid #e9ecef;
+  transition: all 0.2s ease;
+  background: white;
+  margin-bottom: 0.5rem;
+  border-radius: 8px;
+}
+
+.rubrique-row:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.rubrique-row:hover {
+  background: #f8f9fa;
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Checkbox moderne */
+.form-check-input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.2rem;
+  cursor: pointer;
+  border: 2px solid #ced4da;
+  transition: all 0.2s;
+}
+
+.form-check-input:checked {
+  background-color: #667eea;
+  border-color: #667eea;
+}
+
+.form-check-label {
+  cursor: pointer;
+  margin-left: 0.5rem;
+  font-weight: 500;
+  color: #495057;
+}
+
+/* Champs de saisie petits */
+.form-control-sm {
+  font-size: 0.875rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+}
+
+/* Badge pour le total */
+.badge {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+}
+
+.badge.bg-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: white;
+}
+
+/* Total général */
+.total-summary {
+  border: 2px solid #667eea !important;
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%) !important;
+  border-radius: 12px !important;
+  padding: 1.25rem !important;
+}
+
+.total-summary i {
+  color: #667eea;
+  font-size: 1.5rem;
+}
+
+.total-summary strong {
+  color: #495057;
+  font-size: 1.1rem;
+}
+
+/* Boutons modernes */
+.btn {
+  border-radius: 10px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 10px 20px;
+  letter-spacing: 0.3px;
+  transition: all 0.3s ease;
+  border: none;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-outline-secondary {
+  color: #6c757d;
+  border: 2px solid #6c757d;
+  background: white;
+}
+
+.btn-outline-secondary:hover {
+  background-color: #6c757d;
+  color: white;
+  transform: translateY(-2px);
+}
+
+.btn-info {
+  background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+  color: white;
+}
+
+.btn-info:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(23, 162, 184, 0.4);
+}
+
+/* Messages d'erreur */
+.invalid-feedback {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: #dc3545;
+  font-weight: 500;
+}
+
+/* Loading */
+.fa-spinner {
+  animation: fa-spin 1s infinite linear;
+}
+
+@keyframes fa-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .container {
+    padding: 0 10px 15px 10px;
+  }
+
+  .page-header {
+    padding: 15px 20px;
+  }
+
+  .page-header h3 {
+    font-size: 1.4rem;
+  }
+
+  .card-body {
+    padding: 1.5rem 1rem;
+  }
+
+  .rubriques-simple {
+    max-height: 300px;
+  }
+
+  .rubrique-row {
+    padding: 0.75rem;
+  }
+
+  .form-control-sm {
+    font-size: 16px; /* Empêche le zoom sur iOS */
+  }
+
+  .d-flex.justify-content-between {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 576px) {
+  .col-2 {
+    flex: 0 0 30%;
+    max-width: 30%;
+  }
+
+  .col-4 {
+    flex: 0 0 100%;
+    max-width: 100%;
+    margin-top: 0.5rem;
+  }
+
+  .col-auto {
+    flex: 0 0 100%;
+    max-width: 100%;
+    margin-top: 0.5rem;
+  }
+}

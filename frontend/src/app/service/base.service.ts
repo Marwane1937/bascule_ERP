@@ -125,6 +125,31 @@ export class BaseService {
     return this.http.get(url);
   }
 
+  getProduitsNomenclature(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/articles/article/nomenclature`);
+  }
+
+  getArticleById(article_id: string | number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/articles/${article_id}`);
+  }
+
+  // === Article Nomenclature ===
+  getArticleNomenclature(compose_id: string | number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/articles/${compose_id}/nomenclature`);
+  }
+
+  addArticleNomenclatureLine(compose_id: string | number, data: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/articles/${compose_id}/nomenclature`, data, { headers: this.httpHeaders });
+  }
+
+  updateArticleNomenclatureLine(compose_id: string | number, composant_id: string | number, data: any): Observable<any> {
+    return this.http.put(`${this.apiUrl}/articles/${compose_id}/nomenclature/${composant_id}`, data, { headers: this.httpHeaders });
+  }
+
+  deleteArticleNomenclatureLine(compose_id: string | number, composant_id: string | number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/articles/${compose_id}/nomenclature/${composant_id}`);
+  }
+
   getProduitsPaged(options: {
     page?: number;
     pageSize?: number;

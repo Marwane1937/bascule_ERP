@@ -101,6 +101,28 @@ const deleteLignesParIds = async (req, res) => {
   }
 };
 
+const genererPDF = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const withStamp = req.query.withStamp === 'true';
+    
+    const pdfPath = await bonCommandeService.genererPDF(id, { withStamp });
+    
+    // Envoyer le fichier PDF
+    res.download(pdfPath, `bon-commande-achat-${id}.pdf`, (err) => {
+      if (err) {
+        console.error('Erreur envoi PDF:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ message: 'Erreur lors de l\'envoi du PDF' });
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Erreur génération PDF:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
 module.exports = {
   getBonCommande,
   getBonCommandeById,
@@ -110,6 +132,7 @@ module.exports = {
   saveInfo,
   updateBonCommande,
   deleteBonCommande,
-  deleteLignesParIds
+  deleteLignesParIds,
+  genererPDF
 };
 

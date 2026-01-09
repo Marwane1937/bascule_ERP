@@ -77,3 +77,34 @@
   }
 }
 
+/* Style pour l'icône cœur du footer - Mode Caisse Black */
+.fa-heart.heart {
+  transition: all 0.3s ease;
+}
+
+.fa-heart.heart:hover {
+  transform: scale(1.2);
+  animation: heartbeat 0.6s ease-in-out;
+}
+
+.fa-heart.heart.active-black-mode {
+  color: #dc3545 !important;
+  animation: heartbeat 1s ease-in-out infinite;
+  filter: drop-shadow(0 0 8px rgba(220, 53, 69, 0.8));
+}
+
+@keyframes heartbeat {
+  0%, 100% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(1.15);
+  }
+  50% {
+    transform: scale(1);
+  }
+  75% {
+    transform: scale(1.1);
+  }
+}
+

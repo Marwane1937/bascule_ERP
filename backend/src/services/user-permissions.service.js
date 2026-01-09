@@ -171,7 +171,12 @@ class UserPermissionsService {
           { name: 'Véhicule', route: '/Vehicule' },
           { name: 'Commercial', route: '/Commercial' },
           { name: 'Produit', route: '/Produit' },
-          { name: 'Famille', route: '/Famille' }
+          { name: 'Famille', route: '/Famille' },
+          { name: 'Ville', route: '/Ville' },
+          { name: 'Banque', route: '/Banque' },
+          { name: 'Bénéficiaire', route: '/Beneficiaire' },
+          { name: 'Département', route: '/Departement' },
+          { name: 'Unité', route: '/Unite' }
         ]
       },
       {
@@ -183,14 +188,36 @@ class UserPermissionsService {
           { name: 'Livraison', route: '/Livraison' },
           { name: 'Retour Client', route: '/Retour' },
           { name: 'Avoir Client', route: '/Avoir' },
-          { name: 'Facturation', route: '/Facturation' }
+          { name: 'Facturation', route: '/Facturation' },
+          { name: 'Contrat', route: '/Contrat' }
         ]
       },
       {
         category: 'Achats',
         icon: 'fas fa-shopping-cart',
         items: [
-          { name: 'Bon de commande', route: '/Bon-Commande' }
+          { name: 'Bon de commande', route: '/Bon-Commande' },
+          { name: 'Facture Fournisseur', route: '/Facture-Fournisseur' }
+        ]
+      },
+      {
+        category: 'Stock',
+        icon: 'fas fa-boxes',
+        items: [
+          { name: 'Entrée de stock', route: '/Stock/Entree' },
+          { name: 'Sortie de stock', route: '/Stock/Sortie' },
+          { name: 'Inventaire', route: '/Stock/Inventaire' },
+          { name: 'Historique mouvements', route: '/Stock/Historique' },
+          { name: 'Reporting Stock', route: '/Stock/Reporting' }
+        ]
+      },
+      {
+        category: 'Interventions',
+        icon: 'fas fa-first-aid',
+        items: [
+          { name: 'Gestion Interventions', route: '/Interventions' },
+          { name: 'Nouvelle Intervention', route: '/Interventions/Nouvelle' },
+          { name: 'Rapports Interventions', route: '/Interventions/Rapports' }
         ]
       },
       {
@@ -220,6 +247,7 @@ class UserPermissionsService {
           { name: 'Utilisateurs', route: '/Users' },
           { name: 'Permissions Utilisateurs', route: '/User-Permissions' },
           { name: 'Listes', route: '/Listes' },
+          { name: 'Compteur', route: '/Compteur' },
           { name: 'Notifications', route: '/Notifications' }
         ]
       },

@@ -3,6 +3,8 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { CaisseService } from 'src/app/service/caisse.service';
 import { BaseService } from 'src/app/service/base.service';
 import { AuthService } from 'src/app/service/auth.service';
+import { CaisseModeService } from 'src/app/service/caisse-mode.service';
+import { Subscription } from 'rxjs';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -54,7 +56,8 @@ export class CaisseRecettesComponent implements OnInit, OnDestroy {
   // Mode caisse : 'declaree' (par défaut) ou 'black'
   caisseMode: 'declaree' | 'black' = 'declaree';
   isBlackMode: boolean = false; // Pour le mode nuit
-  
+  private caisseModeSubscription?: Subscription;
+
   // Onglets actifs
   activeTab: 'liste' | 'ajout' = 'liste';
   
@@ -62,28 +65,37 @@ export class CaisseRecettesComponent implements OnInit, OnDestroy {
     private caisseService: CaisseService,
     private baseService: BaseService,
     private authService: AuthService,
-    private fb: FormBuilder
+    private fb: FormBuilder,
+    private caisseModeService: CaisseModeService
   ) {}
 
   ngOnInit(): void {
+    // S'abonner au service pour recevoir les changements de mode
+    this.caisseModeSubscription = this.caisseModeService.caisseMode$.subscribe(mode => {
+      this.caisseMode = mode === 'black' ? 'black' : 'declaree';
+      this.isBlackMode = mode === 'black';
+      this.currentPage = 1;
+      this.loadNextNumero();
+      this.loadDocuments();
+    });
+    
+    // Initialiser avec le mode actuel
+    const currentMode = this.caisseModeService.getCurrentMode();
+    this.caisseMode = currentMode === 'black' ? 'black' : 'declaree';
+    this.isBlackMode = currentMode === 'black';
+    
     this.loadCurrentUser();
     this.initForm();
     this.loadDocuments();
     this.loadNextNumero();
     this.loadRubriques();
     this.loadEmployes();
-    
-    // Appliquer le mode nuit au body si nécessaire
-    if (this.isBlackMode) {
-      document.body.classList.add('black-mode-active');
-      document.documentElement.classList.add('black-mode-active');
-    }
   }
   
   ngOnDestroy(): void {
-    // Nettoyer les classes au destruction du composant
-    document.body.classList.remove('black-mode-active');
-    document.documentElement.classList.remove('black-mode-active');
+    if (this.caisseModeSubscription) {
+      this.caisseModeSubscription.unsubscribe();
+    }
   }
 
   loadCurrentUser(): void {
@@ -241,23 +253,7 @@ export class CaisseRecettesComponent implements OnInit, OnDestroy {
     });
   }
 
-  toggleCaisseMode(): void {
-    this.caisseMode = this.caisseMode === 'declaree' ? 'black' : 'declaree';
-    this.isBlackMode = this.caisseMode === 'black';
-    
-    // Appliquer le mode nuit au body
-    if (this.isBlackMode) {
-      document.body.classList.add('black-mode-active');
-      document.documentElement.classList.add('black-mode-active');
-    } else {
-      document.body.classList.remove('black-mode-active');
-      document.documentElement.classList.remove('black-mode-active');
-    }
-    
-    this.currentPage = 1; // Réinitialiser à la première page
-    this.loadNextNumero(); // Recharger le numéro avec le bon préfixe
-    this.loadDocuments(); // Recharger les documents avec le bon filtre
-  }
+  // Méthode supprimée - le mode est maintenant géré par le service via le footer
 
   setActiveTab(tab: 'liste' | 'ajout'): void {
     this.activeTab = tab;

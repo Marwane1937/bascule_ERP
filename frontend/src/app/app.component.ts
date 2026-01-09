@@ -3,6 +3,7 @@ import { Router, NavigationEnd } from '@angular/router';
 import { AuthService } from './service/auth.service';
 import { PermissionsService } from './service/permissions.service';
 import { UserPermissionsService, MenuCategory } from './service/user-permissions.service';
+import { CaisseModeService } from './service/caisse-mode.service';
 import { filter } from 'rxjs/operators';
 
 @Component({
@@ -18,6 +19,7 @@ export class AppComponent implements OnInit {
   
   constructor(
     public authService: AuthService,
+    public caisseModeService: CaisseModeService,
     private router: Router,
     private permissionsService: PermissionsService,
     private userPermissionsService: UserPermissionsService,
@@ -202,5 +204,9 @@ export class AppComponent implements OnInit {
 
   toggleSidebar() {
     this.sidebarHidden = !this.sidebarHidden;
+  }
+
+  toggleCaisseBlackMode(): void {
+    this.caisseModeService.toggleMode();
   }
 }

@@ -29,6 +29,7 @@ const getEmailDataByDocumentId = async (document_id, sequelizeConnection = null)
           s.part_id,
           p.nom AS client,
           c.nom AS commercial,
+          sd.article_id AS article_id,
           a.article_cod,
           sd.description AS designation,
           a.article_nom,
@@ -69,7 +70,7 @@ const getEmailDataByDocumentId = async (document_id, sequelizeConnection = null)
     `
        
         Select v.document_id , v.numero , v.description as client_ref,v.date , p.nom as client , c.nom as commercial , 
-        a.article_cod , q.designation ,a.article_nom ,vd.quantite , vd.prix ,
+        vd.article_id AS article_id, a.article_cod , q.designation ,a.article_nom ,vd.quantite , vd.prix ,
         CASE WHEN q.designation IS NULL OR LTRIM(RTRIM(CAST(q.designation AS VARCHAR(MAX)))) = '' THEN a.article_nom ELSE q.designation END as article , vd.taux_tva,
         case when vd.remise <> 0 then (vd.quantite * vd.prix)-((vd.quantite * vd.prix)*vd.remise) else (vd.quantite * vd.prix)-vd.remise_montant end as remise,
         vi.condition , vi.expedition , vi.transporteur , '' as adresse , '' as ville , vd.id AS ligne_id,

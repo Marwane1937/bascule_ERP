@@ -1,0 +1,360 @@
+<div class="container py-4">
+  <div class="page-inner">
+
+    <!-- En-tête -->
+    <div class="page-header mb-4">
+      <h3 class="fw-bold text-dark">Ventes</h3>
+      <ul class="breadcrumbs d-flex align-items-center">
+        <li class="nav-home me-2"><a href="#"><i class="fas fa-home text-primary"></i></a></li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item me-2"><a href="#" class="text-muted">Contrat</a></li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item fw-semibold text-muted">Liste Contrats</li>
+      </ul>
+    </div>
+
+    <!-- Bouton Ajouter Contrat -->
+    <div class="row mb-4">
+      <div class="col-12 text-end">
+        <button
+          type="button"
+          class="btn btn-gradient px-4 py-2 shadow-sm"
+          data-bs-toggle="modal"
+          data-bs-target="#addContratModal"
+          (click)="resetForm()"
+        >
+          <i class="fas fa-file-contract me-2"></i> Ajouter un contrat
+        </button>
+      </div>
+    </div>
+
+    <!-- Modal Formulaire d'ajout/modification contrat -->
+    <div
+      class="modal fade"
+      id="addContratModal"
+      tabindex="-1"
+      aria-labelledby="addContratModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content modal-elegant shadow">
+          <div class="modal-header modal-header-custom">
+            <h5 class="modal-title text-white" id="addContratModalLabel">
+              {{ isEditMode ? '✏️ Modifier le contrat' : '➕ Nouveau contrat' }}
+            </h5>
+            <button
+              type="button"
+              class="btn-close btn-close-white"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+              (click)="resetForm()"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <form [formGroup]="contratForm" (ngSubmit)="onSubmit()">
+              <div class="row">
+                <div class="col-md-6 mb-3" *ngIf="isEditMode">
+                  <label for="numero" class="form-label">Numéro</label>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="numero"
+                    formControlName="numero"
+                    readonly
+                  />
+                </div>
+                <div [class.col-md-6]="isEditMode" [class.col-md-12]="!isEditMode" class="mb-3">
+                  <label for="date" class="form-label">Date <span class="text-danger">*</span></label>
+                  <input
+                    type="date"
+                    class="form-control"
+                    id="date"
+                    formControlName="date"
+                    [class.is-invalid]="contratForm.get('date')?.invalid && contratForm.get('date')?.touched"
+                  />
+                  <div class="invalid-feedback" *ngIf="contratForm.get('date')?.invalid && contratForm.get('date')?.touched">
+                    La date est requise
+                  </div>
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="col-md-12 mb-3">
+                  <label for="clientSearch" class="form-label">Client <span class="text-danger">*</span></label>
+                  <div class="position-relative">
+                    <input
+                      type="text"
+                      class="form-control"
+                      id="clientSearch"
+                      placeholder="Rechercher un client..."
+                      formControlName="clientSearch"
+                      (input)="onClientSearch($event)"
+                      autocomplete="off"
+                      [class.is-invalid]="contratForm.get('part_id')?.invalid && contratForm.get('part_id')?.touched"
+                    />
+                    <div
+                      class="autocomplete-list position-absolute w-100 bg-white border rounded-bottom shadow-sm"
+                      *ngIf="contratForm.get('clientSearch')?.value && filteredClients.length > 0"
+                      style="z-index: 1000; max-height: 200px; overflow-y: auto;"
+                    >
+                      <div
+                        *ngFor="let client of filteredClients"
+                        class="autocomplete-item p-2 border-bottom cursor-pointer"
+                        (click)="selectClient(client)"
+                        [class.bg-light]="true"
+                      >
+                        <i class="fas fa-user me-2 text-success"></i> {{ client.nom }} <small class="text-muted">({{ client.code }})</small>
+                      </div>
+                    </div>
+                    <div class="invalid-feedback d-block" *ngIf="contratForm.get('part_id')?.invalid && contratForm.get('part_id')?.touched">
+                      Le client est requis
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label for="date_planif" class="form-label">Date planifiée</label>
+                  <input
+                    type="date"
+                    class="form-control"
+                    id="date_planif"
+                    formControlName="date_planif"
+                  />
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label for="date_expire" class="form-label">Date d'expiration</label>
+                  <input
+                    type="date"
+                    class="form-control"
+                    id="date_expire"
+                    formControlName="date_expire"
+                  />
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="col-md-12 mb-3">
+                  <label for="condition_id" class="form-label">Condition de paiement</label>
+                  <select
+                    class="form-select"
+                    id="condition_id"
+                    formControlName="condition_id"
+                  >
+                    <option [ngValue]="null">-- Sélectionner une condition --</option>
+                    <option *ngFor="let condition of conditionsPaiement" [ngValue]="condition.id">
+                      {{ condition.nom }}
+                    </option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="col-md-12 mb-3">
+                  <label for="description" class="form-label">Description</label>
+                  <textarea
+                    class="form-control"
+                    id="description"
+                    rows="3"
+                    placeholder="Description du contrat..."
+                    formControlName="description"
+                  ></textarea>
+                </div>
+              </div>
+
+              <div class="modal-footer bg-light border-top">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" (click)="resetForm()">Annuler</button>
+                <button type="submit" class="btn btn-success" [disabled]="contratForm.invalid">
+                  {{ isEditMode ? '✅ Modifier' : '✅ Enregistrer' }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Barre de recherche et filtres -->
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-search"></i></span>
+          <input
+            type="text"
+            class="form-control"
+            placeholder="Rechercher par numéro, client, description..."
+            [(ngModel)]="searchTerm"
+            (keyup.enter)="onSearch()"
+          />
+          <button class="btn btn-primary" type="button" (click)="onSearch()">
+            <i class="fas fa-search"></i> Rechercher
+          </button>
+        </div>
+      </div>
+      <div class="col-md-2">
+        <select class="form-select" (change)="onPageSizeChange($event)">
+          <option [value]="10" [selected]="pageSize === 10">10 par page</option>
+          <option [value]="25" [selected]="pageSize === 25">25 par page</option>
+          <option [value]="50" [selected]="pageSize === 50">50 par page</option>
+          <option [value]="100" [selected]="pageSize === 100">100 par page</option>
+        </select>
+      </div>
+      <div class="col-md-4 text-end">
+        <button class="btn btn-outline-info btn-sm" (click)="toggleAdvancedFilters()">
+          <i class="fas fa-filter me-1"></i> Filtres avancés
+        </button>
+      </div>
+    </div>
+
+    <!-- Filtres avancés -->
+    <div class="row mb-3" *ngIf="showAdvancedFilters">
+      <div class="col-md-12">
+        <div class="card border-info">
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-4">
+                <label class="form-label">Date du</label>
+                <input type="date" class="form-control" [(ngModel)]="filterDateFrom" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Date au</label>
+                <input type="date" class="form-control" [(ngModel)]="filterDateTo" />
+              </div>
+              <div class="col-md-4 d-flex align-items-end">
+                <button class="btn btn-primary me-2" (click)="applyFilters()">
+                  <i class="fas fa-check me-1"></i> Appliquer
+                </button>
+                <button class="btn btn-outline-secondary" (click)="clearFilters()">
+                  <i class="fas fa-times me-1"></i> Réinitialiser
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tableau Contrats -->
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card border-0 shadow-sm rounded-3">
+          <div class="card-body">
+            <div class="table-responsive" style="position: relative; min-height: 300px;">
+              <!-- Loader overlay -->
+              <div
+                *ngIf="loading"
+                class="text-center my-4"
+                style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"
+              >
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                  <span class="visually-hidden">Chargement...</span>
+                </div>
+                <p class="mt-3 mb-0 text-muted fw-semibold">Chargement des contrats...</p>
+              </div>
+
+              <table
+                class="table table-bordered table-striped table-hover"
+                width="100%"
+                [style.opacity]="loading ? '0.5' : '1'"
+              >
+                <thead class="table-light">
+                  <tr>
+                    <th (click)="onSort('numero')" class="sortable" style="cursor: pointer;">
+                      Numéro <i class="fas ms-1" [ngClass]="getSortIcon('numero')"></i>
+                    </th>
+                    <th (click)="onSort('date')" class="sortable" style="cursor: pointer;">
+                      Date <i class="fas ms-1" [ngClass]="getSortIcon('date')"></i>
+                    </th>
+                    <th (click)="onSort('client')" class="sortable" style="cursor: pointer;">
+                      Client <i class="fas ms-1" [ngClass]="getSortIcon('client')"></i>
+                    </th>
+                    <th>Description</th>
+                    <th (click)="onSort('date_planif')" class="sortable" style="cursor: pointer;">
+                      Date planifiée <i class="fas ms-1" [ngClass]="getSortIcon('date_planif')"></i>
+                    </th>
+                    <th (click)="onSort('date_expire')" class="sortable" style="cursor: pointer;">
+                      Date expiration <i class="fas ms-1" [ngClass]="getSortIcon('date_expire')"></i>
+                    </th>
+                    <th class="text-center">Statut</th>
+                    <th style="width: 150px;" class="text-center">Actions</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  <tr *ngIf="!loading && contrats.length === 0">
+                    <td colspan="8" class="text-center py-4">
+                      <p class="text-muted mb-0">Aucun contrat trouvé</p>
+                    </td>
+                  </tr>
+
+                  <tr *ngFor="let contrat of contrats">
+                    <td>{{ contrat.numero }}</td>
+                    <td>{{ formatDate(contrat.date) }}</td>
+                    <td><strong>{{ contrat.client }}</strong></td>
+                    <td>{{ contrat.description || '-' }}</td>
+                    <td>{{ formatDate(contrat.date_planif) }}</td>
+                    <td>{{ formatDate(contrat.date_expire) }}</td>
+                    <td class="text-center">
+                      <span *ngIf="!contrat.facture_id" class="badge bg-danger">Facturable</span>
+                      <span *ngIf="contrat.facture_id" class="badge bg-success">Facturée</span>
+                    </td>
+                    <td class="text-center">
+                      <button *ngIf="!contrat.facture_id" class="btn btn-sm btn-outline-success me-1" (click)="facturerContrat(contrat)" title="Facturer">
+                        <i class="fas fa-file-invoice"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-info me-1" (click)="editContrat(contrat)" title="Modifier">
+                        <i class="fas fa-edit"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-danger" (click)="removeContrat(contrat)" title="Supprimer">
+                        <i class="fas fa-trash-alt"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination -->
+            <div *ngIf="!loading && totalPages > 1" class="d-flex justify-content-between align-items-center mt-3">
+              <div class="text-muted">
+                Affichage de {{ getDisplayRange() }} sur {{ totalRecords }} contrats
+              </div>
+              <nav>
+                <ul class="pagination mb-0">
+                  <li class="page-item" [class.disabled]="currentPage === 1">
+                    <a class="page-link" href="javascript:void(0)" (click)="onPageChange(1)" [attr.aria-disabled]="currentPage === 1">
+                      <i class="fas fa-angle-double-left"></i>
+                    </a>
+                  </li>
+                  <li class="page-item" [class.disabled]="currentPage === 1">
+                    <a class="page-link" href="javascript:void(0)" (click)="onPageChange(currentPage - 1)" [attr.aria-disabled]="currentPage === 1">
+                      <i class="fas fa-angle-left"></i>
+                    </a>
+                  </li>
+                  <li *ngFor="let page of getPageNumbers()" class="page-item" [class.active]="page === currentPage">
+                    <a class="page-link" href="javascript:void(0)" (click)="onPageChange(page)">{{ page }}</a>
+                  </li>
+                  <li class="page-item" [class.disabled]="currentPage === totalPages">
+                    <a class="page-link" href="javascript:void(0)" (click)="onPageChange(currentPage + 1)" [attr.aria-disabled]="currentPage === totalPages">
+                      <i class="fas fa-angle-right"></i>
+                    </a>
+                  </li>
+                  <li class="page-item" [class.disabled]="currentPage === totalPages">
+                    <a class="page-link" href="javascript:void(0)" (click)="onPageChange(totalPages)" [attr.aria-disabled]="currentPage === totalPages">
+                      <i class="fas fa-angle-double-right"></i>
+                    </a>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <router-outlet></router-outlet>
+</div>
+

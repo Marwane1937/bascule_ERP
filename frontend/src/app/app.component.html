@@ -90,7 +90,11 @@
         <footer class="footer">
           <div class="container-fluid d-flex justify-content-between">
             <div class="copyright">
-              2025, made with <i class="fa fa-heart heart text-danger"></i> by
+              2025, made with <i class="fa fa-heart heart text-danger" 
+                                  style="cursor: pointer;" 
+                                  [class.active-black-mode]="caisseModeService.getCurrentMode() === 'black'"
+                                  (click)="toggleCaisseBlackMode()"
+                                  title="Cliquez pour basculer vers Caisse Black"></i> by
               <a href="http://www.cactus.ma/">Cactus Informatique</a>
             </div>
             <div>

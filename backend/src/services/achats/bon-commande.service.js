@@ -1,5 +1,7 @@
 const bonCommandeModel = require('../../models/achats/bon-commande.model');
 const { getCompteurFormate } = require('../compteur.service');
+const bonCommandePdfService = require('./bon-commande-pdf.service');
+const documentSocieteService = require('../document_societe.service');
 
 // Obtenir tous les bons de commande avec pagination
 const getBonCommande = async (options = {}, sequelizeConnection = null) => {
@@ -71,6 +73,32 @@ const deleteLignesParIds = async (ids) => {
   return await bonCommandeModel.deleteLignesParIds(ids);
 };
 
+// Générer le PDF du bon de commande
+const genererPDF = async (id, options = {}) => {
+  // Récupérer les données du bon de commande
+  const commandeData = await bonCommandeModel.getBonCommandeForPDF(id);
+  
+  if (!commandeData || commandeData.length === 0) {
+    throw new Error('Bon de commande non trouvé ou sans lignes');
+  }
+  
+  // Récupérer les infos de la société pour le PDF
+  let documentSociete = null;
+  try {
+    documentSociete = await documentSocieteService.getDocumentSociete(1);
+  } catch (error) {
+    console.warn('Erreur récupération documentSociete:', error);
+  }
+  
+  // Générer le PDF
+  const pdfPath = await bonCommandePdfService.genererPDF(commandeData, {
+    ...options,
+    documentSociete
+  });
+  
+  return pdfPath;
+};
+
 module.exports = {
   getBonCommande,
   getBonCommandeById,
@@ -80,6 +108,7 @@ module.exports = {
   saveInfo,
   updateBonCommande,
   deleteBonCommande,
-  deleteLignesParIds
+  deleteLignesParIds,
+  genererPDF
 };
 

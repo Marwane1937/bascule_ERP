@@ -1,7 +1,9 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import { CaisseService } from 'src/app/service/caisse.service';
 import { BaseService } from 'src/app/service/base.service';
+import { CaisseModeService } from 'src/app/service/caisse-mode.service';
+import { Subscription } from 'rxjs';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -9,7 +11,7 @@ import Swal from 'sweetalert2';
   templateUrl: './caisse.component.html',
   styleUrls: ['./caisse.component.css']
 })
-export class CaisseComponent implements OnInit {
+export class CaisseComponent implements OnInit, OnDestroy {
   activeTab: 'all' | 'recettes' | 'depenses' = 'all';
   solde: any = {
     total_entrees: 0,
@@ -25,6 +27,7 @@ export class CaisseComponent implements OnInit {
 
   // Type de caisse: 'declared' = caisse déclarée, 'black' = caisse black
   caisseType: 'declared' | 'black' = 'declared';
+  private caisseModeSubscription?: Subscription;
 
   // Pour les rapports
   reportDateFrom: string = new Date().toISOString().split('T')[0];
@@ -50,13 +53,29 @@ export class CaisseComponent implements OnInit {
   constructor(
     private caisseService: CaisseService,
     private baseService: BaseService,
-    private router: Router
+    private router: Router,
+    private caisseModeService: CaisseModeService
   ) { }
 
   ngOnInit(): void {
+    // S'abonner au service pour recevoir les changements de mode
+    this.caisseModeSubscription = this.caisseModeService.caisseMode$.subscribe(mode => {
+      this.caisseType = mode === 'black' ? 'black' : 'declared';
+      this.loadSolde();
+    });
+    
+    // Initialiser avec le mode actuel
+    this.caisseType = this.caisseModeService.getCurrentMode() === 'black' ? 'black' : 'declared';
+    
     this.loadSolde();
     this.loadEmployes();
     this.loadRubriques();
+  }
+
+  ngOnDestroy(): void {
+    if (this.caisseModeSubscription) {
+      this.caisseModeSubscription.unsubscribe();
+    }
   }
 
   loadRubriques(): void {
@@ -154,11 +173,7 @@ export class CaisseComponent implements OnInit {
     this.loadSolde();
   }
 
-  switchCaisseType(type: 'declared' | 'black'): void {
-    console.log('[CaisseComponent] 🔄 Changement type caisse:', type);
-    this.caisseType = type;
-    this.loadSolde();
-  }
+  // Méthode supprimée - le mode est maintenant géré par le service via le footer
 
   navigateToRecettes(): void {
     this.router.navigate(['/Caisse-Recettes']);

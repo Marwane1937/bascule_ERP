@@ -1,0 +1,155 @@
+/* Styles pour l'interface d'historique */
+
+.page-header {
+  border-bottom: 1px solid #e9ecef;
+  padding-bottom: 1rem;
+}
+
+.page-header h3 {
+  color: #495057;
+  margin-bottom: 0.5rem;
+}
+
+.breadcrumbs {
+  font-size: 0.875rem;
+}
+
+.breadcrumbs .nav-home {
+  color: #6c757d;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.cursor-pointer:hover {
+  background-color: #f8f9fa !important;
+}
+
+/* Styles pour les détails expandés */
+.detail-loading {
+  text-align: center;
+  color: #6c757d;
+  font-style: italic;
+  padding: 1rem;
+}
+
+/* Styles pour les inputs */
+.form-control:focus {
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+/* Styles pour les boutons */
+.btn:focus {
+  box-shadow: none;
+}
+
+.btn-outline-primary {
+  color: #0d6efd;
+  border-color: #0d6efd;
+}
+
+.btn-outline-primary:hover {
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+}
+
+/* Styles pour les badges */
+.badge {
+  font-size: 0.75em;
+}
+
+.badge-success {
+  background-color: #198754;
+}
+
+.badge-primary {
+  background-color: #0d6efd;
+}
+
+.badge-warning {
+  background-color: #ffc107;
+  color: #212529;
+}
+
+/* Styles pour la pagination */
+.pagination .page-link {
+  color: #0d6efd;
+}
+
+.pagination .page-link:hover {
+  color: #0a58ca;
+  background-color: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.pagination .page-item.active .page-link {
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+}
+
+/* Styles pour les tableaux */
+.table th {
+  border-top: none;
+  font-weight: 600;
+  color: #495057;
+  background-color: #f8f9fa;
+}
+
+.table td {
+  vertical-align: middle;
+}
+
+.table-hover tbody tr:hover {
+  background-color: rgba(0, 0, 0, 0.075);
+}
+
+/* Styles pour les cartes */
+.card {
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+  border: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+.card-header {
+  font-weight: 600;
+}
+
+.card-primary {
+  border-color: #0d6efd;
+}
+
+.card-primary .card-header {
+  background-color: #0d6efd;
+  color: white;
+}
+
+/* Styles pour les spinners */
+.spinner-border-sm {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Styles responsives */
+@media (max-width: 768px) {
+  .container {
+    padding-left: 15px;
+    padding-right: 15px;
+  }
+
+  .table-responsive {
+    font-size: 0.875rem;
+  }
+
+  .btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+  }
+}
+
+
+
+
+
+
+

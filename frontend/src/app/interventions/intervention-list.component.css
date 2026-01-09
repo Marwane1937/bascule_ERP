@@ -1,0 +1,93 @@
+/* Style simple et cohérent avec Client/Fournisseur */
+
+.btn-gradient {
+  background: linear-gradient(135deg, #00b4db, #0083b0);
+  color: white;
+  border: none;
+  border-radius: 25px;
+  font-weight: 500;
+  transition: 0.3s ease;
+}
+
+.btn-gradient:hover {
+  background: linear-gradient(135deg, #0090c4, #006a8e);
+}
+
+.card {
+  border-radius: 12px;
+}
+
+.table-hover tbody tr:hover {
+  background-color: #f6f8fc;
+}
+
+.btn-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  border-radius: 8px;
+}
+
+/* Style pour les badges */
+.badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.4rem 0.8rem;
+  border-radius: 20px;
+}
+
+.badge.bg-info {
+  background-color: #17a2b8 !important;
+}
+
+/* Style pour les colonnes triables */
+.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sortable:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Style pour la devise */
+.currency-value {
+  font-weight: 600;
+  color: #28a745;
+}
+
+/* Styles pour le modal d'édition */
+.modal-elegant {
+  border-radius: 15px;
+  overflow: hidden;
+}
+
+.modal-header-custom {
+  background: linear-gradient(135deg, #00b4db, #0083b0);
+  color: white;
+  border-bottom: none;
+}
+
+/* Autocomplete styles */
+.autocomplete-list {
+  top: 100%;
+  left: 0;
+  right: 0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid #dee2e6;
+  margin-top: 2px;
+}
+
+.autocomplete-item {
+  cursor: pointer;
+  transition: background-color 0.2s;
+  padding: 0.75rem 1rem;
+}
+
+.autocomplete-item:hover {
+  background-color: #f8f9fa !important;
+}
+
+.autocomplete-item:last-child {
+  border-bottom: none;
+}

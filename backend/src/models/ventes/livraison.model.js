@@ -1292,27 +1292,47 @@ const transfererLivraisonVersFacturation = async (stockId, factureDate, partId, 
 
       const adresseId = stockData && (Array.isArray(stockData) ? stockData[0]?.adresse_id : stockData.adresse_id);
 
-      // Exécuter toutes les requêtes dans une seule chaîne SQL pour garantir que SET IDENTITY_INSERT
-      // est dans la même session que l'INSERT (méthode précédente qui fonctionnait)
-      // Utilisation de paramètres pour la sécurité, mais dans une seule requête
+      // 1. Créer d'abord l'entrée dans facture_souche (auto-incrémenté) avec sens = 1
       const adresseIdParam = adresseId || null;
-      const completeQuery = `
-        SET IDENTITY_INSERT facture_souche ON;
-        INSERT INTO facture_souche (facture_id, part_id, adresse_id, sens)
-        VALUES (:factureId, :partId, :adresseId, 1);
-        SET IDENTITY_INSERT facture_souche OFF;
+      const insertFactureSoucheQuery = `
+        INSERT INTO facture_souche (part_id, adresse_id, sens)
+        OUTPUT INSERTED.facture_id
+        VALUES (:partId, :adresseId, 1)
+      `;
+
+      const [factureSoucheResult] = await sequelize.query(insertFactureSoucheQuery, {
+        replacements: {
+          partId: partIdNum,
+          adresseId: adresseIdParam
+        },
+        type: sequelize.QueryTypes.INSERT,
+        transaction: t
+      });
+
+      // Récupérer le facture_id auto-généré
+      let factureId = null;
+      if (Array.isArray(factureSoucheResult) && factureSoucheResult.length > 0) {
+        factureId = factureSoucheResult[0].facture_id;
+      } else if (factureSoucheResult && factureSoucheResult.facture_id) {
+        factureId = factureSoucheResult.facture_id;
+      }
+
+      if (!factureId) {
+        throw new Error('Erreur lors de la création de facture_souche : facture_id non récupéré');
+      }
+
+      // 2. Créer la facture avec le facture_id récupéré
+      const insertFactureQuery = `
         INSERT INTO facture (facture_id, facture_ind, facture_num, facture_dat, facture_typ, facture_ht, facture_tva)
         VALUES (:factureId, 1, :factureNum, :factureDate, 'FA', 0, 0);
         UPDATE stock SET facture_id = :factureId WHERE id = :stockId;
         UPDATE compteur SET compteur = compteur + 1 WHERE LTRIM(RTRIM(code)) = 'FA';
       `;
 
-      // Exécuter la requête complète avec replacements
-      await sequelize.query(completeQuery, {
+      // Exécuter la requête avec le facture_id récupéré
+      await sequelize.query(insertFactureQuery, {
         replacements: {
-          factureId: stockIdNum,
-          partId: partIdNum,
-          adresseId: adresseIdParam,
+          factureId: factureId,
           factureNum: factureNum,
           factureDate: factureDate,
           stockId: stockIdNum
@@ -1324,21 +1344,13 @@ const transfererLivraisonVersFacturation = async (stockId, factureDate, partId, 
       return {
         success: true,
         stockId: stockIdNum,
-        factureId: stockIdNum,
+        factureId: factureId,
         factureNum: factureNum,
         message: 'Livraison transférée vers facturation avec succès'
       };
 
     } catch (error) {
       console.error('❌ Erreur lors du transfert livraison vers facturation:', error);
-      // S'assurer que IDENTITY_INSERT est désactivé même en cas d'erreur
-      try {
-        await sequelize.query('SET IDENTITY_INSERT facture_souche OFF', {
-          transaction: t
-        });
-      } catch (e) {
-        // Ignorer l'erreur si la transaction est déjà rollbackée
-      }
       throw new Error(`Erreur lors du transfert: ${error.message}`);
     }
   });
@@ -1526,8 +1538,7 @@ const transfererCommandeVersFacturation = async (commandeId, factureDate, partId
       const anneeCourte = new Date(factureDate).getFullYear().toString().slice(2);
       const factureNum = `FA${anneeCourte}-${compteurFA.toString().padStart(4, '0')}`;
 
-      // 9. Créer la facture dans facture_souche et facture (utiliser stockId1 comme facture_id)
-      const factureId = stockId1;
+      // 9. Créer la facture dans facture_souche et facture
 
       // Récupérer l'adresse_id depuis la commande ou partenaire
       const [partenaireData] = await sequelize.query(
@@ -1541,23 +1552,45 @@ const transfererCommandeVersFacturation = async (commandeId, factureDate, partId
 
       const adresseId = partenaireData && (Array.isArray(partenaireData) ? partenaireData[0]?.adresse_id : partenaireData.adresse_id);
 
-      // Créer facture_souche et facture
-      const completeQuery = `
-        SET IDENTITY_INSERT facture_souche ON;
-        INSERT INTO facture_souche (facture_id, part_id, adresse_id, sens)
-        VALUES (:factureId, :partId, :adresseId, 1);
-        SET IDENTITY_INSERT facture_souche OFF;
+      // 9.1 Créer d'abord l'entrée dans facture_souche (auto-incrémenté) avec sens = 1
+      const insertFactureSoucheQuery = `
+        INSERT INTO facture_souche (part_id, adresse_id, sens)
+        OUTPUT INSERTED.facture_id
+        VALUES (:partId, :adresseId, 1)
+      `;
+
+      const [factureSoucheResult] = await sequelize.query(insertFactureSoucheQuery, {
+        replacements: {
+          partId: partIdNum,
+          adresseId: adresseId || null
+        },
+        type: sequelize.QueryTypes.INSERT,
+        transaction: t
+      });
+
+      // Récupérer le facture_id auto-généré
+      let factureId = null;
+      if (Array.isArray(factureSoucheResult) && factureSoucheResult.length > 0) {
+        factureId = factureSoucheResult[0].facture_id;
+      } else if (factureSoucheResult && factureSoucheResult.facture_id) {
+        factureId = factureSoucheResult.facture_id;
+      }
+
+      if (!factureId) {
+        throw new Error('Erreur lors de la création de facture_souche : facture_id non récupéré');
+      }
+
+      // 9.2 Créer la facture avec le facture_id récupéré
+      const insertFactureQuery = `
         INSERT INTO facture (facture_id, facture_ind, facture_num, facture_dat, facture_typ, facture_ht, facture_tva)
         VALUES (:factureId, 1, :factureNum, :factureDate, 'FA', 0, 0);
         UPDATE stock SET facture_id = :factureId WHERE id = :stockId1;
         UPDATE compteur SET compteur = compteur + 1 WHERE LTRIM(RTRIM(code)) = 'FA';
       `;
 
-      await sequelize.query(completeQuery, {
+      await sequelize.query(insertFactureQuery, {
         replacements: {
           factureId: factureId,
-          partId: partIdNum,
-          adresseId: adresseId || null,
           factureNum: factureNum,
           factureDate: factureDate,
           stockId1: stockId1
@@ -1580,14 +1613,6 @@ const transfererCommandeVersFacturation = async (commandeId, factureDate, partId
 
     } catch (error) {
       console.error('❌ Erreur lors du transfert commande vers facturation:', error);
-      // S'assurer que IDENTITY_INSERT est désactivé même en cas d'erreur
-      try {
-        await sequelize.query('SET IDENTITY_INSERT facture_souche OFF', {
-          transaction: t
-        });
-      } catch (e) {
-        // Ignorer l'erreur si la transaction est déjà rollbackée
-      }
       throw new Error(`Erreur lors du transfert: ${error.message}`);
     }
   });

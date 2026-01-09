@@ -166,9 +166,19 @@
                                         <td class="text-end">{{ f.facture_tva | number:'1.2-2' }} dh</td>
                                         <td class="text-end fw-bold">{{ f.facture_ttc | number:'1.2-2' }} dh</td>
                                         <td class="text-center">
-                                            <button class="btn btn-sm btn-outline-purple me-1" (click)="onPrintFacture(f.facture_id)" title="Imprimer">
-                                                <i class="fas fa-print"></i>
-                                            </button>
+                                            <div class="btn-group" role="group">
+                                                <button type="button" class="btn btn-sm btn-outline-purple dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Imprimer">
+                                                    <i class="fas fa-print"></i>
+                                                </button>
+                                                <ul class="dropdown-menu">
+                                                    <li><a class="dropdown-item" href="javascript:void(0)" (click)="onPrintFacture(f.facture_id, 'standard')">
+                                                        <i class="fas fa-file-invoice me-2"></i> Facture standard
+                                                    </a></li>
+                                                    <li><a class="dropdown-item" href="javascript:void(0)" (click)="onPrintFacture(f.facture_id, 'contrat')">
+                                                        <i class="fas fa-file-contract me-2"></i> Facture contrat
+                                                    </a></li>
+                                                </ul>
+                                            </div>
                                         </td>
                                     </tr>
                                 </tbody>

@@ -21,5 +21,8 @@ router.put('/:id', bonCommandeController.updateBonCommande);
 router.post('/delete', bonCommandeController.deleteBonCommande);
 router.post('/delete-lignes', bonCommandeController.deleteLignesParIds);
 
+// Route pour générer le PDF du bon de commande
+router.get('/pdf/:id', bonCommandeController.genererPDF);
+
 module.exports = router;
 

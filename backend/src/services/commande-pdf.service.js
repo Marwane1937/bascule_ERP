@@ -123,7 +123,15 @@ class CommandePdfService {
           fs.mkdirSync(commandeDir, { recursive: true });
         }
 
-        const fileName = `commande-${Date.now()}.pdf`;
+        const firstLine = commandeData[0];
+
+        const clientName = (firstLine.client || 'client').trim();
+        const commandeNum = (firstLine.numero || 'numero');
+        // Nettoyer le nom pour qu'il soit valide comme nom de fichier (remplacer espaces et caractères spéciaux)
+        const cleanClientName = clientName.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').toLowerCase();
+        const fileName = `commande_${commandeNum}_${cleanClientName}.pdf`;
+
+        //const fileName = `commande-${Date.now()}.pdf`;
         const pdfPath = path.join(commandeDir, fileName);
 
         const doc = new PDFDocument({ margin: 40, size: 'A4' });
@@ -147,11 +155,11 @@ class CommandePdfService {
             doc.image(logoBuffer, 50, 20, { width: 100 });
           } catch (error) {
             console.warn('Erreur affichage logo personnalisé, utilisation du logo par défaut:', error);
-            const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
+            const logoPath = path.join(__dirname, '..', 'public', 'Cactus.png');
             if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
           }
         } else {
-          const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
+          const logoPath = path.join(__dirname, '..', 'public', 'Cactus.png');
           if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
         }
 
@@ -173,10 +181,12 @@ class CommandePdfService {
           });
         } else {
           // En-tête par défaut à droite du logo (ajusté pour logo de 100px)
-          doc.fontSize(11).fillColor('#046ba7').font('Helvetica-Bold').text('Balances et Bascules Pont Bascule Electronique', 160, 30);
-          doc.font('Helvetica').fontSize(10)
-            .text('Mecanique - Vente et Reparation - Entretien', 160, 45)
-            .text('Etalonnage Logiciels de Gestion', 160, 58);
+          doc.fontSize(11).fillColor('#bccbaa').font('Helvetica-Bold').text('Cactus Informatique', 160, 30);
+          doc.font('Helvetica').fontSize(10).fillColor('#000')
+            .text('LOTISSEMENT HLIWA RUE 8 N°69', 160, 45)
+            .text('AIN SEBAA 20250 CASABLANCA', 160, 58)
+            .text('TEL : 05 22 34 35 45', 160, 71)
+            .text('FAX : 05 22 67 38 09', 160, 84);
         }
 
         // Ligne de séparation horizontale
@@ -444,7 +454,7 @@ class CommandePdfService {
 
         // === PIED DE PAGE PERSONNALISÉ (comme le devis avec fond coloré) ===
         // Couleur de background similaire au logo (couleur bleu/vert clair)
-        const footerBgColor = '#E8F4F8'; // Couleur de fond claire similaire au logo
+        const footerBgColor = '#f3f5ef'; // Couleur de fond claire similaire au logo
 
         // Calculer la position du pied de page pour qu'il reste sur la même page
         // Hauteur de page A4 = 842 points, marge bas = 40 points

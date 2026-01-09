@@ -1,0 +1,258 @@
+<div class="container py-4">
+    <div class="page-inner">
+
+        <!-- En-tête -->
+        <div class="page-header mb-4">
+            <h3 class="fw-bold text-dark">Entrée de Stock (Réceptions)</h3>
+            <ul class="breadcrumbs d-flex align-items-center">
+                <li class="nav-home me-2"><a href="#"><i class="fas fa-home text-primary"></i></a></li>
+                <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+                <li class="nav-item me-2"><a href="#" class="text-muted">Stock</a></li>
+                <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+                <li class="nav-item fw-semibold text-muted">Entrée de Stock</li>
+            </ul>
+        </div>
+
+
+        <!-- Barre de recherche et filtres -->
+        <div class="row mb-3">
+            <div class="col-md-5">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input
+                        type="text"
+                        class="form-control"
+                        placeholder="Rechercher par numéro ou fournisseur..."
+                        [(ngModel)]="searchTerm"
+                        (keyup.enter)="onSearch()">
+                    <button class="btn btn-primary" type="button" (click)="onSearch()">
+                        <i class="fas fa-search"></i> Rechercher
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" [(ngModel)]="pageSize" (change)="getAchatsNonEntres()">
+                    <option [value]="10">10 par page</option>
+                    <option [value]="25">25 par page</option>
+                    <option [value]="50">50 par page</option>
+                    <option [value]="100">100 par page</option>
+                </select>
+            </div>
+            <div class="col-md-5 text-end">
+                <button class="btn btn-outline-secondary me-2" (click)="toggleAdvancedFilters()">
+                    <i class="fas fa-filter"></i> Filtres avancés
+                    <i class="fas" [class.fa-chevron-down]="!showAdvancedFilters" [class.fa-chevron-up]="showAdvancedFilters"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Filtres avancés -->
+        <div class="row mb-3" *ngIf="showAdvancedFilters">
+            <div class="col-md-12">
+                <div class="card border-primary">
+                    <div class="card-header bg-primary text-white">
+                        <i class="fas fa-filter"></i> Filtres avancés
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label"><i class="fas fa-calendar-alt"></i> Date de début</label>
+                                <input type="date" class="form-control" [(ngModel)]="filterDateFrom" (change)="onFilterChange()">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label"><i class="fas fa-calendar-alt"></i> Date de fin</label>
+                                <input type="date" class="form-control" [(ngModel)]="filterDateTo" (change)="onFilterChange()">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label"><i class="fas fa-building"></i> Fournisseur</label>
+                                <input type="text" class="form-control" [(ngModel)]="filterFournisseur" (input)="onFilterChange()" placeholder="Nom du fournisseur...">
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-12 text-end">
+                                <button class="btn btn-outline-danger" (click)="resetFilters()">
+                                    <i class="fas fa-times"></i> Réinitialiser les filtres
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tableau des achats non entrés en stock -->
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card border-0 shadow-sm rounded-3">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">
+                            <i class="fas fa-shopping-cart"></i>
+                            Achats non entrés en stock ({{ totalRecords }})
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive" style="position: relative; min-height: 400px;">
+                            <!-- Loader -->
+                            <div *ngIf="loading"
+                                class="text-center my-4"
+                                style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                                    <span class="visually-hidden">Chargement...</span>
+                                </div>
+                                <p class="mt-3 mb-0 text-muted fw-semibold">Chargement des achats...</p>
+                            </div>
+
+                            <table
+                                id="stockEntreeTable"
+                                class="table table-bordered table-striped table-hover"
+                                width="100%"
+                                [style.opacity]="loading ? '0.5' : '1'">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th (click)="onSort('numero')" class="sortable" style="cursor: pointer;">
+                                            Numéro
+                                            <i class="fas ms-1" [ngClass]="getSortIcon('numero')"></i>
+                                        </th>
+                                        <th (click)="onSort('date')" class="sortable" style="cursor: pointer;">
+                                            Date
+                                            <i class="fas ms-1" [ngClass]="getSortIcon('date')"></i>
+                                        </th>
+                                        <th (click)="onSort('fournisseur')" class="sortable" style="cursor: pointer;">
+                                            Fournisseur
+                                            <i class="fas ms-1" [ngClass]="getSortIcon('fournisseur')"></i>
+                                        </th>
+                                        <th>Description</th>
+                                        <th>Total HT</th>
+                                        <th style="width: 150px;" class="text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngIf="!loading && achats.length === 0">
+                                        <td colspan="6" class="text-center py-4">
+                                            <p class="text-muted mb-0">Aucun achat non entré en stock trouvé</p>
+                                        </td>
+                                    </tr>
+
+                                    <!-- Lignes principales -->
+                                    <ng-container *ngFor="let achat of achats; let i = index">
+                                        <tr class="cursor-pointer" (click)="toggleRowExpansion(achat, i)">
+                                            <td>
+                                                <i class="fas me-2" [class.fa-chevron-right]="!expandedRows[i]" [class.fa-chevron-down]="expandedRows[i]"></i>
+                                                {{ achat.numero }}
+                                            </td>
+                                            <td>{{ achat.date ? (achat.date | date:'dd/MM/yyyy') : '-' }}</td>
+                                            <td>{{ achat.fournisseur || '-' }}</td>
+                                            <td>{{ achat.description || '-' }}</td>
+                                            <td class="text-end">{{ achat.total_ht | number:'1.2-2' }} dh</td>
+                                            <td class="text-center">
+                                                <button class="btn btn-sm"
+                                                        [class.btn-secondary]="isButtonDisabled(achat.document_id)"
+                                                        [class.btn-success]="!isButtonDisabled(achat.document_id)"
+                                                        [disabled]="isButtonDisabled(achat.document_id)"
+                                                        (click)="$event.stopPropagation(); accepterEntreeStock(achat)">
+                                                    <i class="fas fa-check"></i>
+                                                    Accepter
+                                                </button>
+                                            </td>
+                                        </tr>
+
+                                        <!-- Ligne de détails expandée -->
+                                        <tr *ngIf="expandedRows[i]" class="table-light">
+                                            <td colspan="6" class="p-0">
+                                                <div class="p-3">
+                                                    <div class="row mb-3">
+                                                        <div class="col-md-6">
+                                                            <strong>Fournisseur:</strong> {{ achat.fournisseur }}
+                                                        </div>
+                                                        <div class="col-md-6 text-end">
+                                                            <strong>Date:</strong> {{ achat.date | date:'dd/MM/yyyy' }}
+                                                        </div>
+                                                    </div>
+
+                                                    <h6 class="mb-3">
+                                                        <i class="fas fa-list"></i> Détails des articles
+                                                        <span *ngIf="isLoadingDetails(achat.document_id)" class="ms-2">
+                                                            <small class="text-muted">Chargement...</small>
+                                                        </span>
+                                                        <span *ngIf="!isLoadingDetails(achat.document_id)" class="ms-2">
+                                                            <small class="text-muted">({{ getAchatDetails(achat.document_id).length }} article(s))</small>
+                                                        </span>
+                                                    </h6>
+
+                                                    <div class="table-responsive">
+                                                        <table class="table table-sm table-bordered">
+                                                            <thead class="table-light">
+                                                                <tr>
+                                                                    <th style="width: 40%;">Article</th>
+                                                                    <th style="width: 20%;" class="text-center">Quantité</th>
+                                                                    <th style="width: 20%;" class="text-end">Prix</th>
+                                                                    <th style="width: 20%;" class="text-end">Total HT</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                <tr *ngIf="isLoadingDetails(achat.document_id)">
+                                                                    <td colspan="4" class="detail-loading">
+                                                                        <small>Chargement des détails...</small>
+                                                                    </td>
+                                                                </tr>
+                                                                <tr *ngFor="let detail of getAchatDetails(achat.document_id)">
+                                                                    <td>{{ detail.article_nom || detail.designation }}</td>
+                                                                    <td class="text-center">{{ detail.quantite }}</td>
+                                                                    <td class="text-end">{{ detail.prix | number:'1.2-2' }} dh</td>
+                                                                    <td class="text-end">{{ (detail.quantite * detail.prix) | number:'1.2-2' }} dh</td>
+                                                                </tr>
+                                                                <tr *ngIf="getAchatDetails(achat.document_id).length > 0" class="table-secondary fw-bold">
+                                                                    <td colspan="3" class="text-end">Total:</td>
+                                                                    <td class="text-end">{{ achat.total_ht | number:'1.2-2' }} dh</td>
+                                                                </tr>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </ng-container>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        <div *ngIf="!loading && totalPages > 1" class="d-flex justify-content-between align-items-center mt-3">
+                            <div class="text-muted">
+                                Affichage de {{ getDisplayRange() }} sur {{ totalRecords }} achats
+                            </div>
+                            <nav>
+                                <ul class="pagination mb-0">
+                                    <li class="page-item" [class.disabled]="currentPage === 1">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onPageChange(1)">
+                                            <i class="fas fa-angle-double-left"></i>
+                                        </a>
+                                    </li>
+                                    <li class="page-item" [class.disabled]="currentPage === 1">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onPageChange(currentPage - 1)">
+                                            <i class="fas fa-angle-left"></i>
+                                        </a>
+                                    </li>
+                                    <li *ngFor="let page of getPageNumbers()" class="page-item" [class.active]="page === currentPage">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onPageChange(page)">{{ page }}</a>
+                                    </li>
+                                    <li class="page-item" [class.disabled]="currentPage === totalPages">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onPageChange(currentPage + 1)">
+                                            <i class="fas fa-angle-right"></i>
+                                        </a>
+                                    </li>
+                                    <li class="page-item" [class.disabled]="currentPage === totalPages">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onPageChange(totalPages)">
+                                            <i class="fas fa-angle-double-right"></i>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>

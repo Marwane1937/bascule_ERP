@@ -1863,12 +1863,265 @@ async function genererRapportCaisseGroup2000_3000PDF(donnees, options = {}) {
   });
 }
 
+/**
+ * Service dédié à la génération de PDF pour les INTERVENTIONS
+ */
+
+async function genererInterventionPDF(interventionId, options = {}) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const PDFDocument = require('pdfkit');
+      const { getConnection } = require('../config/database');
+      const telegramService = require('./telegram.service'); // Importez le service Telegram
+
+      // Récupérer les données complètes de l'intervention avec la requête fournie
+      const sequelize = getConnection();
+      const query = `
+        SELECT
+              i.date,
+			  p.nom as client_nom ,
+			  e.prenom+' '+e.nom as technicien_nom,
+              e.telegram_id as employe_telegram_id,
+              idt.quantite,
+              idt.prix,
+              idt.description as detail_description,
+              r.nom AS rubrique_nom,
+              (idt.quantite * idt.prix) AS total_ligne
+            FROM intervention i
+			inner join intervention_detail idt on i.id = idt.intervention_id
+			inner join partenaire p on p.part_id = i.part_id
+			inner join employe e on i.employe_id = e.id
+            LEFT JOIN listes r ON r.id = idt.rubrique_id and r.group_id = 5000
+            WHERE idt.intervention_id = :interventionId
+            ORDER BY idt.ligne, idt.id
+      `;
+
+      const details = await sequelize.query(query, {
+        replacements: { interventionId },
+        type: sequelize.QueryTypes.SELECT
+      });
+
+      if (!details || details.length === 0) {
+        return reject(new Error('Aucune donnée trouvée pour cette intervention'));
+      }
+
+      // Utiliser la première ligne pour les infos générales
+      const firstRow = details[0];
+      const interventionData = {
+        id: interventionId,
+        date: firstRow.date,
+        client_nom: firstRow.client_nom,
+        technicien_nom: firstRow.technicien_nom,
+        employe_telegram_id: firstRow.employe_telegram_id, // Récupérer l'ID Telegram du technicien
+        intervention_description: firstRow.intervention_description,
+        details: details
+      };
+
+      const doc = new PDFDocument({ size: 'A4', margin: 50 });
+      const fileName = `fiche-deplacement-intervention-${interventionId}.pdf`;
+
+      let buffers = [];
+      doc.on('data', buffers.push.bind(buffers));
+      doc.on('end', async () => {
+        const pdfBuffer = Buffer.concat(buffers);
+        
+        // Gérer l'envoi Telegram ici
+        if (interventionData.employe_telegram_id) {
+          try {
+            await telegramService.sendPdfToTechnician(interventionData.employe_telegram_id, pdfBuffer, fileName);
+            console.log(`[genererInterventionPDF] PDF envoyé au technicien ${interventionData.technicien_nom} (${interventionData.employe_telegram_id}) via Telegram.`);
+          } catch (telegramError) {
+            console.error('[genererInterventionPDF] Erreur envoi Telegram:', telegramError);
+          }
+        }
+        resolve(pdfBuffer);
+      });
+
+      // --- En-tête (Logo et infos entreprise) ---
+      if (options.documentSociete && options.documentSociete.logo) {
+        try {
+          const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
+          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
+          doc.image(logoBuffer, 50, 20, { width: 100 });
+        } catch (error) {
+          console.warn('Erreur affichage logo personnalisé, utilisation du logo par défaut:', error);
+          // Fallback au logo par défaut si besoin
+        }
+      }
+
+      if (options.documentSociete && options.documentSociete.entete) {
+        const enteteText = htmlToPlainText(options.documentSociete.entete);
+        const enteteLines = enteteText.split('\n');
+        let yPosEntete = 30;
+        enteteLines.forEach(line => {
+          if (line.trim()) {
+            doc.fontSize(10).font('Helvetica-Bold').text(line.trim(), 160, yPosEntete);
+            yPosEntete += 12;
+          }
+        });
+      } else {
+        doc.fontSize(11).fillColor('#046ba7').font('Helvetica-Bold').text('Balances et Bascules Pont Bascule Electronique', 160, 30);
+        doc.font('Helvetica').fontSize(10)
+          .text('Mecanique - Vente et Reparation - Entretien', 160, 45)
+          .text('Etalonnage Logiciels de Gestion', 160, 58);
+      }
+      doc.rect(40, 100, 520, 1).fill('#000'); // Ligne de séparation
+
+      // --- Titre ---
+      doc.fontSize(18).font('Helvetica-Bold').fillColor('#000').text('FICHE DE DÉPLACEMENT / INTERVENTION', 50, 120);
+
+      // --- Informations Intervention ---
+      let yPos = 170;
+      doc.fontSize(10).font('Helvetica');
+
+      // Cadre d'informations
+      drawRoundedRectOutline(doc, 50, yPos, 495, 100, 8); // Ajusté la hauteur du cadre
+
+      doc.font('Helvetica-Bold').text('N° Intervention:', 60, yPos + 10);
+      doc.font('Helvetica').text(interventionData.id || 'N/A', 150, yPos + 10);
+
+      doc.font('Helvetica-Bold').text('Date:', 60, yPos + 25);
+      doc.font('Helvetica').text(interventionData.date ? new Date(interventionData.date).toLocaleDateString('fr-FR') : 'N/A', 150, yPos + 25);
+
+      doc.font('Helvetica-Bold').text('Client:', 60, yPos + 40);
+      doc.font('Helvetica').text(interventionData.client_nom || 'N/A', 150, yPos + 40);
+
+      doc.font('Helvetica-Bold').text('Technicien:', 60, yPos + 55);
+      doc.font('Helvetica').text(interventionData.technicien_nom || 'N/A', 150, yPos + 55);
+
+      doc.font('Helvetica-Bold').text('Description:', 60, yPos + 70);
+      doc.font('Helvetica').text(interventionData.intervention_description || 'N/A', 150, yPos + 70, { width: 350 });
+
+      // --- Détails des rubriques ---
+      yPos = 290;
+      doc.fontSize(12).font('Helvetica-Bold').text('Détails des Prestations:', 50, yPos);
+      yPos += 25;
+
+      const tableTop = yPos;
+      const tableWidth = 495;
+      const colWidths = [200, 70, 75, 75, 75]; // Rubrique, Quantité, Prix Unitaire, Total HT, Taux TVA
+      const colHeaders = ['Rubrique', 'Qté', 'Prix U.', 'Total HT'];
+      const colX = [50, 250, 320, 395, 470]; // Positions X pour les colonnes
+
+      // En-tête du tableau
+      doc.rect(50, tableTop, tableWidth, 25).fill('#E0E0E0');
+      doc.fontSize(9).font('Helvetica-Bold').fillColor('#000');
+      colHeaders.forEach((header, i) => {
+        let align = 'left';
+        if (i > 0) align = 'center'; // Centré pour Qté, Prix U
+        if (i === colHeaders.length - 1) align = 'right'; // Aligner à droite pour Total HT
+        doc.text(header, colX[i], tableTop + 8, {
+          width: colWidths[i],
+          align: align
+        });
+      });
+
+      let currentY = tableTop + 25;
+      let totalGeneralHT = 0;
+      const rowHeight = 20;
+      const pageHeight = doc.page.height;
+      const footerHeightActual = 50; // Espace nécessaire pour le footer (environ 3 lignes de texte à 7pt + espacements)
+      const contentBottomLimit = pageHeight - footerHeightActual - 40; // Limite avant le footer + marge inférieure
+
+      for (let i = 0; i < interventionData.details.length; i++) {
+        const detail = interventionData.details[i];
+        const quantite = detail.quantite || 0;
+        const prix = detail.prix || 0;
+        const totalLigne = quantite * prix;
+        totalGeneralHT += totalLigne;
+
+        // Vérifier si une nouvelle page est nécessaire avant d'ajouter la ligne
+        if (currentY + rowHeight > contentBottomLimit) {
+          doc.addPage();
+          currentY = 50; // Position de départ sur la nouvelle page
+
+          // Redessiner l'en-tête du tableau sur la nouvelle page
+          doc.rect(50, currentY, tableWidth, 25).fill('#E0E0E0');
+          doc.fontSize(9).font('Helvetica-Bold').fillColor('#000');
+          colHeaders.forEach((header, idx) => {
+            let align = 'left';
+            if (idx > 0) align = 'center';
+            if (idx === colHeaders.length - 1) align = 'right';
+            doc.text(header, colX[idx], currentY + 8, {
+              width: colWidths[idx],
+              align: align
+            });
+          });
+          currentY += 25;
+        }
+
+        // Contenu des lignes
+        if (i % 2 === 0) {
+          doc.rect(50, currentY, tableWidth, rowHeight).fill('#F5F5F5');
+        }
+        doc.fontSize(9).font('Helvetica').fillColor('#000');
+
+        doc.text(detail.rubrique_nom || 'N/A', colX[0], currentY + 6, { width: colWidths[0], align: 'left' });
+        doc.text(quantite.toFixed(2), colX[1], currentY + 6, { width: colWidths[1], align: 'center' });
+        doc.text(prix.toFixed(2), colX[2], currentY + 6, { width: colWidths[2], align: 'center' });
+        doc.text(totalLigne.toFixed(2), colX[3], currentY + 6, { width: colWidths[3], align: 'right' });
+
+        currentY += rowHeight;
+      }
+
+      // Ligne de total général HT
+      currentY += 10;
+      // Vérifier pour le total aussi si ça dépasse la limite du contenu
+      if (currentY + rowHeight > contentBottomLimit) {
+        doc.addPage();
+        currentY = 50;
+      }
+      doc.rect(50, currentY, tableWidth, 25).fill('#D0D0D0');
+      doc.fontSize(10).font('Helvetica-Bold').fillColor('#000');
+      doc.text('TOTAL GÉNÉRAL HT:', colX[0], currentY + 8, { width: colWidths[0], align: 'left' });
+      doc.text(totalGeneralHT.toFixed(2) + ' DH', colX[3], currentY + 8, { width: colWidths[3] + colWidths[4], align: 'right' }); // Ajuster la largeur pour inclure TVA si nécessaire
+
+      currentY += 35; // Espace après le total
+
+      // --- Pied de page (sera dessiné une seule fois à la fin du document) ---
+      const drawFooter = () => {
+        const pageHeight = doc.page.height;
+        const bottomMargin = 40;
+        const footerHeight = 50; // Hauteur réservée au footer
+        const footerY = pageHeight - bottomMargin - footerHeight;
+
+        doc.rect(0, footerY, doc.page.width, footerHeight).fill('#FFFFFF'); // Fond blanc pour le footer
+        doc.strokeColor('#000').lineWidth(1.5);
+        doc.moveTo(50, footerY + 2).lineTo(545, footerY + 2).stroke(); // Ligne de séparation
+
+        doc.font('Helvetica').fontSize(7).fillColor('#000');
+        if (options.documentSociete && options.documentSociete.pied_page) {
+          const piedPageText = htmlToPlainText(options.documentSociete.pied_page);
+          doc.text(piedPageText, 50, footerY + 10, { width: 495, align: 'center' });
+        } else {
+          doc.text('SARL au capital 500 000.00 DHS - allée des orangers Derb Najat Rue 4 N°67 RDC Ain Sebaa Casablanca', 50, footerY + 10, { width: 495, align: 'center' });
+          doc.text('Tel: 0522672135 - Fax 0522672143 - RC120431TP37951465 IF: 1680027 Email: info@lesbasculesmondial.com', 50, footerY + 20, { width: 495, align: 'center' });
+          doc.text('RIB 007 780 000368400000157019 - CNSS: 6463814 ICE: 000079494000078', 50, footerY + 30, { width: 495, align: 'center' });
+        }
+      };
+
+      // Attacher le dessin du footer à l'événement 'end' du document
+      doc.on('end', () => {
+        drawFooter();
+      });
+
+      doc.end();
+
+    } catch (error) {
+      console.error('[genererInterventionPDF] Erreur dans la génération du PDF:', error);
+      console.error('[genererInterventionPDF] Stack:', error.stack);
+      reject(error);
+    }
+  });
+}
+
 module.exports = {
   genererCaissePDF,
   genererRapportCaissePDF,
   genererRapportCaissePDFByEmploye,
   genererCaissePDFByEmploye,
   genererBonDeCaissePDF,
-  genererRapportCaisseGroup2000_3000PDF
+  genererRapportCaisseGroup2000_3000PDF,
+  genererInterventionPDF,
+  htmlToPlainText // Exportez la fonction si elle est utilisée ailleurs
 };
-

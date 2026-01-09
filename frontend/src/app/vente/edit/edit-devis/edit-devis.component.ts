@@ -12,6 +12,27 @@ const QuillMention = require('quill-mention');
 declare var bootstrap: any;
 Quill.register('modules/mention', QuillMention.default);
 
+type DevisProduitLigne = {
+  id: number;
+  designation: string;
+  article_id: number;
+  pu: number;
+  qte: number;
+  reduc: number;
+  taxe: number;
+  total: number;
+  reducMode: 'pourcentage' | 'montant' | string;
+  articleSearch: string;
+  // Champs additionnels (optionnels) pour la nomenclature
+  isNomenclature?: boolean;
+  nomenclatureLines?: any[];
+  // Optionnel: pour tracer l'origine (produit composé)
+  compose_id?: number;
+  compose_qte?: number;
+  compose_pu?: number;
+  compose_designation?: string;
+};
+
 @Component({
   selector: 'app-edit-devis',
   templateUrl: './edit-devis.component.html',
@@ -20,7 +41,7 @@ Quill.register('modules/mention', QuillMention.default);
 export class EditDevisComponent implements OnInit {
   produits1: any[] = [];
   editFacturation = false;
-  mode: 'editor' | 'table' = 'table';
+  mode: 'editor' | 'table' | 'nomenclature' = 'table';
   ligneSelectionnee: number | null = null;
   modules: any = {};
   editInfos = false;
@@ -32,7 +53,7 @@ export class EditDevisComponent implements OnInit {
   commerciaux: any[] = [];
   filteredCommerciaux: any[] = [];
   selectedCommercial: any = null;
-  produitsOriginal: any[] = [];
+  produitsOriginal: DevisProduitLigne[] = [];
   reductionMode: 'percent' | 'amount' = 'percent';
   reducMode: 'pourcentage' | 'montant' = 'pourcentage';
   produitsSupprimes: number[] = [];
@@ -52,7 +73,7 @@ export class EditDevisComponent implements OnInit {
     description: 'Description du devis',
   };
 
-  produits = [{
+  produits: DevisProduitLigne[] = [{
     id: 0,
     designation: '',
     article_id: 0,
@@ -66,6 +87,8 @@ export class EditDevisComponent implements OnInit {
   }]
 
   filteredArticles: { [key: number]: any[] } = {};
+  produitsNomenclature: any[] = [];
+  filteredNomenclatureArticles: { [key: number]: any[] } = {};
 
   selectedInfo = {
     document_id: this.route.snapshot.paramMap.get('document_id')!,
@@ -124,6 +147,7 @@ export class EditDevisComponent implements OnInit {
     // Charger toutes les données en parallèle pour accélérer le chargement
     forkJoin({
       produits: this.baseService.getProduit(),
+      produitsNomenclature: this.baseService.getProduitsNomenclature().pipe(catchError(() => of({ data: [] }))),
       clients: this.baseService.getClient(),
       commerciaux: this.baseService.getCommercial(),
       devis: this.venteSerivce.getDevisById(id)
@@ -140,6 +164,9 @@ export class EditDevisComponent implements OnInit {
         }
         this.produits1 = produitsData;
         this.configureQuillModules();
+
+        const nomen = data.produitsNomenclature?.data || data.produitsNomenclature || [];
+        this.produitsNomenclature = Array.isArray(nomen) ? nomen : [];
         
         // Traitement des clients
         let clientsData = data.clients;
@@ -188,6 +215,13 @@ export class EditDevisComponent implements OnInit {
       subject: ['', Validators.required],
       body: ['', Validators.required]
     });
+  }
+
+  activerModeNomenclature() {
+    this.mode = 'nomenclature';
+    if (this.ligneSelectionnee === null && this.produits.length > 0) {
+      this.ligneSelectionnee = 0;
+    }
   }
 
   // Traitement des données du devis après chargement parallèle
@@ -600,6 +634,165 @@ export class EditDevisComponent implements OnInit {
     );
   }
 
+  onNomenclatureSearchChange(index: number, term: string) {
+    if (!term) {
+      this.filteredNomenclatureArticles[index] = [];
+      return;
+    }
+    term = term.trim().toLowerCase();
+    if (term.length === 0) {
+      this.filteredNomenclatureArticles[index] = [];
+      return;
+    }
+    this.filteredNomenclatureArticles[index] = this.produitsNomenclature.filter((article: any) =>
+      (article.article_nom && article.article_nom.toLowerCase().includes(term)) ||
+      (article.article_cod && article.article_cod.toLowerCase().includes(term))
+    ).slice(0, 50);
+  }
+
+  selectNomenclatureArticle(index: number, article: any) {
+    const composeId = article?.article_id;
+    if (!composeId) return;
+    const composeQty = Number(this.produits?.[index]?.qte) || 1;
+    const composePu = Number(article?.pu ?? 0) || 0;
+    const composeDesignation = article?.article_nom || '';
+
+    // Charger la nomenclature (composants) puis remplacer la ligne par les composants
+    this.baseService.getArticleNomenclature(composeId).pipe(
+      catchError(() => of({ data: [] }))
+    ).subscribe((res: any) => {
+      const lines = res?.data || res || [];
+      if (!Array.isArray(lines) || lines.length === 0) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Nomenclature vide',
+          text: 'Ce produit ne contient aucun composant de nomenclature.'
+        });
+        return;
+      }
+
+      // Créer d'abord la ligne pour le produit composé
+      const composeRow: DevisProduitLigne = {
+        id: 0,
+        designation: composeDesignation,
+        article_id: composeId,
+        pu: composePu,
+        qte: composeQty,
+        reduc: 0,
+        taxe: this.isClientExonerated ? 0 : 0.2,
+        total: composePu * composeQty,
+        reducMode: 'montant',
+        articleSearch: composeDesignation,
+        compose_id: composeId,
+        isNomenclature: true
+      };
+
+      // Ensuite créer les lignes pour les composants
+      const composantRows: DevisProduitLigne[] = lines.map((comp: any) => {
+        const composantId = comp?.Composant_id || comp?.composant_id;
+        const produitTrouve = this.produits1.find((x: any) => +x.article_id === +composantId);
+        const qte = Number(comp?.Quantite ?? comp?.quantite) || 0;
+        const pu = Number(produitTrouve?.pu ?? produitTrouve?.prix_vente ?? 0) || 0;
+        const taxe = Number(produitTrouve?.taxe ?? 0.2);
+        const designation = produitTrouve?.article_nom || comp?.composant_nom || '';
+
+        return {
+          id: 0,
+          designation,
+          article_id: composantId,
+          pu,
+          qte,
+          reduc: 0,
+          taxe: this.isClientExonerated ? 0 : taxe,
+          total: 0,
+          reducMode: 'montant',
+          articleSearch: designation,
+          compose_id: composeId,
+          compose_qte: composeQty,
+          compose_pu: composePu,
+          compose_designation: composeDesignation
+        };
+      }).filter((r: any) => !!r.article_id);
+
+      if (composantRows.length === 0) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Nomenclature invalide',
+          text: 'Aucun composant valide trouvé pour ce produit.'
+        });
+        return;
+      }
+
+      // Remplacer la ligne actuelle par : le produit composé + tous les composants
+      const allRows = [composeRow, ...composantRows];
+      this.produits.splice(index, 1, ...allRows);
+
+      // Réinitialiser les index de filtres (les indices ont changé)
+      this.filteredArticles = {};
+      this.filteredNomenclatureArticles = {};
+
+      // Recalculer les totaux des lignes insérées (composé + composants)
+      for (let j = index; j < index + allRows.length; j++) {
+        this.recalculateTotal(j);
+      }
+
+      // Afficher la liste pour voir tous les composants
+      this.mode = 'table';
+      this.ligneSelectionnee = index;
+      this.cdr.detectChanges();
+    });
+  }
+
+  imprimerPdfNormal() {
+    const id = this.route.snapshot.paramMap.get('document_id');
+    if (!id) {
+      Swal.fire({ icon: 'error', title: 'Erreur', text: 'document_id introuvable.' });
+      return;
+    }
+    this.emailService.generateDevisPDF(id, { printMode: 'normal' }).subscribe({
+      next: (res) => {
+        const url = res?.pdfUrl;
+        if (url) window.open(url, '_blank');
+        else Swal.fire({ icon: 'error', title: 'Erreur', text: 'Lien PDF non reçu.' });
+      },
+      error: () => Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors de la génération du PDF." })
+    });
+  }
+
+  async imprimerPdfNomenclature() {
+    const id = this.route.snapshot.paramMap.get('document_id');
+    if (!id) {
+      Swal.fire({ icon: 'error', title: 'Erreur', text: 'document_id introuvable.' });
+      return;
+    }
+
+    const composeIds = Array.from(new Set((this.produits || []).map(p => p.compose_id).filter((x: any) => !!x))) as number[];
+    // Pas de popup: on laisse le backend détecter automatiquement l'article composé à partir des lignes du devis.
+    // Si on a un hint en session (compose_id), on envoie quand même ses infos (quantité/prix) pour être exact.
+    let composeArticlePayload: any = null;
+    if (composeIds.length > 0) {
+      const composeId = composeIds[0]; // sans popup: prendre le premier
+      const firstRow = (this.produits || []).find(p => +(p.compose_id ?? 0) === +composeId);
+      const articleCompose = this.produitsNomenclature?.find((a: any) => +a.article_id === +composeId);
+      composeArticlePayload = {
+        article_id: composeId,
+        article_cod: articleCompose?.article_cod || '',
+        article_nom: articleCompose?.article_nom || firstRow?.compose_designation || '',
+        prix: Number(firstRow?.compose_pu ?? articleCompose?.pu ?? 0) || 0,
+        quantite: Number(firstRow?.compose_qte ?? 1) || 1
+      };
+    }
+
+    this.emailService.generateDevisPDF(id, { printMode: 'nomenclature', composeArticle: composeArticlePayload }).subscribe({
+      next: (res) => {
+        const url = res?.pdfUrl;
+        if (url) window.open(url, '_blank');
+        else Swal.fire({ icon: 'error', title: 'Erreur', text: 'Lien PDF non reçu.' });
+      },
+      error: () => Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors de la génération du PDF." })
+    });
+  }
+
   selectArticle(index: number, article: any) {
     this.produits[index].article_id = article.article_id;
     this.produits[index].articleSearch = article.article_nom;
@@ -706,6 +899,7 @@ export class EditDevisComponent implements OnInit {
       // - client exonéré valide -> taux_tva = 0
       // - sinon -> taux TVA standard = 0.2 (20%)
       const desiredTax = this.isClientExonerated ? 0 : 0.2;
+
       console.log('[EditDevisComponent][TVA] ligne', {
         i: i + 1,
         article_id: p.article_id,
@@ -798,7 +992,15 @@ export class EditDevisComponent implements OnInit {
           title: 'Enregistrement réussi',
           text: `${lignesAModifier.length} ligne(s) enregistrée(s) avec succès.`,
         });
-        this.produitsOriginal = JSON.parse(JSON.stringify(this.produits));
+        // Recharger le devis pour refléter les lignes insérées (nomenclature => plusieurs lignes)
+        this.venteSerivce.getDevisById(document_id).subscribe({
+          next: (updated: any) => {
+            this.processDevisData(updated?.data || updated);
+          },
+          error: () => {
+            this.produitsOriginal = JSON.parse(JSON.stringify(this.produits));
+          }
+        });
       },
       error: (err) => {
         Swal.fire({
@@ -931,7 +1133,8 @@ export class EditDevisComponent implements OnInit {
       Swal.fire({ icon: 'error', title: 'Erreur', text: 'document_id introuvable.' });
       return;
     }
-    this.emailService.generateDevisPDF(id).subscribe({
+    // Compat: ancien bouton "Voir commande" garde le comportement normal
+    this.emailService.generateDevisPDF(id, { withStamp, printMode: 'normal' }).subscribe({
       next: (res) => {
         const url = res?.pdfUrl;
         if (url) {

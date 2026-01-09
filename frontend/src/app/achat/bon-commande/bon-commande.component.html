@@ -48,7 +48,7 @@
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label for="Numero" class="form-label">Numéro</label>
-                                    <input id="NumeroBonCommande" type="text" class="form-control" [value]="getNextLigne()"
+                                    <input id="NumeroBonCommande" type="text" class="form-control" [value]="nextBonCommandeNumero"
                                         readonly />
                                 </div>
                                 <div class="col-md-6 mb-3">
@@ -205,7 +205,10 @@
                                             <button class="btn btn-sm btn-outline-info me-1" (click)="editBonCommande(bc.document_id)" title="Modifier">
                                                 <i class="fas fa-edit"></i>
                                             </button>
-                                            <button class="btn btn-sm btn-outline-danger me-1" (click)="deleteBonCommande(bc.document_id)" title="Supprimer">
+                                            <button class="btn btn-sm btn-outline-primary me-1" (click)="telechargerPDF(bc.document_id)" title="Télécharger PDF">
+                                                <i class="fas fa-file-pdf"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger" (click)="deleteBonCommande(bc.document_id)" title="Supprimer">
                                                 <i class="fas fa-trash-alt"></i>
                                             </button>
                                         </td>
