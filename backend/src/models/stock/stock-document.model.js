@@ -34,7 +34,7 @@ const getAllStockDocuments = async (options = {}) => {
       replacements.search = `%${search.trim()}%`;
     }
 
-    if (type && [20, 21, 22].includes(parseInt(type))) {
+    if (type && [10, 20, 21, 22].includes(parseInt(type))) {
       whereClause += whereClause ? ' AND ' : 'WHERE ';
       whereClause += 'sd.type = :type';
       replacements.type = parseInt(type);
@@ -341,7 +341,8 @@ const generateStockDocumentNumero = async (type, sequelizeConnection = null) => 
   const sequelize = sequelizeConnection || getConnection();
 
   const typeMap = {
-    20: 'INV', // Inventaire
+    10: 'INV', // Inventaire (nouveau type)
+    20: 'INV', // Inventaire (ancien type)
     21: 'ENT', // Entrée
     22: 'SOR'  // Sortie
   };

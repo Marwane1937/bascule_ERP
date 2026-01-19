@@ -1,8 +1,10 @@
-const sequelize = require('../../config/database');
+const { getConnection } = require('../../config/database');
+const sequelize = require('../../config/database'); // Garder pour compatibilité QueryTypes
 
-async function getArticleColumnSet(connectionToUse) {
+async function getArticleColumnSet(connectionToUse = null) {
+  const conn = connectionToUse || getConnection();
   try {
-    const cols = await connectionToUse.query(
+    const cols = await conn.query(
       `
         SELECT COLUMN_NAME
         FROM INFORMATION_SCHEMA.COLUMNS
@@ -18,7 +20,8 @@ async function getArticleColumnSet(connectionToUse) {
 
 // Récupérer tous les clients
 const getAllArticle = async (sequelizeConnection = null) => {
-  const connectionToUse = sequelizeConnection || sequelize;
+  // Utiliser la connexion passée, sinon getConnection() pour avoir la connexion active
+  const connectionToUse = sequelizeConnection || getConnection();
   const colSet = await getArticleColumnSet(connectionToUse);
   const hasQuantite = colSet.has('quantite');
   const hasPrixQuantite = colSet.has('prix_quantite');

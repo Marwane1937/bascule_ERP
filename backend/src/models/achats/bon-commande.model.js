@@ -140,12 +140,23 @@ const getBonCommandeById = async (id) => {
 
     const partId = bonCommande.part_id;
 
-    // Récupérer les détails du bon de commande (sans JOIN sur quill pour éviter les erreurs)
+    // Récupérer les détails du bon de commande (+ infos article pour afficher l'article même sans quill)
     let details = [];
     try {
       details = await sequelize.query(
-        `SELECT d.id, d.article_id, d.quantite, d.prix, d.taux_tva, d.remise, d.description, d.remise_montant
+        `SELECT 
+           d.id, 
+           d.article_id, 
+           d.quantite, 
+           d.prix, 
+           d.taux_tva, 
+           d.remise, 
+           d.description, 
+           d.remise_montant,
+           a.article_nom,
+           a.article_cod
          FROM achat_document_detail d
+         LEFT JOIN article a ON a.article_id = d.article_id
          WHERE d.document_id = :id
          ORDER BY d.id DESC`,
         {
@@ -171,7 +182,7 @@ const getBonCommandeById = async (id) => {
           const quillMap = new Map(quillData.map(q => [q.quill_id, q.designation]));
           details = details.map(d => ({
             ...d,
-            designation: quillMap.get(d.id) || d.description || ''
+            designation: quillMap.get(d.id) || d.description || d.article_nom || ''
           }));
         }
       } catch (quillError) {
@@ -179,7 +190,7 @@ const getBonCommandeById = async (id) => {
         // Continuer sans les données quill
         details = details.map(d => ({
           ...d,
-          designation: d.description || ''
+          designation: d.description || d.article_nom || ''
         }));
       }
     } catch (detailError) {
@@ -231,7 +242,10 @@ const getBonCommandeById = async (id) => {
         }
       );
     } catch (conditionError) {
-      console.warn('[getBonCommandeById] Table achat_document_info non accessible:', conditionError.message);
+      // Ne pas polluer les logs si la table n'existe pas dans cet environnement
+      if (!String(conditionError?.message || '').includes("Invalid object name 'achat_document_info'")) {
+        console.warn('[getBonCommandeById] Table achat_document_info non accessible:', conditionError.message);
+      }
       condition = [];
     }
 
@@ -245,7 +259,13 @@ const getBonCommandeById = async (id) => {
     console.error('[getBonCommandeById] Erreur générale:', error);
     throw error;
   }
+};  
+
+const formatToSqlDateTime = (value) => {
+  if (!value) return null;
+  return value.replace('T', ' ') + ':00';
 };
+
 
 // Ajouter un bon de commande (type = 2)
 const addBonCommande = async ({ numero, date, description, part_id, contact_id, etat, type, parent }) => {
@@ -275,12 +295,13 @@ const addBonCommande = async ({ numero, date, description, part_id, contact_id, 
       
       // Forcer type = 2 pour bon de commande
       const typeFinal = 2;
-      
+      const dateSql = formatToSqlDateTime(date);
+  
       let query = `INSERT INTO achat_document (numero, date, description, part_id, etat, type`;
-      let values = `:numero, :date, :description, :part_id, :etat, :type`;
+      let values = `:numero, :dateSql, :description, :part_id, :etat, :type`;
       let replacements = { 
         numero: numeroFinal, 
-        date, 
+        dateSql, 
         description, 
         part_id, 
        // contact_id: contact_id || null, 
@@ -398,9 +419,9 @@ const saveDetail = async (detailData) => {
   
   // Mode Insert
   const insertQuery = `
-    INSERT INTO achat_document_detail (document_id, article_id, quantite, prix, taux_tva, remise, remise_montant)
+    INSERT INTO achat_document_detail (document_id, article_id, quantite, prix, taux_tva, remise, remise_montant ,cr_date)
     OUTPUT INSERTED.id
-    VALUES (:document_id, :article_id, :quantite, :prix, :taux_tva, :remise, :remise_montant)
+    VALUES (:document_id, :article_id, :quantite, :prix, :taux_tva, :remise, :remise_montant , GETDATE())
   `;
   
   const [result] = await sequelize.query(insertQuery, {

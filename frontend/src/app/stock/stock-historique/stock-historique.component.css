@@ -147,6 +147,50 @@
   }
 }
 
+/* Styles pour les lignes d'inventaire */
+.inventory-row {
+  background-color: #fff3cd !important; /* Jaune clair pour inventaire */
+}
+
+.inventory-row:hover {
+  background-color: #ffe69c !important;
+}
+
+/* Styles pour les entrées (vert clair) */
+.entree-row {
+  background-color: #d1e7dd !important; /* Vert très clair pour entrées */
+}
+
+.entree-row:hover {
+  background-color: #badbcc !important;
+}
+
+/* Styles pour les sorties (rouge clair) */
+.sortie-row {
+  background-color: #f8d7da !important; /* Rouge très clair pour sorties */
+}
+
+.sortie-row:hover {
+  background-color: #f1aeb5 !important;
+}
+
+/* Quantités en gras */
+.table td strong {
+  font-weight: bold;
+}
+
+/* Couleurs pour les quantités */
+.text-success {
+  color: #198754 !important;
+}
+
+.text-danger {
+  color: #dc3545 !important;
+}
+
+
+
+
 
 
 

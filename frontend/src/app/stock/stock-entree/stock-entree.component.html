@@ -3,7 +3,7 @@
 
         <!-- En-tête -->
         <div class="page-header mb-4">
-            <h3 class="fw-bold text-dark">Entrée de Stock (Réceptions)</h3>
+            <h3 class="fw-bold text-dark">Entrée de Stock</h3>
             <ul class="breadcrumbs d-flex align-items-center">
                 <li class="nav-home me-2"><a href="#"><i class="fas fa-home text-primary"></i></a></li>
                 <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
@@ -13,6 +13,71 @@
             </ul>
         </div>
 
+        <!-- Boutons d'action -->
+        <div class="row mb-4">
+            <div class="col-12 d-flex justify-content-end gap-2 align-items-center" style="flex-wrap: nowrap !important; overflow-x: visible;">
+                <button type="button" class="btn btn-gradient px-4 py-2 shadow-sm" data-bs-toggle="modal"
+                    data-bs-target="#addEntreeStockModal">
+                    <i class="fas fa-plus me-2"></i> Ajouter une Entrée de Stock
+                </button>
+            </div>
+        </div>
+
+        <!-- Modal Formulaire d'ajout entrée de stock -->
+        <div class="modal fade" id="addEntreeStockModal" tabindex="-1" aria-labelledby="addEntreeStockModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content modal-elegant shadow">
+                    <div class="modal-header modal-header-custom">
+                        <h5 class="modal-title text-white" id="addEntreeStockModalLabel">➕ Nouvelle Entrée de Stock</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form [formGroup]="EntreeStockForm" (ngSubmit)="onSubmitEntreeStock()">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="NumeroEntreeStock" class="form-label">Numéro</label>
+                                    <input id="NumeroEntreeStock" type="text" class="form-control" [value]="nextEntreeStockNumero" readonly />
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="Description" class="form-label">Description</label>
+                                    <input type="text" class="form-control" id="description" placeholder="Ex: Entrée suite à réparation"
+                                        formControlName="description" />
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="Date" class="form-label">Date Création</label>
+                                    <input type="date" class="form-control" id="date" formControlName="date" />
+                                </div>
+                                <div class="col-md-6 mb-3 position-relative">
+                                    <label for="FournisseurSearch" class="form-label">Fournisseur <span class="text-danger">*</span></label>
+                                    <input id="FournisseurSearch" type="text" class="form-control" placeholder="Commencez à écrire..."
+                                        [(ngModel)]="searchFournisseur" (input)="onFournisseurSearchChange($any($event.target).value)"
+                                        [ngModelOptions]="{standalone: true}" autocomplete="off"
+                                        name="fournisseurSearch" 
+                                        [class.is-invalid]="EntreeStockForm.get('part_id')?.invalid && EntreeStockForm.get('part_id')?.touched" />
+                                    <input type="hidden" formControlName="part_id" />
+                                    <div *ngIf="EntreeStockForm.get('part_id')?.invalid && EntreeStockForm.get('part_id')?.touched" class="invalid-feedback">
+                                        Le fournisseur est requis
+                                    </div>
+                                    <ul *ngIf="searchFournisseur && filteredFournisseurs.length > 0" class="list-group position-absolute w-100 shadow"
+                                        style="max-height: 200px; overflow-y: auto; z-index: 1050;">
+                                        <li class="list-group-item list-group-item-action" *ngFor="let fournisseur of filteredFournisseurs"
+                                            (click)="selectFournisseur(fournisseur)">
+                                            {{ fournisseur.nom }}
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="modal-footer bg-light border-top">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save me-2"></i> Créer et Éditer
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Barre de recherche et filtres -->
         <div class="row mb-3">
@@ -31,7 +96,7 @@
                 </div>
             </div>
             <div class="col-md-2">
-                <select class="form-select" [(ngModel)]="pageSize" (change)="getAchatsNonEntres()">
+                <select class="form-select" [(ngModel)]="pageSize" (change)="getEntreesStock()">
                     <option [value]="10">10 par page</option>
                     <option [value]="25">25 par page</option>
                     <option [value]="50">50 par page</option>
@@ -80,14 +145,14 @@
             </div>
         </div>
 
-        <!-- Tableau des achats non entrés en stock -->
+        <!-- Tableau des entrées de stock -->
         <div class="row">
             <div class="col-md-12">
                 <div class="card border-0 shadow-sm rounded-3">
                     <div class="card-header bg-light">
                         <h5 class="mb-0">
-                            <i class="fas fa-shopping-cart"></i>
-                            Achats non entrés en stock ({{ totalRecords }})
+                            <i class="fas fa-boxes"></i>
+                            Entrées de Stock ({{ totalRecords }})
                         </h5>
                     </div>
                     <div class="card-body">
@@ -99,7 +164,7 @@
                                 <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
                                     <span class="visually-hidden">Chargement...</span>
                                 </div>
-                                <p class="mt-3 mb-0 text-muted fw-semibold">Chargement des achats...</p>
+                                <p class="mt-3 mb-0 text-muted fw-semibold">Chargement des entrées de stock...</p>
                             </div>
 
                             <table
@@ -129,7 +194,7 @@
                                 <tbody>
                                     <tr *ngIf="!loading && achats.length === 0">
                                         <td colspan="6" class="text-center py-4">
-                                            <p class="text-muted mb-0">Aucun achat non entré en stock trouvé</p>
+                                            <p class="text-muted mb-0">Aucune entrée de stock trouvée</p>
                                         </td>
                                     </tr>
 
@@ -141,17 +206,14 @@
                                                 {{ achat.numero }}
                                             </td>
                                             <td>{{ achat.date ? (achat.date | date:'dd/MM/yyyy') : '-' }}</td>
-                                            <td>{{ achat.fournisseur || '-' }}</td>
+                                            <td>{{ achat.client || achat.fournisseur || '-' }}</td>
                                             <td>{{ achat.description || '-' }}</td>
                                             <td class="text-end">{{ achat.total_ht | number:'1.2-2' }} dh</td>
                                             <td class="text-center">
-                                                <button class="btn btn-sm"
-                                                        [class.btn-secondary]="isButtonDisabled(achat.document_id)"
-                                                        [class.btn-success]="!isButtonDisabled(achat.document_id)"
-                                                        [disabled]="isButtonDisabled(achat.document_id)"
-                                                        (click)="$event.stopPropagation(); accepterEntreeStock(achat)">
-                                                    <i class="fas fa-check"></i>
-                                                    Accepter
+                                                <button class="btn btn-sm btn-primary"
+                                                        (click)="$event.stopPropagation(); editEntreeStock(achat.document_id)">
+                                                    <i class="fas fa-edit"></i>
+                                                    Modifier
                                                 </button>
                                             </td>
                                         </tr>
@@ -219,7 +281,7 @@
                         <!-- Pagination -->
                         <div *ngIf="!loading && totalPages > 1" class="d-flex justify-content-between align-items-center mt-3">
                             <div class="text-muted">
-                                Affichage de {{ getDisplayRange() }} sur {{ totalRecords }} achats
+                                Affichage de {{ getDisplayRange() }} sur {{ totalRecords }} entrées de stock
                             </div>
                             <nav>
                                 <ul class="pagination mb-0">

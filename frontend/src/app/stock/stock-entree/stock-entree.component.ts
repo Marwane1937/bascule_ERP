@@ -1,5 +1,8 @@
 import { Component, OnInit } from '@angular/core';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
 import { StockService } from 'src/app/service/stock.service';
+import { BaseService } from 'src/app/service/base.service';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -28,13 +31,139 @@ export class StockEntreeComponent implements OnInit {
   filterDateTo: string = '';
   filterFournisseur: string = '';
 
-  constructor(private stockService: StockService) { }
+  // Formulaire d'ajout
+  EntreeStockForm!: FormGroup;
+  fournisseurs: any[] = [];
+  filteredFournisseurs: any[] = [];
+  searchFournisseur: string = '';
+  nextEntreeStockNumero: string = 'ENT25-0001';
+
+  constructor(
+    private stockService: StockService,
+    private fb: FormBuilder,
+    private router: Router,
+    private baseService: BaseService
+  ) { }
 
   ngOnInit(): void {
-    this.getAchatsNonEntres();
+    this.getEntreesStock();
+    this.initForm();
+    this.loadFournisseurs();
+    this.loadNextEntreeStockNumero();
   }
 
-  getAchatsNonEntres(): void {
+  initForm(): void {
+    const today = new Date().toISOString().split('T')[0];
+    
+    this.EntreeStockForm = this.fb.group({
+      date: [today],
+      description: [''],
+      part_id: [0, Validators.required], // Fournisseur obligatoire
+      contact_id: [0],
+      fournisseurSearch: ['']
+    });
+  }
+
+  loadFournisseurs(): void {
+    this.baseService.getFournisseur().subscribe({
+      next: (response: any) => {
+        const data = response?.data || response || [];
+        this.fournisseurs = Array.isArray(data) ? data : [];
+        this.filteredFournisseurs = [...this.fournisseurs];
+      },
+      error: (error) => {
+        console.error('Erreur chargement fournisseurs:', error);
+      }
+    });
+  }
+
+  onFournisseurSearchChange(value: string): void {
+    this.searchFournisseur = value || '';
+    if (!value || value.trim() === '') {
+      this.filteredFournisseurs = [...this.fournisseurs];
+      return;
+    }
+    const searchLower = value.toLowerCase().trim();
+    this.filteredFournisseurs = this.fournisseurs.filter(f => 
+      f.nom?.toLowerCase().includes(searchLower)
+    );
+  }
+
+  selectFournisseur(fournisseur: any): void {
+    this.EntreeStockForm.patchValue({
+      part_id: fournisseur.part_id,
+      fournisseurSearch: fournisseur.nom
+    });
+    this.filteredFournisseurs = [];
+    this.searchFournisseur = fournisseur.nom;
+  }
+
+  loadNextEntreeStockNumero(): void {
+    this.stockService.getNextEntreeStockNumero().subscribe({
+      next: (response: any) => {
+        if (response?.success && response?.data?.numero) {
+          this.nextEntreeStockNumero = response.data.numero;
+        }
+      },
+      error: (error) => {
+        console.error('Erreur chargement numéro:', error);
+      }
+    });
+  }
+
+  onSubmitEntreeStock(): void {
+    if (this.EntreeStockForm.valid) {
+      const formValue = {
+        ...this.EntreeStockForm.value
+      };
+      
+      this.stockService.createEntreeStock(formValue).subscribe({
+        next: (response: any) => {
+          Swal.fire({
+            icon: 'success',
+            title: 'Succès',
+            text: `Entrée de stock ${response.numero || ''} créée avec succès !`,
+            timer: 2000,
+            showConfirmButton: false
+          });
+          
+          // Fermer la modal
+          const modal = document.getElementById('addEntreeStockModal');
+          if (modal) {
+            const bsModal = (window as any).bootstrap?.Modal?.getInstance(modal);
+            if (bsModal) {
+              bsModal.hide();
+            }
+          }
+          
+          // Rediriger vers la page d'édition
+          if (response.id || response.stockId) {
+            this.router.navigate(['/Edit-EntreeStock', response.id || response.stockId]);
+          } else {
+            this.EntreeStockForm.reset();
+            this.initForm();
+            this.loadNextEntreeStockNumero();
+            this.getEntreesStock();
+          }
+        },
+        error: (err) => {
+          Swal.fire({
+            icon: 'error',
+            title: 'Erreur',
+            text: `Une erreur s'est produite lors de la création de l'entrée de stock: ${err.error?.message || err.message || 'Erreur inconnue'}`
+          });
+        }
+      });
+    } else {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Formulaire invalide',
+        text: 'Veuillez remplir tous les champs requis.'
+      });
+    }
+  }
+
+  getEntreesStock(): void {
     this.loading = true;
 
     // Nettoyer le cache des détails quand on change de page
@@ -59,7 +188,7 @@ export class StockEntreeComponent implements OnInit {
       options.fournisseur = this.filterFournisseur.trim();
     }
 
-    this.stockService.getAchatsNonEntresStock(options).subscribe({
+    this.stockService.getEntreesStock(options).subscribe({
       next: (response: any) => {
         this.achats = response.data || [];
         this.totalRecords = response.pagination?.total || 0;
@@ -67,8 +196,8 @@ export class StockEntreeComponent implements OnInit {
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement achats:', error);
-        Swal.fire('Erreur', 'Erreur lors du chargement des achats', 'error');
+        console.error('Erreur chargement entrées de stock:', error);
+        Swal.fire('Erreur', 'Erreur lors du chargement des entrées de stock', 'error');
         this.loading = false;
       },
     });
@@ -76,17 +205,17 @@ export class StockEntreeComponent implements OnInit {
 
   onSearch(): void {
     this.currentPage = 1;
-    this.getAchatsNonEntres();
+    this.getEntreesStock();
   }
 
   onFilterChange(): void {
     this.currentPage = 1;
-    this.getAchatsNonEntres();
+    this.getEntreesStock();
   }
 
   onPageChange(page: number): void {
     this.currentPage = page;
-    this.getAchatsNonEntres();
+    this.getEntreesStock();
   }
 
   onSort(column: string): void {
@@ -97,7 +226,7 @@ export class StockEntreeComponent implements OnInit {
       this.sortDirection = 'DESC';
     }
     this.currentPage = 1;
-    this.getAchatsNonEntres();
+    this.getEntreesStock();
   }
 
   getSortIcon(column: string): string {
@@ -117,7 +246,7 @@ export class StockEntreeComponent implements OnInit {
     this.filterDateTo = '';
     this.filterFournisseur = '';
     this.currentPage = 1;
-    this.getAchatsNonEntres();
+    this.getEntreesStock();
   }
 
   toggleRowExpansion(achat: any, index: number): void {
@@ -156,6 +285,10 @@ export class StockEntreeComponent implements OnInit {
 
   isLoadingDetails(achatId: number): boolean {
     return this.loadingDetails[achatId] || false;
+  }
+
+  editEntreeStock(documentId: number): void {
+    this.router.navigate(['/Edit-EntreeStock', documentId]);
   }
 
   isButtonDisabled(achatId: number): boolean {
@@ -201,7 +334,7 @@ export class StockEntreeComponent implements OnInit {
             delete this.achatDetails[achat.document_id];
             delete this.loadingDetails[achat.document_id];
 
-            this.getAchatsNonEntres();
+            this.getEntreesStock();
           },
           error: (error) => {
             console.error('Erreur création entrée stock:', error);

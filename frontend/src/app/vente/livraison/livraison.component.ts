@@ -131,10 +131,16 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     // Récupérer la date du jour au format YYYY-MM-DD
-    const today = new Date().toISOString().split('T')[0];
-
-    this.LivraisonForm.reset({
-      date: today, // Date du jour par défaut
+   // const today = new Date().toISOString().split('T')[0];
+   const now = new Date();
+   const pad = (n: number) => n.toString().padStart(2, '0');
+   const datetimeLocal =
+     `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T` +
+     `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+   
+    
+    this.LivraisonForm.reset({ 
+      date: datetimeLocal, // Date du jour par défaut
       description: '',
       part_id: 0,
       contact_id: 0,

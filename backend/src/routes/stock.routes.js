@@ -38,8 +38,22 @@ router.get('/documents/:id', stockController.getStockDocumentById);
 // Routes pour créer des mouvements de stock
 router.post('/entree-achat', stockController.createEntreeStockFromAchat);
 router.post('/sortie-vente', stockController.createSortieStockFromVente);
-router.post('/sortie-stock', stockController.createSortieStock);
+// router.post('/sortie-stock', stockController.createSortieStock); // Déplacé vers sortie-stock.routes.js
 router.post('/inventaire', stockController.createInventaire);
+
+// Routes pour inventaire (type=20)
+router.post('/inventaire-header', stockController.createInventaireHeader);
+router.get('/inventaire/:id', stockController.getInventaireById);
+router.get('/stock-calcul', stockController.getStockCalculData);
+// Routes export doivent être AVANT la route générale /historique
+router.get('/historique/export-pdf', stockController.exportStockHistoriquePDF);
+router.get('/historique/export-excel', stockController.exportStockHistoriqueExcel);
+router.get('/historique', stockController.getStockHistorique);
+router.post('/inventaire/:id/lignes', stockController.saveInventaireLignes);
+router.delete('/inventaire/:id/lignes', stockController.viderInventaireLignes);
+router.put('/inventaire/:id/date', stockController.updateInventaireDate);
+router.post('/inventaire/:id/valider', stockController.validerInventaire);
+router.post('/inventaire/:id/validation-finale', stockController.validationFinaleInventaire);
 
 module.exports = router;
 

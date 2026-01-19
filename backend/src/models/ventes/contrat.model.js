@@ -492,9 +492,9 @@ const saveDetailStock = async (detail, sequelizeConnection = null) => {
   const descriptionLimited = (description || '').substring(0, 200);
 
   const query = `
-    INSERT INTO stock_detail (stock_id, article_id, quantite, prix, taux_tva, description, sens, remise, remise_montant)
+    INSERT INTO stock_detail (stock_id, article_id, quantite, prix, taux_tva, description, sens, remise, remise_montant , cr_date)
     OUTPUT INSERTED.id
-    VALUES (:stock_id, :article_id, :quantite, :prix, :taux_tva, :description, :sens, :remise, :remise_montant)
+    VALUES (:stock_id, :article_id, :quantite, :prix, :taux_tva, :description, :sens, :remise, :remise_montant , GETDATE())
   `;
 
   const replacements = {

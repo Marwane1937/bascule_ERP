@@ -7,6 +7,11 @@ const getClients = async (req, res) => {
   try {
     console.log('[getClients Controller] 📥 Requête reçue pour récupérer les clients');
     const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    console.log(`[getClients Controller] 🔍 Connexion utilisée:`, {
+      database: sequelize.config?.database || 'unknown',
+      hasReqSequelize: !!req.sequelize,
+      isCurrentConnection: sequelize === databaseSwitchService.currentConnection ? 'OUI' : 'NON'
+    });
     const clients = await clientService.getClients(sequelize);
     console.log(`[getClients Controller] ✅ ${clients?.length || 0} clients récupérés`);
     res.json({

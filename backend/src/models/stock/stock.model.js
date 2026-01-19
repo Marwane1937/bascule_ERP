@@ -842,106 +842,99 @@ const getEtatStock = async (options = {}) => {
     const {
       page = 1,
       pageSize = 25,
-      orderBy = 'article_nom',
-      orderDirection = 'ASC',
-      search = '',
-      depotId = 1,
-      stockMinimum = null
+      orderBy = 'date',
+      orderDirection = 'DESC',
+      search = ''
     } = options;
 
     const safePage = parseInt(page) || 1;
     const safePageSize = parseInt(pageSize) || 25;
     const offset = (safePage - 1) * safePageSize;
 
-    const validColumns = ['article_id', 'article_cod', 'article_nom', 'stock_actuel', 'valeur_stock'];
-    const safeOrderBy = validColumns.includes(orderBy) ? orderBy : 'article_nom';
-    const safeOrderDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-
-    let whereClause = '';
+    let whereClause = 'quantite <> 0';
     const replacements = {};
 
     if (search && search.trim()) {
-      whereClause = `WHERE (
-        a.article_cod LIKE :search
-        OR a.article_nom LIKE :search
-      )`;
+      whereClause += ' AND (article_cod LIKE :search OR article_nom LIKE :search)';
       replacements.search = `%${search.trim()}%`;
     }
 
-    // Requête pour l'état détaillé du stock
-    const query = `
-      SELECT
-        article_id,
-        article_cod,
-        article_nom,
-        categorie_nom,
-        unite_nom,
-        stock_actuel,
-        prix_moyen,
-        valeur_stock,
-        stock_minimum,
-        stock_maximum,
-        total_count
-      FROM (
-        SELECT
-          a.article_id,
-          a.article_cod,
-          a.article_nom,
-          cat.nom AS categorie_nom,
-          u.nom AS unite_nom,
-          ISNULL(stock_calc.stock_actuel, 0) AS stock_actuel,
-          ISNULL(stock_calc.prix_moyen, 0) AS prix_moyen,
-          ISNULL(stock_calc.valeur_stock, 0) AS valeur_stock,
-          ISNULL(ast.stock_min, 0) AS stock_minimum,
-          ISNULL(ast.stock_max, 0) AS stock_maximum,
-          COUNT(*) OVER() AS total_count,
-          ROW_NUMBER() OVER (ORDER BY a.${safeOrderBy} ${safeOrderDirection}) AS RowNum
-        FROM article a
-        LEFT JOIN famille cat ON cat.id = a.famille
-        LEFT JOIN unite u ON u.id = a.unite_id
-        LEFT JOIN article_stock ast ON ast.article_id = a.article_id AND ast.depot_id = :depotId
-        LEFT JOIN (
-          SELECT
-            sdd.article_id,
-            SUM(sdd.quantite * sdd.sens) AS stock_actuel,
-            CASE
-              WHEN SUM(sdd.quantite * sdd.sens) > 0 THEN
-                SUM(sdd.quantite * sdd.prix * sdd.sens) / SUM(sdd.quantite * sdd.sens)
-              ELSE 0
-            END AS prix_moyen,
-            SUM(sdd.quantite * sdd.prix * sdd.sens) AS valeur_stock
-          FROM stock_document_detail sdd
-          INNER JOIN stock_document sd ON sd.id = sdd.stock_id
-          WHERE sd.etat = 1
-          GROUP BY sdd.article_id
-        ) stock_calc ON stock_calc.article_id = a.article_id
-        ${whereClause}
-      ) AS PaginatedResults
-      WHERE RowNum > ${offset} AND RowNum <= ${offset + safePageSize}
-      ORDER BY RowNum
+    // Requête pour compter le total
+    const countQuery = `
+      SELECT COUNT(*) as total_count
+      FROM v_stock_final
+      WHERE ${whereClause}
     `;
 
-    replacements.depotId = depotId;
+    // Validation des colonnes pour le tri
+    const validColumns = ['date', 'article_cod', 'article_nom', 'quantite', 'prix_achat', 'prix_vente', 'mouvement'];
+    const safeOrderBy = validColumns.includes(orderBy) ? orderBy : 'date';
+    const safeOrderDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+    // Pour le tri sur quantite calculée, on doit l'ajouter dans l'ORDER BY
+    let orderByClause = '';
+    if (safeOrderBy === 'quantite') {
+      orderByClause = `ORDER BY CASE WHEN mouvement = 'Entrée' THEN quantite WHEN mouvement = 'Sortie' THEN quantite * (-1) END ${safeOrderDirection}`;
+    } else {
+      orderByClause = `ORDER BY ${safeOrderBy} ${safeOrderDirection}`;
+    }
+
+    // Requête principale pour l'état de stock depuis v_stock_final
+    const query = `
+      SELECT 
+        date,
+        article_cod,
+        article_nom,
+        CASE 
+          WHEN mouvement = 'Entrée' THEN quantite 
+          WHEN mouvement = 'Sortie' THEN quantite * (-1) 
+        END as quantite,
+        prix_achat,
+        prix_vente,
+        mouvement,
+        total_count
+      FROM (
+        SELECT 
+          date,
+          article_cod,
+          article_nom,
+          quantite,
+          prix_achat,
+          prix_vente,
+          mouvement,
+          COUNT(*) OVER() AS total_count,
+          ROW_NUMBER() OVER (${orderByClause}) AS RowNum
+        FROM v_stock_final
+        WHERE ${whereClause}
+      ) AS PaginatedResults
+      WHERE RowNum > ${offset} AND RowNum <= ${offset + safePageSize}
+      ${orderByClause}
+    `;
 
     let results = [];
     let total = 0;
 
     try {
+      // Compter le total
+      const countResult = await sequelize.query(countQuery, {
+        replacements: Object.keys(replacements).length > 0 ? replacements : undefined,
+        type: sequelize.QueryTypes.SELECT
+      });
+      total = parseInt(countResult[0]?.total_count) || 0;
+
+      // Récupérer les données
       const dataQueryResult = await sequelize.query(query, {
         replacements: Object.keys(replacements).length > 0 ? replacements : undefined,
         type: sequelize.QueryTypes.SELECT
       });
 
       if (Array.isArray(dataQueryResult)) {
-        results = dataQueryResult;
+        results = dataQueryResult.map(({ total_count, ...rest }) => rest);
       } else {
-        results = dataQueryResult ? [dataQueryResult] : [];
-      }
-
-      // Extraire le total depuis la première ligne
-      if (results.length > 0) {
-        total = parseInt(results[0].total_count) || 0;
-        results = results.map(({ total_count, ...rest }) => rest);
+        results = dataQueryResult ? [{ total_count: undefined, ...dataQueryResult }] : [];
+        if (results.length > 0 && results[0].total_count !== undefined) {
+          delete results[0].total_count;
+        }
       }
     } catch (dataError) {
       console.error('[getEtatStock] Erreur:', dataError.message);
@@ -966,7 +959,7 @@ const getEtatStock = async (options = {}) => {
 };
 
 /**
- * Récupérer la fiche de stock (historique des mouvements) pour un article
+ * Récupérer la fiche de stock (historique des mouvements) depuis v_fiche_stock
  */
 const getFicheStock = async (articleId, options = {}) => {
   const sequelize = getConnection();
@@ -975,135 +968,150 @@ const getFicheStock = async (articleId, options = {}) => {
       page = 1,
       pageSize = 50,
       dateFrom = null,
-      dateTo = null
+      dateTo = null,
+      article_nom = null,
+      article = null,
+      article_id = null
     } = options;
 
     const safePage = parseInt(page) || 1;
     const safePageSize = parseInt(pageSize) || 50;
     const offset = (safePage - 1) * safePageSize;
 
-    let whereClause = 'sdd.article_id = :articleId';
-    const replacements = { articleId };
+    let whereConditions = [];
+    const replacements = {};
 
-    if (dateFrom) {
-      whereClause += ' AND sd.date >= :dateFrom';
+    // Filtre par date (between)
+    if (dateFrom && dateTo) {
+      whereConditions.push('CONVERT(DATE, date) BETWEEN CONVERT(DATE, :dateFrom) AND CONVERT(DATE, :dateTo)');
       replacements.dateFrom = dateFrom;
-    }
-
-    if (dateTo) {
-      whereClause += ' AND sd.date <= :dateTo';
+      replacements.dateTo = dateTo;
+    } else if (dateFrom) {
+      whereConditions.push('CONVERT(DATE, date) >= CONVERT(DATE, :dateFrom)');
+      replacements.dateFrom = dateFrom;
+    } else if (dateTo) {
+      whereConditions.push('CONVERT(DATE, date) <= CONVERT(DATE, :dateTo)');
       replacements.dateTo = dateTo;
     }
 
-    // Requête pour la fiche de stock
+    // Filtre par article_id (priorité ABSOLUE - si article_id est fourni, ignorer les autres filtres article)
+    if (article_id) {
+      // Convertir en nombre pour s'assurer que c'est un entier
+      const articleIdNum = parseInt(article_id, 10);
+      console.log('[getFicheStock] article_id reçu (string):', article_id, 'converti en:', articleIdNum);
+      if (!isNaN(articleIdNum) && articleIdNum > 0) {
+        // La vue v_fiche_stock doit avoir une colonne article_id
+        // Si la vue n'a pas cette colonne, il faudra la modifier
+        whereConditions.push('article_id = :article_id');
+        replacements.article_id = articleIdNum;
+        console.log('[getFicheStock] Filtre article_id ajouté:', articleIdNum);
+        // Ne PAS ajouter les autres filtres article si article_id est fourni
+      } else {
+        console.log('[getFicheStock] article_id invalide:', article_id);
+      }
+    } else {
+      // Appliquer les filtres texte SEULEMENT si article_id n'est pas fourni
+      // Filtre par article_nom
+      if (article_nom && article_nom.trim()) {
+        whereConditions.push('article_nom LIKE :article_nom');
+        replacements.article_nom = `%${article_nom.trim()}%`;
+      }
+
+      // Filtre par article (code ou nom)
+      if (article && article.trim()) {
+        whereConditions.push('(article_cod LIKE :article OR article_nom LIKE :article)');
+        replacements.article = `%${article.trim()}%`;
+      }
+    }
+
+    const whereClause = whereConditions.length > 0 
+      ? `WHERE ${whereConditions.join(' AND ')}` 
+      : '';
+
+    // Requête pour compter le total
+    const countQuery = `
+      SELECT COUNT(*) as total_count
+      FROM v_fiche_stock
+      ${whereClause}
+    `;
+
+    // Requête principale pour la fiche de stock depuis v_fiche_stock
     const query = `
-      SELECT
-        mouvement_id,
-        date_mouvement,
-        type_mouvement,
-        numero_document,
-        description,
-        quantite_entree,
-        quantite_sortie,
-        stock_apres_mouvement,
-        prix_unitaire,
-        valeur_mouvement,
-        partenaire_nom,
-        utilisateur_nom,
+      SELECT 
+        depot,
+        date,
+        type,
+        numero,
+        tiers,
+        entree,
+        sortie,
+        solde,
         total_count
       FROM (
-        SELECT
-          sd.id AS mouvement_id,
-          sd.date AS date_mouvement,
-          CASE sd.type
-            WHEN 20 THEN 'Inventaire'
-            WHEN 21 THEN 'Entrée'
-            WHEN 22 THEN 'Sortie'
-            ELSE 'Autre'
-          END AS type_mouvement,
-          sd.numero AS numero_document,
-          sd.description,
-          CASE WHEN sdd.sens = 1 THEN sdd.quantite ELSE 0 END AS quantite_entree,
-          CASE WHEN sdd.sens = -1 THEN ABS(sdd.quantite) ELSE 0 END AS quantite_sortie,
-          SUM(sdd.quantite * sdd.sens) OVER (
-            PARTITION BY sdd.article_id
-            ORDER BY sd.date, sd.id
-            ROWS UNBOUNDED PRECEDING
-          ) AS stock_apres_mouvement,
-          sdd.prix AS prix_unitaire,
-          (sdd.quantite * sdd.prix * sdd.sens) AS valeur_mouvement,
-          COALESCE(p.nom, sd.part_ref) AS partenaire_nom,
-          u.nom AS utilisateur_nom,
+        SELECT 
+          depot,
+          date,
+          type,
+          numero,
+          tiers,
+          entree,
+          sortie,
+          solde,
           COUNT(*) OVER() AS total_count,
-          ROW_NUMBER() OVER (ORDER BY sd.date DESC, sd.id DESC) AS RowNum
-        FROM stock_document_detail sdd
-        INNER JOIN stock_document sd ON sd.id = sdd.stock_id
-        LEFT JOIN partenaire p ON p.part_id = sd.part_id
-        LEFT JOIN utilisateur u ON u.id = sd.user_id
-        WHERE ${whereClause} AND sd.etat = 1
+          ROW_NUMBER() OVER (ORDER BY date asc) AS RowNum
+        FROM v_fiche_stock
+        ${whereClause}
       ) AS PaginatedResults
       WHERE RowNum > ${offset} AND RowNum <= ${offset + safePageSize}
-      ORDER BY RowNum
+      ORDER BY date asc
     `;
 
     let results = [];
     let total = 0;
 
     try {
+      // Debug: afficher la requête et les paramètres
+     // if (article_id) {
+       // console.log('[getFicheStock] Filtre article_id reçu:', article_id);
+       // console.log('[getFicheStock] WHERE clause:', whereClause);
+       //  console.log('[getFicheStock] Replacements:', replacements);
+    //  }
+
+      // Compter le total
+      const countResult = await sequelize.query(countQuery, {
+        replacements: Object.keys(replacements).length > 0 ? replacements : undefined,
+        type: sequelize.QueryTypes.SELECT
+      });
+      total = parseInt(countResult[0]?.total_count) || 0;
+
+      console.log('[getFicheStock] Total trouvé avec filtre article_id:', total);
+
+      // Récupérer les données
       const dataQueryResult = await sequelize.query(query, {
         replacements: Object.keys(replacements).length > 0 ? replacements : undefined,
         type: sequelize.QueryTypes.SELECT
       });
 
-      if (Array.isArray(dataQueryResult)) {
-        results = dataQueryResult;
-      } else {
-        results = dataQueryResult ? [dataQueryResult] : [];
-      }
+      console.log('[getFicheStock] Résultats trouvés:', dataQueryResult?.length || 0, 'lignes');
 
-      // Extraire le total depuis la première ligne
-      if (results.length > 0) {
-        total = parseInt(results[0].total_count) || 0;
-        results = results.map(({ total_count, ...rest }) => rest);
+      if (Array.isArray(dataQueryResult)) {
+        results = dataQueryResult.map(({ total_count, ...rest }) => rest);
+      } else {
+        results = dataQueryResult ? [{ total_count: undefined, ...dataQueryResult }] : [];
+        if (results.length > 0 && results[0].total_count !== undefined) {
+          delete results[0].total_count;
+        }
       }
     } catch (dataError) {
-      console.error('[getFicheStock] Erreur:', dataError.message);
+      console.error('[getFicheStock] Erreur SQL:', dataError.message);
+      console.error('[getFicheStock] Stack:', dataError.stack);
       throw new Error(`Erreur lors de la récupération de la fiche de stock: ${dataError.message || 'Erreur inconnue'}`);
     }
 
     const totalPages = Math.ceil(total / safePageSize) || 1;
 
-    // Récupérer les informations de l'article
-    const articleQuery = `
-      SELECT
-        a.article_id,
-        a.article_cod,
-        a.article_nom,
-        cat.nom AS categorie_nom,
-        u.nom AS unite_nom,
-        ISNULL(current_stock.stock_actuel, 0) AS stock_actuel
-      FROM article a
-      LEFT JOIN famille cat ON cat.id = a.famille
-      LEFT JOIN unite u ON u.id = a.unite_id
-      LEFT JOIN (
-        SELECT
-          sdd.article_id,
-          SUM(sdd.quantite * sdd.sens) AS stock_actuel
-        FROM stock_document_detail sdd
-        INNER JOIN stock_document sd ON sd.id = sdd.stock_id
-        WHERE sd.etat = 1
-        GROUP BY sdd.article_id
-      ) current_stock ON current_stock.article_id = a.article_id
-      WHERE a.article_id = :articleId
-    `;
-
-    const articleInfo = await sequelize.query(articleQuery, {
-      replacements: { articleId },
-      type: sequelize.QueryTypes.SELECT
-    });
-
     return {
-      article: articleInfo[0] || null,
+      article: null, // Plus besoin d'articleInfo si on utilise v_fiche_stock
       mouvements: results,
       pagination: {
         page: safePage,
@@ -1127,114 +1135,102 @@ const getChiffreAffairesArticles = async (options = {}) => {
     const {
       page = 1,
       pageSize = 25,
-      orderBy = 'chiffre_affaires',
+      orderBy = 'ca',
       orderDirection = 'DESC',
-      search = '',
-      dateFrom = null,
-      dateTo = null
+      search = ''
     } = options;
 
     const safePage = parseInt(page) || 1;
     const safePageSize = parseInt(pageSize) || 25;
     const offset = (safePage - 1) * safePageSize;
 
-    const validColumns = ['article_id', 'article_cod', 'article_nom', 'quantite_vendue', 'chiffre_affaires', 'marge_moyenne'];
-    const safeOrderBy = validColumns.includes(orderBy) ? orderBy : 'chiffre_affaires';
+    // Mapping des colonnes pour le tri (nom frontend -> nom SQL)
+    const columnMapping = {
+      'ca': 'chiffre_affaire',
+      'article_cod': 'article_cod',
+      'article_nom': 'article_nom',
+      'quantite_vendue': 'quantite_vendue'
+    };
+    
+    const validColumns = ['article_cod', 'article_nom', 'quantite_vendue', 'ca'];
+    const safeOrderBy = validColumns.includes(orderBy) ? orderBy : 'ca';
     const safeOrderDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    
+    // Utiliser le nom SQL réel pour l'ORDER BY - validation stricte
+    let sqlOrderBy = columnMapping[safeOrderBy];
+    if (!sqlOrderBy) {
+      sqlOrderBy = 'chiffre_affaire'; // Valeur par défaut
+    }
+    
+    // Validation supplémentaire : s'assurer que la colonne existe dans la vue
+    const validSqlColumns = ['chiffre_affaire', 'article_cod', 'article_nom', 'quantite_vendue'];
+    if (!validSqlColumns.includes(sqlOrderBy)) {
+      sqlOrderBy = 'chiffre_affaire';
+    }
 
     let whereClause = '';
     const replacements = {};
 
+    // Recherche uniquement par article (code ou nom)
     if (search && search.trim()) {
-      whereClause = `WHERE (
-        a.article_cod LIKE :search
-        OR a.article_nom LIKE :search
-      )`;
+      whereClause = 'WHERE (article_cod LIKE :search OR article_nom LIKE :search)';
       replacements.search = `%${search.trim()}%`;
     }
 
-    // Filtres de date
-    let dateFilter = '';
-    if (dateFrom) {
-      dateFilter += ' AND s.date >= :dateFrom';
-      replacements.dateFrom = dateFrom;
-    }
-    if (dateTo) {
-      dateFilter += ' AND s.date <= :dateTo';
-      replacements.dateTo = dateTo;
-    }
+    // Requête pour compter le total
+    const countQuery = `
+      SELECT COUNT(*) as total_count
+      FROM v_ca_article
+      ${whereClause}
+    `;
 
-    // Requête pour le chiffre d'affaires par article
+    // Requête principale pour le chiffre d'affaires depuis v_ca_article
     const query = `
-      SELECT
-        article_id,
+      SELECT 
         article_cod,
         article_nom,
-        categorie_nom,
         quantite_vendue,
-        chiffre_affaires,
-        prix_moyen_vente,
-        marge_moyenne,
+        chiffre_affaire as ca,
         total_count
       FROM (
-        SELECT
-          a.article_id,
-          a.article_cod,
-          a.article_nom,
-          cat.nom AS categorie_nom,
-          ISNULL(ca_stats.quantite_vendue, 0) AS quantite_vendue,
-          ISNULL(ca_stats.chiffre_affaires, 0) AS chiffre_affaires,
-          ISNULL(ca_stats.prix_moyen_vente, 0) AS prix_moyen_vente,
-          ISNULL(ca_stats.marge_moyenne, 0) AS marge_moyenne,
+        SELECT 
+          article_cod,
+          article_nom,
+          quantite_vendue,
+          chiffre_affaire,
           COUNT(*) OVER() AS total_count,
-          ROW_NUMBER() OVER (ORDER BY ISNULL(ca_stats.${safeOrderBy}, 0) ${safeOrderDirection}) AS RowNum
-        FROM article a
-        LEFT JOIN famille cat ON cat.id = a.famille
-        LEFT JOIN (
-          SELECT
-            sd.article_id,
-            SUM(ABS(sd.quantite)) AS quantite_vendue,
-            SUM(sd.quantite * sd.prix) AS chiffre_affaires,
-            CASE
-              WHEN SUM(ABS(sd.quantite)) > 0 THEN
-                SUM(sd.quantite * sd.prix) / SUM(ABS(sd.quantite))
-              ELSE 0
-            END AS prix_moyen_vente,
-            CASE
-              WHEN SUM(sd.quantite * sd.prix) > 0 THEN
-                AVG(sd.taux_tva)
-              ELSE 0
-            END AS marge_moyenne
-          FROM stock_detail sd
-          INNER JOIN stock s ON s.id = sd.stock_id
-          WHERE s.type = 2 AND s.facture_id IS NOT NULL ${dateFilter}
-          GROUP BY sd.article_id
-        ) ca_stats ON ca_stats.article_id = a.article_id
+          ROW_NUMBER() OVER (ORDER BY ${sqlOrderBy} ${safeOrderDirection}) AS RowNum
+        FROM v_ca_article
         ${whereClause}
       ) AS PaginatedResults
       WHERE RowNum > ${offset} AND RowNum <= ${offset + safePageSize}
-      ORDER BY RowNum
+      ORDER BY ${sqlOrderBy} ${safeOrderDirection}
     `;
 
     let results = [];
     let total = 0;
 
     try {
+      // Compter le total
+      const countResult = await sequelize.query(countQuery, {
+        replacements: Object.keys(replacements).length > 0 ? replacements : undefined,
+        type: sequelize.QueryTypes.SELECT
+      });
+      total = parseInt(countResult[0]?.total_count) || 0;
+
+      // Récupérer les données
       const dataQueryResult = await sequelize.query(query, {
         replacements: Object.keys(replacements).length > 0 ? replacements : undefined,
         type: sequelize.QueryTypes.SELECT
       });
 
       if (Array.isArray(dataQueryResult)) {
-        results = dataQueryResult;
+        results = dataQueryResult.map(({ total_count, ...rest }) => rest);
       } else {
-        results = dataQueryResult ? [dataQueryResult] : [];
-      }
-
-      // Extraire le total depuis la première ligne
-      if (results.length > 0) {
-        total = parseInt(results[0].total_count) || 0;
-        results = results.map(({ total_count, ...rest }) => rest);
+        results = dataQueryResult ? [{ total_count: undefined, ...dataQueryResult }] : [];
+        if (results.length > 0 && results[0].total_count !== undefined) {
+          delete results[0].total_count;
+        }
       }
     } catch (dataError) {
       console.error('[getChiffreAffairesArticles] Erreur:', dataError.message);

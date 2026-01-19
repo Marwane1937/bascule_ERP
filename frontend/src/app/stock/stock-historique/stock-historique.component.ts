@@ -10,15 +10,10 @@ import Swal from 'sweetalert2';
 export class StockHistoriqueComponent implements OnInit {
 
   // Données
-  mouvements: any[] = [];
-  mouvementDetails: { [key: number]: any[] } = {};
-  loadingDetails: { [key: number]: boolean } = {};
-  detailsLoaded: { [key: number]: boolean } = {};
-  expandedRows: { [key: number]: boolean } = {};
-
+  historique: any[] = [];
+  
   // État
   loading: boolean = false;
-  showAdvancedFilters: boolean = false;
 
   // Pagination
   currentPage: number = 1;
@@ -27,67 +22,43 @@ export class StockHistoriqueComponent implements OnInit {
   totalPages: number = 1;
 
   // Recherche et tri
-  searchTerm: string = '';
   sortColumn: string = 'date';
   sortDirection: 'ASC' | 'DESC' = 'DESC';
 
-  // Filtres avancés
+  // Filtres
+  filterArticleNom: string = '';
   filterDateFrom: string = '';
   filterDateTo: string = '';
-  filterType: string = '';
-  filterArticle: string = '';
-
-  // Types de mouvements
-  typesMouvement: any[] = [
-    { value: '', label: 'Tous les types' },
-    { value: '20', label: 'Inventaire' },
-    { value: '21', label: 'Entrée de stock' },
-    { value: '22', label: 'Sortie de stock' }
-  ];
+  filterStatus: string = '';
 
   constructor(private stockService: StockService) { }
 
   ngOnInit(): void {
-    this.getHistoriqueMouvements();
+    this.getHistorique();
   }
 
-  // Récupération de l'historique des mouvements
-  getHistoriqueMouvements(): void {
+  // Récupération de l'historique
+  getHistorique(): void {
     this.loading = true;
 
     const options: any = {
       page: this.currentPage,
       pageSize: this.pageSize,
-      orderBy: this.sortColumn,
-      orderDirection: this.sortDirection,
-      search: this.searchTerm
+      article_nom: this.filterArticleNom,
+      dateFrom: this.filterDateFrom,
+      dateTo: this.filterDateTo,
+      status: this.filterStatus
     };
 
-    // Ajouter les filtres avancés si activés
-    if (this.showAdvancedFilters) {
-      if (this.filterDateFrom) options.dateFrom = this.filterDateFrom;
-      if (this.filterDateTo) options.dateTo = this.filterDateTo;
-      if (this.filterType) options.type = this.filterType;
-      if (this.filterArticle) options.article = this.filterArticle;
-    }
-
-    // Pour l'instant, utiliser une requête qui retourne des données d'exemple
-    // TODO: Créer une vraie fonction pour récupérer l'historique des mouvements
-    this.stockService.getAchatsNonEntresStock(options).subscribe({
+    this.stockService.getStockHistorique(options).subscribe({
       next: (response: any) => {
-        // Transformer les données pour simuler des mouvements
-        this.mouvements = (response.data || []).slice(0, 10).map((item: any, index: number) => ({
-          id: index + 1,
-          numero: `MV${String(index + 1).padStart(3, '0')}`,
-          date: new Date(Date.now() - index * 86400000), // Dates décroissantes
-          type: Math.floor(Math.random() * 3) + 20, // 20, 21, ou 22
-          description: `Mouvement ${index + 1}`,
-          utilisateur: 'Admin',
-          articles_count: Math.floor(Math.random() * 5) + 1,
-          total_quantite: Math.floor(Math.random() * 100) + 10
-        }));
-        this.totalRecords = this.mouvements.length;
-        this.totalPages = Math.ceil(this.totalRecords / this.pageSize);
+        if (response.success) {
+          this.historique = response.data || [];
+          this.totalRecords = response.pagination?.total || 0;
+          this.totalPages = response.pagination?.totalPages || 1;
+        } else {
+          Swal.fire('Erreur', response.message || 'Erreur lors du chargement', 'error');
+        }
         this.loading = false;
       },
       error: (error) => {
@@ -101,33 +72,14 @@ export class StockHistoriqueComponent implements OnInit {
   // Recherche
   onSearch(): void {
     this.currentPage = 1;
-    this.getHistoriqueMouvements();
-  }
-
-  // Tri
-  onSort(column: string): void {
-    if (this.sortColumn === column) {
-      this.sortDirection = this.sortDirection === 'ASC' ? 'DESC' : 'ASC';
-    } else {
-      this.sortColumn = column;
-      this.sortDirection = 'DESC';
-    }
-    this.currentPage = 1;
-    this.getHistoriqueMouvements();
-  }
-
-  getSortIcon(column: string): string {
-    if (this.sortColumn !== column) {
-      return 'fa-sort';
-    }
-    return this.sortDirection === 'ASC' ? 'fa-sort-up' : 'fa-sort-down';
+    this.getHistorique();
   }
 
   // Pagination
   onPageChange(page: number): void {
     if (page >= 1 && page <= this.totalPages) {
       this.currentPage = page;
-      this.getHistoriqueMouvements();
+      this.getHistorique();
     }
   }
 
@@ -154,90 +106,85 @@ export class StockHistoriqueComponent implements OnInit {
     return `${start}-${end}`;
   }
 
-  // Filtres
-  toggleAdvancedFilters(): void {
-    this.showAdvancedFilters = !this.showAdvancedFilters;
-  }
-
-  onFilterChange(): void {
-    this.currentPage = 1;
-    this.getHistoriqueMouvements();
-  }
-
+  // Réinitialiser les filtres
   resetFilters(): void {
+    this.filterArticleNom = '';
     this.filterDateFrom = '';
     this.filterDateTo = '';
-    this.filterType = '';
-    this.filterArticle = '';
+    this.filterStatus = '';
     this.currentPage = 1;
-    this.getHistoriqueMouvements();
+    this.getHistorique();
   }
 
-  // Gestion des détails
-  toggleRowExpansion(mouvement: any, index: number): void {
-    if (this.expandedRows[index]) {
-      // Fermer la ligne
-      this.expandedRows[index] = false;
-    } else {
-      // Ouvrir la ligne et charger les détails si pas encore chargés
-      this.expandedRows[index] = true;
+  // Vérifier si c'est un inventaire
+  isInventory(row: any): boolean {
+    return row.status && row.status.toString().toLowerCase().includes('inventory');
+  }
 
-      if (!this.mouvementDetails[mouvement.id]) {
-        this.loadingDetails[mouvement.id] = true;
+  // Vérifier si c'est une entrée (positif) ou sortie (négatif)
+  isEntree(row: any): boolean {
+    const quantite = parseFloat(row.quantite) || 0;
+    return quantite > 0;
+  }
 
-        // Simuler le chargement des détails
-        setTimeout(() => {
-          this.mouvementDetails[mouvement.id] = Array.from({ length: mouvement.articles_count }, (_, i) => ({
-            article_nom: `Article ${i + 1}`,
-            article_cod: `ART${String(i + 1).padStart(3, '0')}`,
-            quantite: Math.floor(Math.random() * 10) + 1,
-            sens: mouvement.type === 21 ? 1 : -1 // Entrée ou sortie
-          }));
-          this.loadingDetails[mouvement.id] = false;
-          this.detailsLoaded[mouvement.id] = true;
-        }, 500);
+  // Export PDF
+  exportPDF(): void {
+    this.loading = true;
+
+    const options: any = {
+      article_nom: this.filterArticleNom,
+      dateFrom: this.filterDateFrom,
+      dateTo: this.filterDateTo,
+      status: this.filterStatus
+    };
+
+    this.stockService.exportStockHistoriquePDF(options).subscribe({
+      next: (response: any) => {
+        this.loading = false;
+        if (response.success && response.pdfUrl) {
+          // Ouvrir le PDF dans un nouvel onglet
+          window.open(response.pdfUrl, '_blank');
+          Swal.fire('Succès', 'PDF généré avec succès', 'success');
+        } else {
+          Swal.fire('Erreur', response.message || 'Erreur lors de la génération du PDF', 'error');
+        }
+      },
+      error: (error) => {
+        console.error('Erreur génération PDF:', error);
+        this.loading = false;
+        Swal.fire('Erreur', 'Erreur lors de la génération du PDF', 'error');
       }
-    }
+    });
   }
 
-  getMouvementDetails(mouvementId: number): any[] {
-    return this.mouvementDetails[mouvementId] || [];
-  }
+  // Export Excel
+  exportExcel(): void {
+    this.loading = true;
 
-  isLoadingDetails(mouvementId: number): boolean {
-    return this.loadingDetails[mouvementId] || false;
-  }
+    const options: any = {
+      article_nom: this.filterArticleNom,
+      dateFrom: this.filterDateFrom,
+      dateTo: this.filterDateTo,
+      status: this.filterStatus
+    };
 
-  // Utilitaires
-  getTypeLabel(type: number): string {
-    switch (type) {
-      case 20: return 'Inventaire';
-      case 21: return 'Entrée de stock';
-      case 22: return 'Sortie de stock';
-      default: return 'Inconnu';
-    }
-  }
-
-  getTypeBadgeClass(type: number): string {
-    switch (type) {
-      case 20: return 'badge bg-success';
-      case 21: return 'badge bg-primary';
-      case 22: return 'badge bg-warning';
-      default: return 'badge bg-secondary';
-    }
-  }
-
-  getSensLabel(sens: number): string {
-    return sens === 1 ? 'Entrée' : 'Sortie';
-  }
-
-  getSensBadgeClass(sens: number): string {
-    return sens === 1 ? 'badge bg-success' : 'badge bg-danger';
-  }
-
-  // Export
-  exporterHistorique(): void {
-    Swal.fire('Information', 'Fonctionnalité d\'export à implémenter', 'info');
+    this.stockService.exportStockHistoriqueExcel(options).subscribe({
+      next: (blob: Blob) => {
+        this.loading = false;
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const dateStr = new Date().toISOString().split('T')[0];
+        link.download = `historique-stock-${dateStr}.csv`;
+        link.click();
+        window.URL.revokeObjectURL(url);
+        Swal.fire('Succès', 'Export Excel téléchargé avec succès', 'success');
+      },
+      error: (error) => {
+        console.error('Erreur export Excel:', error);
+        this.loading = false;
+        Swal.fire('Erreur', 'Erreur lors de l\'export Excel', 'error');
+      }
+    });
   }
 }
-

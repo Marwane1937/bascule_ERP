@@ -1,8 +1,10 @@
-const sequelize = require('../../config/database');
+const { getConnection } = require('../../config/database');
+const sequelize = require('../../config/database'); // Garder pour compatibilité QueryTypes
 
 // Récupérer tous les clients
 const getAllClients = async (sequelizeConnection = null) => {
-  const connectionToUse = sequelizeConnection || sequelize;
+  // Utiliser la connexion passée, sinon getConnection() pour avoir la connexion active
+  const connectionToUse = sequelizeConnection || getConnection();
   const [results] = await connectionToUse.query('SELECT * FROM partenaire where type = 1');
   return results;
 };

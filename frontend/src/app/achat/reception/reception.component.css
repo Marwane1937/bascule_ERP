@@ -1,0 +1,46 @@
+/* Même look & feel que les interfaces Achats existantes */
+.page-header h3 {
+  margin: 0;
+}
+
+.modal-header.bg-warning {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.table thead th {
+  font-weight: 600;
+}
+
+.reception-modal-backdrop {
+  background: rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Modal XL: plus large & lisible (sans fullscreen) */
+.reception-modal-xl {
+  max-width: 95vw;
+}
+
+.reception-modal-xl .modal-content {
+  border-radius: 10px;
+}
+
+.modal-body {
+  overflow: auto;
+}
+
+/* Un peu de design pour le contenu */
+.reception-modal-xl .modal-body {
+  background: #f8fafc;
+}
+
+.reception-modal-xl .card {
+  border-radius: 12px;
+}
+
+.reception-modal-xl .table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+

@@ -50,6 +50,21 @@ export class EmailService {
     });
   }
 
+  // Méthodes pour les entrées de stock
+  generateEntreeStockPDF(document_id: string, withStamp: boolean = false) {
+    return this.http.post<any>('http://localhost:3500/api/stock/entree-stock/generate-pdf', {
+      document_id,
+      withStamp
+    });
+  }
+
+  generateSortieStockPDF(document_id: string, withStamp: boolean = false) {
+    return this.http.post<any>('http://localhost:3500/api/stock/sortie-stock/generate-pdf', {
+      document_id,
+      withStamp
+    });
+  }
+
   // Méthodes pour les commandes (utilisant le service commande-pdf séparé)
   generateCommandePDF(document_id: string) {
     return this.http.post<any>('http://localhost:3500/api/commande-pdf/generate', { document_id });

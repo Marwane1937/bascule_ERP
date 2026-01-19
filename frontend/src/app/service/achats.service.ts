@@ -118,5 +118,64 @@ export class AchatsService {
   telechargerPDFFactureFournisseur(id: number): Observable<Blob> {
     return this.http.get(`${this.apiUrl}/facture-fournisseur-pdf/${id}`, { responseType: 'blob' });
   }
+
+  // ================= RÉCEPTION =================
+
+  private receptionsUrl = `${this.apiUrl}/receptions`;
+
+  // Liste des réceptions (pagination)
+  getReceptions(options: any = {}): Observable<any> {
+    const params = new URLSearchParams();
+    if (options.page) params.append('page', options.page.toString());
+    if (options.pageSize) params.append('pageSize', options.pageSize.toString());
+    if (options.orderBy) params.append('orderBy', options.orderBy);
+    if (options.orderDirection) params.append('orderDirection', options.orderDirection);
+    if (options.search) params.append('search', options.search);
+    const url = `${this.receptionsUrl}${params.toString() ? '?' + params.toString() : ''}`;
+    return this.http.get(url);
+  }
+
+  // Récupérer les commandes non réceptionnées
+  getCommandesNonReceptionnees(): Observable<any> {
+    return this.http.get(`${this.receptionsUrl}/commandes-non-receptionnees`);
+  }
+
+  // Créer une réception depuis une commande
+  createReceptionFromCommande(commandeId: number, details?: any[]): Observable<any> {
+    return this.http.post(`${this.receptionsUrl}/from-commande`, { commandeId, details: details || null });
+  }
+
+  // Récupérer une réception par ID
+  getReceptionById(id: number): Observable<any> {
+    return this.http.get(`${this.receptionsUrl}/${id}`);
+  }
+
+  // Mettre à jour une réception
+  updateReception(id: number, data: any): Observable<any> {
+    return this.http.put(`${this.receptionsUrl}/${id}`, data);
+  }
+
+  // Supprimer une réception
+  deleteReception(id: number): Observable<any> {
+    return this.http.post(`${this.receptionsUrl}/delete`, { id });
+  }
+
+  // Sauvegarder les lignes de détail d'une réception
+  saveReceptionDetails(lignes: any[]): Observable<any> {
+    return this.http.post(`${this.receptionsUrl}/save-details`, { lignes });
+  }
+
+  // Supprimer des lignes de réception par IDs
+  deleteReceptionLignes(ids: number[]): Observable<any> {
+    return this.http.post(`${this.receptionsUrl}/delete-lignes`, { ids });
+  }
+
+  // Générer le PDF de réception
+  generateReceptionPDF(document_id: number, withStamp: boolean = false): Observable<any> {
+    return this.http.post<any>('http://localhost:3500/api/reception-pdf/generate', {
+      document_id,
+      withStamp: !!withStamp
+    });
+  }
 }
 

@@ -43,6 +43,36 @@
 .table-dark th {
   background-color: #343a40 !important;
   border-color: #454d55 !important;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 10 !important;
+}
+
+/* Auto-complétion dropdown */
+.position-relative {
+  position: relative;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.hover-bg-light:hover {
+  background-color: #f8f9fa !important;
+}
+
+.z-index-1050 {
+  z-index: 1050;
+}
+
+/* Input article avec auto-complétion */
+.input-group .form-control {
+  font-size: 1rem;
+}
+
+/* Alerte pour filtre sélectionné */
+.alert-info {
+  border-left: 4px solid #007bff !important;
 }
 
 /* Indicateurs visuels pour le stock */

@@ -15,78 +15,50 @@
 
         <!-- Barre de recherche et filtres -->
         <div class="row mb-3">
-            <div class="col-md-5">
-                <div class="input-group">
-                    <span class="input-group-text"><i class="fas fa-search"></i></span>
-                    <input
-                        type="text"
-                        class="form-control"
-                        placeholder="Rechercher par numéro, article..."
-                        [(ngModel)]="searchTerm"
-                        (keyup.enter)="onSearch()">
-                    <button class="btn btn-primary" type="button" (click)="onSearch()">
-                        <i class="fas fa-search"></i> Rechercher
-                    </button>
-                </div>
+            <div class="col-md-3">
+                <label class="form-label"><i class="fas fa-box"></i> Nom de l'article</label>
+                <input
+                    type="text"
+                    class="form-control"
+                    placeholder="Rechercher par nom d'article..."
+                    [(ngModel)]="filterArticleNom"
+                    (keyup.enter)="onSearch()">
             </div>
             <div class="col-md-2">
-                <select class="form-select" [(ngModel)]="pageSize" (change)="getHistoriqueMouvements()">
-                    <option [value]="10">10 par page</option>
-                    <option [value]="25">25 par page</option>
-                    <option [value]="50">50 par page</option>
-                    <option [value]="100">100 par page</option>
+                <label class="form-label"><i class="fas fa-calendar-alt"></i> Date de début</label>
+                <input type="date" class="form-control" [(ngModel)]="filterDateFrom" (change)="onSearch()">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label"><i class="fas fa-calendar-alt"></i> Date de fin</label>
+                <input type="date" class="form-control" [(ngModel)]="filterDateTo" (change)="onSearch()">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label"><i class="fas fa-tag"></i> Status</label>
+                <select class="form-select" [(ngModel)]="filterStatus" (change)="onSearch()">
+                    <option value="">Tous</option>
+                    <option value="Inventory">Inventory</option>
+                    <option value="Entrée">Entrée</option>
+                    <option value="Sortie">Sortie</option>
                 </select>
             </div>
-            <div class="col-md-5 text-end">
-                <button class="btn btn-outline-secondary me-2" (click)="toggleAdvancedFilters()">
-                    <i class="fas fa-filter"></i> Filtres avancés
-                    <i class="fas" [class.fa-chevron-down]="!showAdvancedFilters" [class.fa-chevron-up]="showAdvancedFilters"></i>
-                </button>
-                <button class="btn btn-outline-primary" (click)="exporterHistorique()">
-                    <i class="fas fa-download"></i> Exporter
+            <div class="col-md-3 d-flex align-items-end">
+                <button class="btn btn-primary w-100 mb-0" (click)="onSearch()">
+                    <i class="fas fa-search"></i> Rechercher
                 </button>
             </div>
         </div>
 
-        <!-- Filtres avancés -->
-        <div class="row mb-3" *ngIf="showAdvancedFilters">
-            <div class="col-md-12">
-                <div class="card border-primary">
-                    <div class="card-header bg-primary text-white">
-                        <i class="fas fa-filter"></i> Filtres avancés
-                    </div>
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-md-3">
-                                <label class="form-label"><i class="fas fa-calendar-alt"></i> Date de début</label>
-                                <input type="date" class="form-control" [(ngModel)]="filterDateFrom" (change)="onFilterChange()">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label"><i class="fas fa-calendar-alt"></i> Date de fin</label>
-                                <input type="date" class="form-control" [(ngModel)]="filterDateTo" (change)="onFilterChange()">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label"><i class="fas fa-tags"></i> Type de mouvement</label>
-                                <select class="form-select" [(ngModel)]="filterType" (change)="onFilterChange()">
-                                    <option *ngFor="let type of typesMouvement" [value]="type.value">
-                                        {{ type.label }}
-                                    </option>
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label"><i class="fas fa-box"></i> Article</label>
-                                <input type="text" class="form-control" [(ngModel)]="filterArticle" (input)="onFilterChange()" placeholder="Nom ou code d'article...">
-                            </div>
-                        </div>
-                        <div class="row mt-3">
-                            <div class="col-md-12 text-end">
-                                <button class="btn btn-outline-danger" (click)="resetFilters()">
-                                    <i class="fas fa-times"></i> Réinitialiser les filtres
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+        <div class="row mb-3">
+            <div class="col-md-12 text-end">
+                <button class="btn btn-outline-secondary me-2" (click)="resetFilters()">
+                    <i class="fas fa-times"></i> Réinitialiser
+                </button>
+                <button class="btn btn-outline-success me-2" (click)="exportExcel()">
+                    <i class="fas fa-file-excel"></i> Exporter en Excel
+                </button>
+                <button class="btn btn-outline-danger" (click)="exportPDF()">
+                    <i class="fas fa-file-pdf"></i> Exporter en PDF
+                </button>
             </div>
         </div>
 
@@ -113,121 +85,50 @@
                             </div>
 
                             <table
-                                id="historiqueTable"
                                 class="table table-bordered table-striped table-hover"
                                 width="100%"
                                 [style.opacity]="loading ? '0.5' : '1'">
                                 <thead class="table-light">
                                     <tr>
-                                        <th (click)="onSort('numero')" class="sortable" style="cursor: pointer;">
-                                            Numéro
-                                            <i class="fas ms-1" [ngClass]="getSortIcon('numero')"></i>
-                                        </th>
-                                        <th (click)="onSort('date')" class="sortable" style="cursor: pointer;">
-                                            Date
-                                            <i class="fas ms-1" [ngClass]="getSortIcon('date')"></i>
-                                        </th>
-                                        <th (click)="onSort('type')" class="sortable" style="cursor: pointer;">
-                                            Type
-                                            <i class="fas ms-1" [ngClass]="getSortIcon('type')"></i>
-                                        </th>
-                                        <th>Description</th>
-                                        <th (click)="onSort('utilisateur')" class="sortable" style="cursor: pointer;">
-                                            Utilisateur
-                                            <i class="fas ms-1" [ngClass]="getSortIcon('utilisateur')"></i>
-                                        </th>
-                                        <th class="text-center">Articles</th>
-                                        <th class="text-center">Quantité Totale</th>
-                                        <th style="width: 150px;" class="text-center">Actions</th>
+                                        <th>Code Article</th>
+                                        <th>Nom Article</th>
+                                        <th>Date</th>
+                                        <th>Quantité</th>
+                                        <th>Mouvement</th>
+                                        <th>Status</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr *ngIf="!loading && mouvements.length === 0">
-                                        <td colspan="8" class="text-center py-4">
+                                    <tr *ngIf="!loading && historique.length === 0">
+                                        <td colspan="6" class="text-center py-4">
                                             <p class="text-muted mb-0">Aucun mouvement trouvé</p>
                                         </td>
                                     </tr>
 
-                                    <!-- Lignes principales -->
-                                    <ng-container *ngFor="let mouvement of mouvements; let i = index">
-                                        <tr class="cursor-pointer" (click)="toggleRowExpansion(mouvement, i)">
-                                            <td>
-                                                <i class="fas me-2" [class.fa-chevron-right]="!expandedRows[i]" [class.fa-chevron-down]="expandedRows[i]"></i>
-                                                {{ mouvement.numero }}
-                                            </td>
-                                            <td>{{ mouvement.date ? (mouvement.date | date:'dd/MM/yyyy HH:mm') : '-' }}</td>
-                                            <td>
-                                                <span [class]="getTypeBadgeClass(mouvement.type)">
-                                                    {{ getTypeLabel(mouvement.type) }}
-                                                </span>
-                                            </td>
-                                            <td>{{ mouvement.description || '-' }}</td>
-                                            <td>{{ mouvement.utilisateur || '-' }}</td>
-                                            <td class="text-center">
-                                                <span class="badge bg-info">{{ mouvement.articles_count }}</span>
-                                            </td>
-                                            <td class="text-center">
-                                                <span class="fw-bold">{{ mouvement.total_quantite }}</span>
-                                            </td>
-                                            <td class="text-center">
-                                                <button class="btn btn-sm btn-outline-info" (click)="$event.stopPropagation(); toggleRowExpansion(mouvement, i)">
-                                                    <i class="fas fa-eye"></i> Détails
-                                                </button>
-                                            </td>
-                                        </tr>
-
-                                        <!-- Ligne de détails expandée -->
-                                        <tr *ngIf="expandedRows[i]" class="table-light">
-                                            <td colspan="8" class="p-0">
-                                                <div class="p-3">
-                                                    <h6 class="mb-3">
-                                                        <i class="fas fa-list"></i> Détails du mouvement
-                                                        <span *ngIf="isLoadingDetails(mouvement.id)" class="ms-2">
-                                                            <small class="text-muted">Chargement...</small>
-                                                        </span>
-                                                        <span *ngIf="!isLoadingDetails(mouvement.id)" class="ms-2">
-                                                            <small class="text-muted">({{ getMouvementDetails(mouvement.id).length }} article(s))</small>
-                                                        </span>
-                                                    </h6>
-
-                                                    <div class="table-responsive">
-                                                        <table class="table table-sm table-bordered">
-                                                            <thead class="table-light">
-                                                                <tr>
-                                                                    <th style="width: 40%;">Article</th>
-                                                                    <th style="width: 20%;" class="text-center">Code</th>
-                                                                    <th style="width: 20%;" class="text-center">Quantité</th>
-                                                                    <th style="width: 20%;" class="text-center">Sens</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                <tr *ngIf="isLoadingDetails(mouvement.id)">
-                                                                    <td colspan="4" class="detail-loading">
-                                                                        <small>Chargement des détails...</small>
-                                                                    </td>
-                                                                </tr>
-                                                                <tr *ngFor="let detail of getMouvementDetails(mouvement.id)">
-                                                                    <td>{{ detail.article_nom }}</td>
-                                                                    <td class="text-center">{{ detail.article_cod }}</td>
-                                                                    <td class="text-center">{{ detail.quantite }}</td>
-                                                                    <td class="text-center">
-                                                                        <span [class]="getSensBadgeClass(detail.sens)">
-                                                                            {{ getSensLabel(detail.sens) }}
-                                                                        </span>
-                                                                    </td>
-                                                                </tr>
-                                                                <tr *ngIf="getMouvementDetails(mouvement.id).length > 0" class="table-secondary fw-bold">
-                                                                    <td colspan="2" class="text-end">Total:</td>
-                                                                    <td class="text-center">{{ mouvement.total_quantite }}</td>
-                                                                    <td class="text-center">-</td>
-                                                                </tr>
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    </ng-container>
+                                    <tr 
+                                        *ngFor="let row of historique" 
+                                        [class.inventory-row]="isInventory(row)"
+                                        [class.entree-row]="isEntree(row) && !isInventory(row)"
+                                        [class.sortie-row]="!isEntree(row) && !isInventory(row)">
+                                        <td>{{ row.article_cod || '-' }}</td>
+                                        <td>{{ row.article_nom || '-' }}</td>
+                                        <td>{{ row.date ? (row.date | date:'dd/MM/yyyy à HH:mm') : '-' }}</td>
+                                        <td class="text-center">
+                                            <strong [class.text-success]="isEntree(row)" [class.text-danger]="!isEntree(row)">
+                                                {{ isEntree(row) ? '+' : '' }}{{ row.quantite || 0 }}
+                                            </strong>
+                                        </td>
+                                        <td>
+                                            <span [class]="isEntree(row) ? 'badge bg-success' : 'badge bg-danger'">
+                                                {{ row.mouvement || (isEntree(row) ? 'Entrée' : 'Sortie') }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span [class]="isInventory(row) ? 'badge bg-warning' : (isEntree(row) ? 'badge bg-info' : 'badge bg-secondary')">
+                                                {{ row.status || '-' }}
+                                            </span>
+                                        </td>
+                                    </tr>
                                 </tbody>
                             </table>
                         </div>
@@ -272,10 +173,3 @@
 
     </div>
 </div>
-
-
-
-
-
-
-

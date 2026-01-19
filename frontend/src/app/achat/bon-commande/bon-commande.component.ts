@@ -81,11 +81,14 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
 
   initForm(): void {
     // Initialiser la date avec la date du jour au format YYYY-MM-DD
-    const today = new Date();
-    const todayString = today.toISOString().split('T')[0];
-    
+    const now = new Date();
+   const pad = (n: number) => n.toString().padStart(2, '0');
+   const datetimeLocal =
+     `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T` +
+     `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+   
     this.BonCommandeForm = this.fb.group({
-      date: [todayString, Validators.required],
+      date: [datetimeLocal, Validators.required],
       description: [''],
       part_id: [0],
       fournisseurSearch: [''],   // le texte visible pour fournisseur

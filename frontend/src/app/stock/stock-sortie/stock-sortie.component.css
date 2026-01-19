@@ -1,23 +1,115 @@
-/* Styles pour l'interface de sortie de stock */
+/* Styles minimaux pour performance optimale */
 
+/* Conteneur principal */
+.container-fluid {
+  width: 100%;
+  padding: 0 15px;
+}
+
+/* En-tête simplifié */
 .page-header {
-  border-bottom: 1px solid #e9ecef;
-  padding-bottom: 1rem;
+  background: #f8f9fa;
+  color: #333;
+  padding: 1rem 0;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #dee2e6;
 }
 
 .page-header h3 {
-  color: #495057;
-  margin-bottom: 0.5rem;
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 500;
 }
 
 .breadcrumbs {
-  font-size: 0.875rem;
-}
-
-.breadcrumbs .nav-home {
+  font-size: 0.85rem;
   color: #6c757d;
+  margin-top: 0.25rem;
 }
 
+/* Barre de recherche simplifiée */
+.input-group .input-group-text {
+  background: #f8f9fa;
+  border: 1px solid #ced4da;
+  color: #495057;
+}
+
+.input-group .form-control {
+  border: 1px solid #ced4da;
+}
+
+.input-group .form-control:focus {
+  border-color: #80bdff;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* Filtres avancés simplifiés */
+.card {
+  border: 1px solid #dee2e6;
+  border-radius: 0.25rem;
+}
+
+.card-header {
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 0.75rem 1rem;
+}
+
+.card-header h5 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #495057;
+}
+
+.card-body {
+  padding: 1rem;
+}
+
+/* Tableaux simplifiés - Suppression des effets visuels lourds */
+.table {
+  margin-bottom: 0;
+  border: 1px solid #dee2e6;
+  border-collapse: separate;
+}
+
+.table thead th {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  font-weight: 500;
+  font-size: 0.875rem;
+  padding: 0.75rem;
+  vertical-align: middle;
+}
+
+.table td {
+  border: 1px solid #dee2e6;
+  padding: 0.75rem;
+  vertical-align: middle;
+}
+
+/* Suppression des animations et transitions lentes */
+.table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+/* Spinner de chargement simplifié */
+.loading-spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #007bff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 1rem auto;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Lignes cliquables simplifiées - Suppression des effets */
 .cursor-pointer {
   cursor: pointer;
 }
@@ -26,91 +118,115 @@
   background-color: #f8f9fa !important;
 }
 
-/* Styles pour les détails expandés */
+/* Détails expandés simplifiés */
+.table-light {
+  background-color: #f8f9fa !important;
+}
+
+.table-light td {
+  border-top: 1px solid #dee2e6;
+  padding: 0.5rem;
+}
+
+/* Indicateur de chargement pour détails */
 .detail-loading {
   text-align: center;
-  color: #6c757d;
-  font-style: italic;
   padding: 1rem;
+  color: #6c757d;
+  font-size: 0.875rem;
 }
 
-/* Styles pour les inputs */
-.form-control:focus {
-  border-color: #0d6efd;
-  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+/* Boutons simplifiés - Suppression des gradients */
+.btn {
+  border-radius: 0.25rem;
 }
 
-/* Styles pour les boutons */
-.btn:focus {
-  box-shadow: none;
+.btn-success {
+  background-color: #28a745;
+  border-color: #28a745;
 }
 
-/* Styles pour les badges */
-.badge {
-  font-size: 0.75em;
+.btn-success:hover {
+  background-color: #218838;
+  border-color: #1e7e34;
 }
 
-/* Styles pour la pagination */
+/* Table responsive */
+.table-responsive {
+  border: none;
+}
+
+/* Pagination simplifiée */
+.pagination {
+  margin: 1rem 0;
+}
+
 .pagination .page-link {
-  color: #0d6efd;
+  color: #007bff;
+  border: 1px solid #dee2e6;
+  margin: 0 2px;
+  padding: 0.375rem 0.75rem;
 }
 
 .pagination .page-link:hover {
-  color: #0a58ca;
-  background-color: #e9ecef;
-  border-color: #adb5bd;
+  background-color: #007bff;
+  border-color: #007bff;
+  color: white;
 }
 
 .pagination .page-item.active .page-link {
-  background-color: #0d6efd;
-  border-color: #0d6efd;
+  background-color: #007bff;
+  border-color: #007bff;
 }
 
-/* Styles pour les tableaux */
-.table th {
-  border-top: none;
-  font-weight: 600;
-  color: #495057;
-  background-color: #f8f9fa;
+/* Sélecteurs de date simplifiés */
+.form-control[type="date"] {
+  border: 1px solid #ced4da;
+  padding: 0.375rem 0.75rem;
 }
 
-.table td {
-  vertical-align: middle;
+.form-control[type="date"]:focus {
+  border-color: #80bdff;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
 }
 
-.table-hover tbody tr:hover {
-  background-color: rgba(0, 0, 0, 0.075);
-}
-
-/* Styles pour les cartes */
-.card {
-  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-  border: 1px solid rgba(0, 0, 0, 0.125);
-}
-
-.card-header {
-  font-weight: 600;
-}
-
-/* Styles pour les spinners */
-.spinner-border-sm {
-  width: 1rem;
-  height: 1rem;
-}
-
-/* Styles responsives */
+/* Responsive minimal */
 @media (max-width: 768px) {
-  .container {
-    padding-left: 15px;
-    padding-right: 15px;
+  .container-fluid {
+    padding: 0 10px;
   }
 
   .table-responsive {
-    font-size: 0.875rem;
+    font-size: 0.8rem;
   }
 
-  .btn-sm {
+  .btn {
     padding: 0.25rem 0.5rem;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
   }
+}
+
+/* Table des détails simplifiée */
+.table-sm th,
+.table-sm td {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+/* Boutons - Par défaut gris (désactivé), vert quand activé */
+.btn:disabled {
+  background-color: #6c757d !important;
+  border-color: #6c757d !important;
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.btn-success:not(:disabled) {
+  background-color: #28a745;
+  border-color: #28a745;
+}
+
+.btn-success:not(:disabled):hover {
+  background-color: #218838;
+  border-color: #1e7e34;
 }

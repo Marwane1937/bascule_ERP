@@ -1,5 +1,7 @@
 const UserPermission = require('../models/user_permissions.model');
 const User = require('../models/user.model');
+const { getConnection } = require('../config/database');
+const databaseSwitchService = require('./database-switch.service');
 
 class UserPermissionsService {
   // Récupérer toutes les permissions d'un utilisateur
@@ -12,7 +14,8 @@ class UserPermissionsService {
         throw new Error('userId est requis pour récupérer les permissions');
       }
 
-      const sequelize = sequelizeConnection || UserPermission.sequelize;
+      // Utiliser la connexion fournie, sinon getConnection() pour avoir la connexion active
+      const sequelize = sequelizeConnection || getConnection();
 
       if (!sequelize) {
         throw new Error('Aucune connexion Sequelize disponible');
@@ -90,7 +93,8 @@ class UserPermissionsService {
   // Mettre à jour les permissions d'un utilisateur
   async updateUserPermissions(userId, permissions, sequelizeConnection = null) {
     try {
-      const sequelize = sequelizeConnection || UserPermission.sequelize;
+      // Utiliser la connexion fournie, sinon getConnection() pour avoir la connexion active
+      const sequelize = sequelizeConnection || getConnection();
 
       // Vérifier que l'utilisateur existe
       const User = sequelizeConnection
@@ -189,7 +193,8 @@ class UserPermissionsService {
           { name: 'Retour Client', route: '/Retour' },
           { name: 'Avoir Client', route: '/Avoir' },
           { name: 'Facturation', route: '/Facturation' },
-          { name: 'Contrat', route: '/Contrat' }
+          { name: 'Contrat', route: '/Contrat' },
+          { name: 'Reporting Vente', route: '/Vente/Reporting' }
         ]
       },
       {
@@ -197,7 +202,8 @@ class UserPermissionsService {
         icon: 'fas fa-shopping-cart',
         items: [
           { name: 'Bon de commande', route: '/Bon-Commande' },
-          { name: 'Facture Fournisseur', route: '/Facture-Fournisseur' }
+          { name: 'Facture Fournisseur', route: '/Facture-Fournisseur' },
+          { name: 'Réception', route: '/Reception' }
         ]
       },
       {
@@ -227,7 +233,8 @@ class UserPermissionsService {
           { name: 'Règlements', route: '/Reglement' },
           { name: 'Caisse', route: '/Caisse' },
           { name: 'Recettes', route: '/Caisse-Recettes' },
-          { name: 'Dépenses', route: '/Caisse-Depenses' }
+          { name: 'Dépenses', route: '/Caisse-Depenses' },
+          { name: 'Reporting Finance', route: '/Finance/Reporting' }
         ]
       },
       {

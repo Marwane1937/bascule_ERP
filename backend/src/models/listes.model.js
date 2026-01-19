@@ -12,6 +12,10 @@ const getAllGroupIds = async (sequelizeConnection = null) => {
           WHEN l.group_id = 2000 THEN 'Recette'
           WHEN l.group_id = 3000 THEN 'Dépense'
           WHEN l.group_id = 4000 THEN 'Charge Véhicule'
+          WHEN l.group_id = 5000 THEN 'Intérvention'
+          WHEN l.group_id = 6000 THEN 'Entrée Stock'
+          WHEN l.group_id = 7000 THEN 'Sortie Stock'
+
         END AS group_nom
       FROM listes l
       WHERE l.etat = 1

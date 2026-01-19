@@ -1,0 +1,503 @@
+<div class="container py-4">
+  <div class="page-inner">
+
+    <!-- En-tête -->
+    <div class="page-header mb-4">
+      <h3 class="fw-bold text-dark">Reporting Finance</h3>
+      <ul class="breadcrumbs d-flex align-items-center">
+        <li class="nav-home me-2"><a href="#"><i class="fas fa-home text-primary"></i></a></li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item me-2"><a href="#" class="text-muted">Finance</a></li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item fw-semibold text-muted">Reporting</li>
+      </ul>
+    </div>
+
+    <!-- Onglets -->
+    <div class="row mb-4">
+      <div class="col-12">
+        <ul class="nav nav-tabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" [class.active]="activeTab === 'compte-client'"
+                    (click)="switchTab('compte-client')" type="button">
+              <i class="fas fa-user-circle me-2"></i>Compte client
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" [class.active]="activeTab === 'balance-client'"
+                    (click)="switchTab('balance-client')" type="button">
+              <i class="fas fa-balance-scale me-2"></i>Balance client
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" [class.active]="activeTab === 'solde-client'"
+                    (click)="switchTab('solde-client')" type="button">
+              <i class="fas fa-wallet me-2"></i>Solde client
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" [class.active]="activeTab === 'vue-globale'"
+                    (click)="switchTab('vue-globale')" type="button">
+              <i class="fas fa-chart-pie me-2"></i>Vue globale
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Contenu des onglets -->
+    <div class="tab-content">
+
+      <!-- === ONGLET COMPTE CLIENT === -->
+      <div class="tab-pane fade" [class.show]="activeTab === 'compte-client'" [class.active]="activeTab === 'compte-client'">
+
+        <!-- Barre de recherche et filtres -->
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <div class="input-group">
+              <span class="input-group-text"><i class="fas fa-search"></i></span>
+              <input type="text" class="form-control" placeholder="Rechercher par client..."
+                     [(ngModel)]="compteClientSearchTerm" (keyup.enter)="onCompteClientSearch()">
+              <button class="btn btn-primary" type="button" (click)="onCompteClientSearch()">
+                <i class="fas fa-search"></i>
+              </button>
+            </div>
+          </div>
+          <div class="col-md-2">
+            <select class="form-select" [(ngModel)]="compteClientPageSize" (change)="getCompteClient()">
+              <option [value]="10">10 par page</option>
+              <option [value]="25">25 par page</option>
+              <option [value]="50">50 par page</option>
+              <option [value]="100">100 par page</option>
+            </select>
+          </div>
+          <div class="col-md-6 text-end">
+            <div class="btn-export-group">
+              <button class="btn-export-pdf" (click)="exportCompteClient('pdf')" title="Exporter PDF">
+                <i class="fas fa-file-pdf"></i> PDF
+              </button>
+              <button class="btn-export-excel" (click)="exportCompteClient('excel')" title="Exporter Excel">
+                <i class="fas fa-file-excel"></i> Excel
+              </button>
+              <button class="btn btn-outline-primary" (click)="getCompteClient()">
+                <i class="fas fa-sync-alt"></i> Actualiser
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tableau Compte Client -->
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Compte client</h5>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                  <tr>
+                    <th (click)="onCompteClientSort('client_nom')" class="sortable">
+                      Client
+                      <i class="fas ms-1" [class]="getCompteClientSortIcon('client_nom')"></i>
+                    </th>
+                    <th (click)="onCompteClientSort('debit')" class="sortable text-end">
+                      Débit
+                      <i class="fas ms-1" [class]="getCompteClientSortIcon('debit')"></i>
+                    </th>
+                    <th (click)="onCompteClientSort('credit')" class="sortable text-end">
+                      Crédit
+                      <i class="fas ms-1" [class]="getCompteClientSortIcon('credit')"></i>
+                    </th>
+                    <th (click)="onCompteClientSort('solde')" class="sortable text-end">
+                      Solde
+                      <i class="fas ms-1" [class]="getCompteClientSortIcon('solde')"></i>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngIf="compteClientLoading">
+                    <td colspan="4" class="text-center py-4">
+                      <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Chargement...</span>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr *ngIf="!compteClientLoading && compteClient.length === 0">
+                    <td colspan="4" class="text-center py-4 text-muted">
+                      <i class="fas fa-inbox fa-2x mb-2"></i><br>
+                      Aucune donnée trouvée
+                    </td>
+                  </tr>
+                  <tr *ngFor="let item of compteClient">
+                    <td><strong>{{ item.client_nom || '-' }}</strong></td>
+                    <td class="text-end">{{ formatCurrency(item.debit || 0) }}</td>
+                    <td class="text-end">{{ formatCurrency(item.credit || 0) }}</td>
+                    <td class="text-end"><strong [class.text-danger]="(item.solde || 0) < 0" [class.text-success]="(item.solde || 0) >= 0">{{ formatCurrency(item.solde || 0) }}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination Compte Client -->
+            <div class="d-flex justify-content-between align-items-center mt-3" *ngIf="compteClientTotalPages > 1">
+              <div class="text-muted">
+                Affichage de {{ getDisplayRange(compteClientCurrentPage, compteClientPageSize, compteClientTotalRecords) }}
+                sur {{ compteClientTotalRecords }} éléments
+              </div>
+              <nav aria-label="Pagination compte client">
+                <ul class="pagination pagination-sm mb-0">
+                  <li class="page-item" [class.disabled]="compteClientCurrentPage === 1">
+                    <a class="page-link" href="#" (click)="onCompteClientPageChange(compteClientCurrentPage - 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-left"></i>
+                    </a>
+                  </li>
+                  <li class="page-item" [class.active]="page === compteClientCurrentPage"
+                      *ngFor="let page of getPageNumbers(compteClientTotalPages, compteClientCurrentPage)">
+                    <a class="page-link" href="#" (click)="onCompteClientPageChange(page); $event.preventDefault()">
+                      {{ page }}
+                    </a>
+                  </li>
+                  <li class="page-item" [class.disabled]="compteClientCurrentPage === compteClientTotalPages">
+                    <a class="page-link" href="#" (click)="onCompteClientPageChange(compteClientCurrentPage + 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-right"></i>
+                    </a>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- === ONGLET BALANCE CLIENT === -->
+      <div class="tab-pane fade" [class.show]="activeTab === 'balance-client'" [class.active]="activeTab === 'balance-client'">
+
+        <!-- Barre de recherche et filtres -->
+        <div class="row mb-3">
+          <div class="col-md-3">
+            <div class="input-group">
+              <span class="input-group-text"><i class="fas fa-search"></i></span>
+              <input type="text" class="form-control" placeholder="Rechercher par client..."
+                     [(ngModel)]="balanceClientSearchTerm" (keyup.enter)="onBalanceClientSearch()">
+              <button class="btn btn-primary" type="button" (click)="onBalanceClientSearch()">
+                <i class="fas fa-search"></i>
+              </button>
+            </div>
+          </div>
+          <div class="col-md-2">
+            <input type="date" class="form-control" placeholder="Date début"
+                   [(ngModel)]="balanceClientDateFrom" (change)="getBalanceClient()">
+          </div>
+          <div class="col-md-2">
+            <input type="date" class="form-control" placeholder="Date fin"
+                   [(ngModel)]="balanceClientDateTo" (change)="getBalanceClient()">
+          </div>
+          <div class="col-md-2">
+            <select class="form-select" [(ngModel)]="balanceClientPageSize" (change)="getBalanceClient()">
+              <option [value]="10">10 par page</option>
+              <option [value]="25">25 par page</option>
+              <option [value]="50">50 par page</option>
+              <option [value]="100">100 par page</option>
+            </select>
+          </div>
+          <div class="col-md-3 text-end">
+            <div class="btn-export-group">
+              <button class="btn-export-pdf" (click)="exportBalanceClient('pdf')" title="Exporter PDF">
+                <i class="fas fa-file-pdf"></i> PDF
+              </button>
+              <button class="btn-export-excel" (click)="exportBalanceClient('excel')" title="Exporter Excel">
+                <i class="fas fa-file-excel"></i> Excel
+              </button>
+              <button class="btn btn-outline-primary" (click)="getBalanceClient()">
+                <i class="fas fa-sync-alt"></i> Actualiser
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tableau Balance Client -->
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Balance client</h5>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                  <tr>
+                    <th (click)="onBalanceClientSort('date')" class="sortable">
+                      Date
+                      <i class="fas ms-1" [class]="getBalanceClientSortIcon('date')"></i>
+                    </th>
+                    <th (click)="onBalanceClientSort('client_nom')" class="sortable">
+                      Client
+                      <i class="fas ms-1" [class]="getBalanceClientSortIcon('client_nom')"></i>
+                    </th>
+                    <th>Document</th>
+                    <th class="text-end">Débit</th>
+                    <th class="text-end">Crédit</th>
+                    <th class="text-end">Solde</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngIf="balanceClientLoading">
+                    <td colspan="6" class="text-center py-4">
+                      <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Chargement...</span>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr *ngIf="!balanceClientLoading && balanceClient.length === 0">
+                    <td colspan="6" class="text-center py-4 text-muted">
+                      <i class="fas fa-inbox fa-2x mb-2"></i><br>
+                      Aucune donnée trouvée
+                    </td>
+                  </tr>
+                  <tr *ngFor="let item of balanceClient">
+                    <td>{{ formatDate(item.date) }}</td>
+                    <td><strong>{{ item.client_nom || '-' }}</strong></td>
+                    <td>{{ item.numero || '-' }}</td>
+                    <td class="text-end">{{ formatCurrency(item.debit || 0) }}</td>
+                    <td class="text-end">{{ formatCurrency(item.credit || 0) }}</td>
+                    <td class="text-end"><strong [class.text-danger]="(item.solde || 0) < 0" [class.text-success]="(item.solde || 0) >= 0">{{ formatCurrency(item.solde || 0) }}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination Balance Client -->
+            <div class="d-flex justify-content-between align-items-center mt-3" *ngIf="balanceClientTotalPages > 1">
+              <div class="text-muted">
+                Affichage de {{ getDisplayRange(balanceClientCurrentPage, balanceClientPageSize, balanceClientTotalRecords) }}
+                sur {{ balanceClientTotalRecords }} éléments
+              </div>
+              <nav aria-label="Pagination balance client">
+                <ul class="pagination pagination-sm mb-0">
+                  <li class="page-item" [class.disabled]="balanceClientCurrentPage === 1">
+                    <a class="page-link" href="#" (click)="onBalanceClientPageChange(balanceClientCurrentPage - 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-left"></i>
+                    </a>
+                  </li>
+                  <li class="page-item" [class.active]="page === balanceClientCurrentPage"
+                      *ngFor="let page of getPageNumbers(balanceClientTotalPages, balanceClientCurrentPage)">
+                    <a class="page-link" href="#" (click)="onBalanceClientPageChange(page); $event.preventDefault()">
+                      {{ page }}
+                    </a>
+                  </li>
+                  <li class="page-item" [class.disabled]="balanceClientCurrentPage === balanceClientTotalPages">
+                    <a class="page-link" href="#" (click)="onBalanceClientPageChange(balanceClientCurrentPage + 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-right"></i>
+                    </a>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- === ONGLET SOLDE CLIENT === -->
+      <div class="tab-pane fade" [class.show]="activeTab === 'solde-client'" [class.active]="activeTab === 'solde-client'">
+
+        <!-- Barre de recherche et filtres -->
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <div class="input-group">
+              <span class="input-group-text"><i class="fas fa-search"></i></span>
+              <input type="text" class="form-control" placeholder="Rechercher par client..."
+                     [(ngModel)]="soldeClientSearchTerm" (keyup.enter)="onSoldeClientSearch()">
+              <button class="btn btn-primary" type="button" (click)="onSoldeClientSearch()">
+                <i class="fas fa-search"></i>
+              </button>
+            </div>
+          </div>
+          <div class="col-md-2">
+            <select class="form-select" [(ngModel)]="soldeClientPageSize" (change)="getSoldeClient()">
+              <option [value]="10">10 par page</option>
+              <option [value]="25">25 par page</option>
+              <option [value]="50">50 par page</option>
+              <option [value]="100">100 par page</option>
+            </select>
+          </div>
+          <div class="col-md-6 text-end">
+            <div class="btn-export-group">
+              <button class="btn-export-pdf" (click)="exportSoldeClient('pdf')" title="Exporter PDF">
+                <i class="fas fa-file-pdf"></i> PDF
+              </button>
+              <button class="btn-export-excel" (click)="exportSoldeClient('excel')" title="Exporter Excel">
+                <i class="fas fa-file-excel"></i> Excel
+              </button>
+              <button class="btn btn-outline-primary" (click)="getSoldeClient()">
+                <i class="fas fa-sync-alt"></i> Actualiser
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tableau Solde Client -->
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Solde client</h5>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                  <tr>
+                    <th (click)="onSoldeClientSort('client_nom')" class="sortable">
+                      Client
+                      <i class="fas ms-1" [class]="getSoldeClientSortIcon('client_nom')"></i>
+                    </th>
+                    <th (click)="onSoldeClientSort('solde')" class="sortable text-end">
+                      Solde
+                      <i class="fas ms-1" [class]="getSoldeClientSortIcon('solde')"></i>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngIf="soldeClientLoading">
+                    <td colspan="2" class="text-center py-4">
+                      <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Chargement...</span>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr *ngIf="!soldeClientLoading && soldeClient.length === 0">
+                    <td colspan="2" class="text-center py-4 text-muted">
+                      <i class="fas fa-inbox fa-2x mb-2"></i><br>
+                      Aucune donnée trouvée
+                    </td>
+                  </tr>
+                  <tr *ngFor="let item of soldeClient">
+                    <td><strong>{{ item.client_nom || '-' }}</strong></td>
+                    <td class="text-end"><strong [class.text-danger]="(item.solde || 0) < 0" [class.text-success]="(item.solde || 0) >= 0">{{ formatCurrency(item.solde || 0) }}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination Solde Client -->
+            <div class="d-flex justify-content-between align-items-center mt-3" *ngIf="soldeClientTotalPages > 1">
+              <div class="text-muted">
+                Affichage de {{ getDisplayRange(soldeClientCurrentPage, soldeClientPageSize, soldeClientTotalRecords) }}
+                sur {{ soldeClientTotalRecords }} éléments
+              </div>
+              <nav aria-label="Pagination solde client">
+                <ul class="pagination pagination-sm mb-0">
+                  <li class="page-item" [class.disabled]="soldeClientCurrentPage === 1">
+                    <a class="page-link" href="#" (click)="onSoldeClientPageChange(soldeClientCurrentPage - 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-left"></i>
+                    </a>
+                  </li>
+                  <li class="page-item" [class.active]="page === soldeClientCurrentPage"
+                      *ngFor="let page of getPageNumbers(soldeClientTotalPages, soldeClientCurrentPage)">
+                    <a class="page-link" href="#" (click)="onSoldeClientPageChange(page); $event.preventDefault()">
+                      {{ page }}
+                    </a>
+                  </li>
+                  <li class="page-item" [class.disabled]="soldeClientCurrentPage === soldeClientTotalPages">
+                    <a class="page-link" href="#" (click)="onSoldeClientPageChange(soldeClientCurrentPage + 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-right"></i>
+                    </a>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- === ONGLET VUE GLOBALE === -->
+      <div class="tab-pane fade" [class.show]="activeTab === 'vue-globale'" [class.active]="activeTab === 'vue-globale'">
+
+        <!-- Barre de filtres -->
+        <div class="row mb-3">
+          <div class="col-md-3">
+            <input type="date" class="form-control" placeholder="Date début"
+                   [(ngModel)]="vueGlobaleDateFrom" (change)="getVueGlobale()">
+          </div>
+          <div class="col-md-3">
+            <input type="date" class="form-control" placeholder="Date fin"
+                   [(ngModel)]="vueGlobaleDateTo" (change)="getVueGlobale()">
+          </div>
+          <div class="col-md-6 text-end">
+            <div class="btn-export-group">
+              <button class="btn-export-pdf" (click)="exportVueGlobale('pdf')" title="Exporter PDF" [disabled]="!vueGlobale">
+                <i class="fas fa-file-pdf"></i> PDF
+              </button>
+              <button class="btn-export-excel" (click)="exportVueGlobale('excel')" title="Exporter Excel" [disabled]="!vueGlobale">
+                <i class="fas fa-file-excel"></i> Excel
+              </button>
+              <button class="btn btn-outline-primary" (click)="getVueGlobale()">
+                <i class="fas fa-sync-alt"></i> Actualiser
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Vue Globale -->
+        <div class="card" *ngIf="vueGlobaleLoading">
+          <div class="card-body text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Chargement...</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" *ngIf="!vueGlobaleLoading && vueGlobale">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Vue globale</h5>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-3">
+                <div class="card bg-primary text-white mb-3">
+                  <div class="card-body">
+                    <h6 class="card-title">Total Débits</h6>
+                    <h3 class="mb-0">{{ formatCurrency(vueGlobale.total_debit || 0) }}</h3>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="card bg-success text-white mb-3">
+                  <div class="card-body">
+                    <h6 class="card-title">Total Crédits</h6>
+                    <h3 class="mb-0">{{ formatCurrency(vueGlobale.total_credit || 0) }}</h3>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="card" [class.bg-danger]="(vueGlobale.solde_global || 0) < 0" [class.bg-info]="(vueGlobale.solde_global || 0) >= 0" [class.text-white]="true" class="mb-3">
+                  <div class="card-body">
+                    <h6 class="card-title">Solde Global</h6>
+                    <h3 class="mb-0">{{ formatCurrency(vueGlobale.solde_global || 0) }}</h3>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="card bg-secondary text-white mb-3">
+                  <div class="card-body">
+                    <h6 class="card-title">Nombre de Clients</h6>
+                    <h3 class="mb-0">{{ vueGlobale.nombre_clients || 0 }}</h3>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" *ngIf="!vueGlobaleLoading && !vueGlobale">
+          <div class="card-body text-center py-4 text-muted">
+            <i class="fas fa-chart-pie fa-2x mb-2"></i><br>
+            Aucune donnée disponible
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+
+

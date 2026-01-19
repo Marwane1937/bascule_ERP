@@ -522,31 +522,35 @@ class EmailService {
         };
 
         // === FONCTION: Dessiner l'en-tête du tableau des articles ===
+        // EXACTEMENT COMME FACTURE CONTRAT
         const drawTableHeader = (y) => {
           const lightGrayColor = '#E0E0E0';
-          doc.roundedRect(50, y, 510, articlesTableHeaderHeight, tableBorderRadius).fill(lightGrayColor).stroke('#000');
-          doc.lineWidth(1).roundedRect(50, y, 510, articlesTableHeaderHeight, tableBorderRadius).stroke('#000');
+          const tableStartX = 40; // Tableau commence à X=40 (marge gauche)
+          const tableWidth = 525; // Largeur totale du tableau (595 - 40 marge gauche) - EXACTEMENT COMME FACTURE CONTRAT
+          doc.roundedRect(tableStartX, y, tableWidth, articlesTableHeaderHeight, tableBorderRadius).fill(lightGrayColor).stroke('#000');
+          doc.lineWidth(1).roundedRect(tableStartX, y, tableWidth, articlesTableHeaderHeight, tableBorderRadius).stroke('#000');
           doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
 
-          const colRefX = 50;
-          const colDesignationX = 100;
-          const colQteX = 350;
-          const colPUX = 410;
-          const colRX = 460;
-          const colHTX = 510;
+          // Colonnes EXACTEMENT COMME FACTURE CONTRAT
+          const colRefX = 40;
           const colRefWidth = 50;
-          const colDesignationWidth = 250;
-          const colQteWidth = 60;
-          const colPUWidth = 50;
-          const colRWidth = 50;
-          const colHTWidth = 50;
+          const colDesignationX = 90; // 40 + 50
+          const colDesignationWidth = 280; // Colonne Désignation considérablement élargie
+          const colQteX = 370; // 90 + 280
+          const colQteWidth = 45; // Légèrement réduit
+          const colPUX = 415; // 370 + 45
+          const colPUWidth = 45; // Légèrement réduit
+          const colRX = 460; // 415 + 45
+          const colRWidth = 35; // Réduit
+          const colHTX = 500; // 460 + 35 + 5 (marge)
+          const colHTWidth = 40; // Réduit pour tenir dans la page
 
-          doc.text('Réf', colRefX, y + 6, { width: colRefWidth, align: 'center' });
-          doc.text('Désignation', colDesignationX, y + 6, { width: colDesignationWidth, align: 'center' });
-          doc.text('Qté', colQteX, y + 6, { width: colQteWidth, align: 'center' });
-          doc.text('P.U.', colPUX, y + 6, { width: colPUWidth, align: 'center' });
-          doc.text('R.', colRX, y + 6, { width: colRWidth, align: 'center' });
-          doc.text('H.T.', colHTX, y + 6, { width: colHTWidth, align: 'center' });
+          doc.text('Réf', colRefX, y + 10, { width: colRefWidth, align: 'center' });
+          doc.text('Désignation', colDesignationX, y + 10, { width: colDesignationWidth, align: 'center' });
+          doc.text('Qté', colQteX, y + 10, { width: colQteWidth, align: 'center' });
+          doc.text('P.U.', colPUX, y + 10, { width: colPUWidth, align: 'center' });
+          doc.text('R.', colRX, y + 10, { width: colRWidth, align: 'center' });
+          doc.text('H.T.', colHTX, y + 10, { width: colHTWidth, align: 'center' });
 
           return y + articlesTableHeaderHeight;
         };
@@ -592,23 +596,30 @@ class EmailService {
         // === DESSINER L'EN-TÊTE DE LA PREMIÈRE PAGE ===
         let y = drawDocumentHeader(true);
         y = drawTableHeader(y);
-        const tableStartY = y;
+        const tableStartY = y; // Position de départ du tableau (après l'en-tête)
+        
+        // === DÉFINIR LA HAUTEUR FIXE DU TABLEAU ===
+        // Le tableau doit occuper une hauteur fixe jusqu'à la limite avant le bloc récapitulatif
+        const maxYBeforeFooter = 550; // Position Y maximale avant le bloc récapitulatif
+        const fixedTableHeight = maxYBeforeFooter - tableStartY; // Hauteur fixe du tableau
 
         // Positions des colonnes (utilisées dans la boucle de rendu des lignes)
-        const colRefX = 50;
-        const colDesignationX = 100;
-        const colQteX = 350;
-        const colPUX = 410;
-        const colRX = 460;
-        const colHTX = 510;
-
+        // EXACTEMENT COMME FACTURE CONTRAT
+        const tableStartX = 40; // Tableau commence à X=40 (marge gauche)
+        const tableWidth = 525; // Largeur totale du tableau (595 - 40 marge gauche)
+        const colRefX = 40;
         const colRefWidth = 50;
-        const colDesignationWidth = 250;
-        const colDesignationPadding = 8;
-        const colQteWidth = 60;
-        const colPUWidth = 50;
-        const colRWidth = 50;
-        const colHTWidth = 50;
+        const colDesignationX = 90; // 40 + 50
+        const colDesignationWidth = 280; // Colonne Désignation considérablement élargie
+        const colDesignationPadding = 8; // Padding réduit pour un rendu plus compact et professionnel
+        const colQteX = 370; // 90 + 280
+        const colQteWidth = 45; // Légèrement réduit
+        const colPUX = 415; // 370 + 45
+        const colPUWidth = 45; // Légèrement réduit
+        const colRX = 460; // 415 + 45
+        const colRWidth = 35; // Réduit
+        const colHTX = 500; // 460 + 35 + 5 (marge)
+        const colHTWidth = 50; // Réduit pour tenir dans la page - COMME FACTURE CONTRAT
         const colHTMargin = 5;
 
         doc.font('Helvetica').fillColor('#000').stroke('#000');
@@ -636,7 +647,7 @@ class EmailService {
           else doc.font('Helvetica');
         }
 
-        function renderInlineHtml(doc, html, x, y, width, maxHeight) {
+        function renderInlineHtml(doc, html, x, y, width, maxHeight, align = 'left') {
           if (!html) return;
 
           // Structure pour stocker les lignes avec leurs segments de texte stylisés
@@ -1022,7 +1033,7 @@ class EmailService {
 
                   // Rendre le segment avec la largeur totale disponible (le texte reviendra automatiquement à la ligne)
                   const yBefore = segmentY;
-                  doc.text(segment.text, segmentX, segmentY, { width: totalContentWidth, align: 'left' });
+                  doc.text(segment.text, segmentX, segmentY, { width: totalContentWidth, align: align });
                   
                   // Vérifier la position Y réelle après le rendu (pour détecter les retours à la ligne automatiques)
                   const yAfter = getActualY();
@@ -1057,7 +1068,7 @@ class EmailService {
                 const textHeight = calculateTextHeight(line.text, drawWidth);
 
                 // Rendre le texte
-                doc.text(line.text, drawX, currentY, { width: drawWidth, align: 'left' });
+                doc.text(line.text, drawX, currentY, { width: drawWidth, align: align });
                 
                 // Mettre à jour Y avec la hauteur réelle
                 currentY += textHeight;
@@ -1071,8 +1082,45 @@ class EmailService {
           doc.restore();
         }
 
+        // === DESSINER D'ABORD LE CONTOUR DU TABLEAU AVEC HAUTEUR FIXE ===
+        // Dessiner le rectangle extérieur du tableau avec la hauteur fixe
+        doc.roundedRect(tableStartX, tableStartY, tableWidth, fixedTableHeight, tableBorderRadius).stroke('#000');
+        // Dessiner les lignes verticales de séparation des colonnes sur toute la hauteur
+        doc.moveTo(90, tableStartY).lineTo(90, tableStartY + fixedTableHeight).stroke('#000');
+        doc.moveTo(370, tableStartY).lineTo(370, tableStartY + fixedTableHeight).stroke('#000');
+        doc.moveTo(415, tableStartY).lineTo(415, tableStartY + fixedTableHeight).stroke('#000');
+        doc.moveTo(460, tableStartY).lineTo(460, tableStartY + fixedTableHeight).stroke('#000');
+        doc.moveTo(495, tableStartY).lineTo(495, tableStartY + fixedTableHeight).stroke('#000');
+        
+        // === CALCULER LA HAUTEUR DISPONIBLE POUR LES LIGNES DE DÉTAIL ===
+        // Hauteur minimale par ligne (quand il y a peu de lignes) - Réduite pour éviter les grands espaces
+        const minRowHeight = 20; // Hauteur minimale compacte pour une ligne
+        // Hauteur maximale par ligne (pour éviter que les lignes soient trop grandes)
+        const maxRowHeight = 80; // Réduite pour éviter les grands espaces
+        
+        // Calculer la hauteur totale disponible pour les lignes (dans le tableau fixe)
+        const availableHeightForRows = fixedTableHeight;
+        
+        // Calculer le nombre de lignes
+        const numberOfRows = devisData && devisData.length > 0 ? devisData.length : 0;
+        
+        // Calculer la hauteur par ligne en fonction du nombre de lignes
+        let rowHeight;
+        if (numberOfRows === 0) {
+          rowHeight = minRowHeight; // Pas de lignes, utiliser la hauteur minimale
+        } else {
+          // Répartir l'espace disponible entre toutes les lignes
+          const calculatedRowHeight = availableHeightForRows / numberOfRows;
+          // S'assurer que la hauteur est entre minRowHeight et maxRowHeight
+          rowHeight = Math.max(minRowHeight, Math.min(maxRowHeight, calculatedRowHeight));
+        }
+        
+        // === RENDU DES LIGNES DU TABLEAU DANS L'ESPACE FIXE ===
+        let currentRowY = tableStartY; // Position Y courante pour les lignes
+        let tableStartYCurrent = tableStartY; // Position Y actuelle du début du tableau (peut changer avec pagination)
+        
         if (devisData && devisData.length > 0) {
-          devisData.forEach(line => {
+          devisData.forEach((line, index) => {
             const ref = line.article_cod || '';
             const designationHtml = line.article || '';
             const pu = isNaN(Number(line.prix)) ? 0 : Number(line.prix);
@@ -1185,27 +1233,48 @@ class EmailService {
               textHeight = baseRowHeight;
             }
 
-            // Vérifier que textHeight est valide avant de calculer naturalHeight
-            const validTextHeight = isNaN(textHeight) || textHeight <= 0 ? baseRowHeight : textHeight;
-            // CRITIQUE : Utiliser le vrai padding (haut + bas) et ajouter une marge de sécurité de 10 points
-            const naturalHeight = Math.max(baseRowHeight, Math.ceil(validTextHeight) + (validColDesignationPadding * 2) + 10);
-            const rowHeight = Math.min(maxRowHeight, naturalHeight);
+            // Calculer la hauteur réelle nécessaire pour cette ligne en fonction de son contenu
+            // Utiliser la hauteur calculée du texte, mais avec des limites min/max réduites
+            // baseRowHeight est déjà défini plus haut
+            const minRowHeightForContent = 20; // Hauteur minimale compacte pour une ligne avec contenu
+            const maxRowHeightForContent = 80; // Hauteur maximale réduite pour éviter les grands espaces
+            // Réduire le padding pour un rendu plus compact
+            const calculatedContentHeight = Math.max(minRowHeightForContent, Math.min(maxRowHeightForContent, Math.ceil(textHeight) + (colDesignationPadding * 2) + 5));
+            
+            // Utiliser la hauteur calculée pour cette ligne spécifique
+            const validRowHeight = calculatedContentHeight;
 
-            // Vérifier que rowHeight est valide
-            const validRowHeight = isNaN(rowHeight) || rowHeight <= 0 ? baseRowHeight : rowHeight;
-
-            if (isNaN(rowHeight) || rowHeight <= 0) {
-              console.error('❌ [PDF] Erreur calcul rowHeight:', { textHeight, validTextHeight, naturalHeight, rowHeight, validRowHeight });
+            if (isNaN(validRowHeight) || validRowHeight <= 0) {
+              console.error('❌ [PDF] Erreur calcul validRowHeight:', { textHeight, validRowHeight });
             }
 
-            // CRITIQUE : Vérifier si la ligne va dépasser la limite AVANT de la rendre
-            // Si oui, ajouter une nouvelle page AVANT de rendre la ligne
-            const currentY = isNaN(y) || y < 0 ? 0 : y;
+            // CRITIQUE : Vérifier AVANT de rendre la ligne si elle rentre dans l'espace restant du tableau
+            // Si non, créer une nouvelle page AVANT de rendre la ligne
+            const currentY = currentRowY;
             const estimatedNextY = currentY + validRowHeight;
-            // Limite ajustée pour remplir la page au maximum avant le pied de page
-            // Page A4 = 842pt, pied de page à 770pt, marge de sécurité = 70pt
-            // Le bloc récapitulatif (totaux, signatures) n'est que sur la dernière page
-            const pageLimit = 700; // Limite avant d'ajouter une nouvelle page
+            const tableEndY = tableStartYCurrent + fixedTableHeight; // Fin du tableau fixe sur la page actuelle
+            
+            // Vérifier si la ligne dépasse la hauteur fixe du tableau
+            // Si oui, créer une nouvelle page AVANT de rendre cette ligne
+            if (estimatedNextY > tableEndY && !isNaN(estimatedNextY)) {
+              // La ligne va dépasser, créer une nouvelle page AVANT de la rendre
+              drawPageFooter();
+              doc.addPage();
+              y = drawDocumentHeader(false);
+              y = drawTableHeader(y);
+              // Redessiner le contour du tableau avec hauteur fixe sur la nouvelle page
+              const newTableStartY = y;
+              doc.roundedRect(tableStartX, newTableStartY, tableWidth, fixedTableHeight, tableBorderRadius).stroke('#000');
+              doc.moveTo(90, newTableStartY).lineTo(90, newTableStartY + fixedTableHeight).stroke('#000');
+              doc.moveTo(370, newTableStartY).lineTo(370, newTableStartY + fixedTableHeight).stroke('#000');
+              doc.moveTo(415, newTableStartY).lineTo(415, newTableStartY + fixedTableHeight).stroke('#000');
+              doc.moveTo(460, newTableStartY).lineTo(460, newTableStartY + fixedTableHeight).stroke('#000');
+              doc.moveTo(495, newTableStartY).lineTo(495, newTableStartY + fixedTableHeight).stroke('#000');
+              // Réinitialiser la position Y pour les lignes
+              currentRowY = newTableStartY;
+              // Mettre à jour tableStartYCurrent pour les vérifications suivantes
+              tableStartYCurrent = newTableStartY;
+            }
 
             // === MODE NOMENCLATURE : Pagination spéciale pour afficher TOUS les composants ===
             if (printMode === 'nomenclature') {
@@ -1629,228 +1698,100 @@ class EmailService {
               return;
             }
             
-            // === MODE NORMAL (pas nomenclature) ===
-            if (estimatedNextY > pageLimit && !isNaN(estimatedNextY)) {
-              // La ligne va dépasser la limite, ajouter une nouvelle page AVANT de la rendre
-              // 1. D'abord, dessiner le pied de page sur la page COURANTE
-              drawPageFooter();
-              // 2. Puis ajouter une nouvelle page
-              doc.addPage();
-              // 3. Redessiner l'en-tête du document sur la nouvelle page
-              y = drawDocumentHeader(false);
-              // 4. Redessiner l'en-tête du tableau
-              y = drawTableHeader(y);
+            // Utiliser currentRowY pour positionner la ligne dans le tableau fixe
+            // S'assurer que la ligne ne dépasse jamais les limites du tableau
+            const validY = currentRowY;
+            const topY = validY + 5; // Position en haut de la cellule
+            
+            // CRITIQUE : Vérifier une dernière fois que la ligne ne dépasse pas le tableau
+            // Si elle dépasse, ne pas la rendre (elle sera sur la page suivante)
+            const finalTableEndY = tableStartYCurrent + fixedTableHeight;
+            if (validY + validRowHeight > finalTableEndY) {
+              // Cette ligne dépasse, elle sera rendue sur la page suivante
+              // Ne pas incrémenter currentRowY ici, la pagination sera gérée au début de la prochaine itération
+              return; // Sortir de cette itération, la ligne sera rendue sur la page suivante
             }
-
-            // CRITIQUE : Calculer la position Y CENTRÉE VERTICALEMENT pour toutes les colonnes numériques
-            // Cela garantit que Qté, P.U., R., H.T. restent alignés même si la désignation est haute
-            // Utiliser une position fixe basée sur la hauteur calculée, pas sur le rendu HTML
-            // Vérifier que rowHeight et y sont des nombres valides pour éviter NaN
-            // Utiliser validRowHeight calculé précédemment
-            const validY = isNaN(y) || y < 0 ? 0 : y;
-            const centerY = validY + (validRowHeight / 2) - 3; // Centre vertical de la ligne (-3 pour ajustement visuel)
-
-            // Vérifier que centerY est valide
-            if (isNaN(centerY) || centerY < 0) {
-              console.error('❌ [PDF] Erreur calcul centerY:', { y, rowHeight, validY, validRowHeight, centerY });
-            }
+            
+            // S'assurer que la ligne ne dépasse pas même après le rendu
+            // Limiter la hauteur réelle de la ligne si nécessaire
+            const maxAllowedHeight = finalTableEndY - validY;
+            const actualRowHeight = Math.min(validRowHeight, maxAllowedHeight);
 
             // GARANTIR que la désignation ne dépasse jamais la position de Qté (320)
             // La désignation doit s'arrêter à : colDesignationX (105) + effectiveDesignationWidth (175) = 280 max
             // Qté commence à 320, donc il y a 40 points de marge de sécurité
 
-            // Draw row container avec bordures arrondies (ovale) avec lignes verticales
-            // Vérifier que toutes les valeurs sont valides avant de dessiner
-            // Utiliser validRowHeight calculé précédemment
-            const rectY = isNaN(y) || y < 0 ? 0 : y;
-            const rectHeight = validRowHeight; // Utiliser validRowHeight déjà calculé
+            // Dessiner uniquement les séparations horizontales entre les lignes
+            // Le contour du tableau est déjà dessiné avec la hauteur fixe
+            const rectY = validY;
+            const rectHeight = actualRowHeight; // Utiliser la hauteur limitée
 
             // Vérifier que toutes les valeurs sont valides avant de dessiner
             if (!isNaN(rectY) && !isNaN(rectHeight) && rectHeight > 0 && rectY >= 0) {
-              doc.roundedRect(50, rectY, 510, rectHeight, tableBorderRadius).stroke('#000');
+              // Dessiner la ligne horizontale de séparation entre les lignes (sauf pour la première ligne)
+              if (index > 0) {
+                doc.moveTo(tableStartX, rectY).lineTo(tableStartX + tableWidth, rectY).stroke('#000');
+              }
+              // Les lignes verticales sont déjà dessinées dans le contour du tableau, pas besoin de les redessiner
             } else {
-              console.error('❌ [PDF] Erreur valeurs pour roundedRect:', { rectY, rectHeight, y, validRowHeight });
+              console.error('❌ [PDF] Erreur valeurs pour ligne:', { rectY, rectHeight, validY, validRowHeight });
             }
 
-            // Column contents - positions exactes selon l'image
-            doc.font('Helvetica').fontSize(9).fillColor('#000');
-
-            // CRITIQUE : RENDRE TOUTES LES COLONNES NUMÉRIQUES AVANT LA DÉSIGNATION
-            // Cela garantit qu'elles ne sont pas affectées par le rendu HTML
-
-            // CRITIQUE : RENDRE TOUTES LES COLONNES NUMÉRIQUES AVANT LA DÉSIGNATION
-            // Utiliser des positions ABSOLUES explicites pour éviter toute interférence
-
-            // Qté - Position CENTRÉE VERTICALEMENT, isolé avec save/restore
-            // CRITIQUE : Rendre AVANT la désignation pour éviter toute interférence
-            // CRITIQUE : Utiliser une position ABSOLUE explicite, jamais doc.x/doc.y
-            doc.save();
-            // FORCER la réinitialisation complète avant et après
-            doc.x = undefined;
-            doc.y = undefined;
-            if (qte > 0 && !isNaN(centerY) && centerY >= 0) {
-              // Position ABSOLUE explicite - ne JAMAIS utiliser doc.x/doc.y
-              const qteValue = isNaN(qte) ? '0,00' : qte.toFixed(2).replace('.', ',');
-              const validColQteX = isNaN(colQteX) || colQteX < 0 ? 320 : colQteX;
-              const validColQteWidth = isNaN(colQteWidth) || colQteWidth <= 0 ? 55 : colQteWidth;
-              if (!isNaN(validColQteX) && !isNaN(centerY) && !isNaN(validColQteWidth)) {
-                doc.text(qteValue, validColQteX, centerY, {
-                  width: validColQteWidth,
-                  align: 'right',
-                  continued: false // FORCER à ne pas continuer
+            // EXACTEMENT COMME FACTURE CONTRAT : rendu du contenu
+            doc.font('Helvetica').fontSize(10).fillColor('#000'); // Taille de police augmentée pour mieux remplir - COMME FACTURE CONTRAT
+            
+            // Réf (centré horizontalement, aligné en haut)
+            doc.text(ref || '', colRefX, topY, { width: colRefWidth, align: 'center' });
+            
+            // Désignation (aligné en haut, à gauche) - EXACTEMENT COMME FACTURE CONTRAT
+            // CRITIQUE : Utiliser actualRowHeight pour s'assurer que le contenu ne dépasse pas la cellule
+            const maxDesignationHeight = actualRowHeight - colDesignationPadding * 2;
+            if (designationHtml && designationHtml.trim()) {
+              if (designationHtml.includes('<') || designationHtml.includes('&')) {
+                // Contient du HTML, utiliser renderInlineHtml - EXACTEMENT COMME FACTURE CONTRAT
+                // Limiter la hauteur pour qu'elle ne dépasse pas la cellule
+                renderInlineHtml(doc, designationHtml, colDesignationX + colDesignationPadding, validY + colDesignationPadding, colDesignationWidth - colDesignationPadding * 2, Math.max(10, maxDesignationHeight));
+              } else {
+                // Texte simple, utiliser doc.text directement avec alignement à gauche - EXACTEMENT COMME FACTURE CONTRAT
+                doc.text(designationPlain, colDesignationX + colDesignationPadding, topY, { 
+                  width: colDesignationWidth - colDesignationPadding * 2, 
+                  align: 'left',
+                  ellipsis: true
                 });
               }
+            } else {
+              // Désignation vide, afficher un tiret - EXACTEMENT COMME FACTURE CONTRAT
+              doc.text('-', colDesignationX + colDesignationPadding, topY, { width: colDesignationWidth - colDesignationPadding * 2, align: 'left' });
             }
-            // Réinitialiser après le texte
-            doc.x = undefined;
-            doc.y = undefined;
-            doc.restore();
+            
+            // Qté, P.U., R., H.T. (centrés horizontalement, alignés en haut)
+            doc.text(qte.toFixed(2).replace('.', ','), colQteX, topY, { width: colQteWidth, align: 'center' });
+            doc.text(pu.toFixed(2).replace('.', ','), colPUX, topY, { width: colPUWidth, align: 'center' });
+            const remiseText = (montantRemise > 0 ? montantRemise.toFixed(2).replace('.', ',') : '0,00');
+            doc.text(remiseText, colRX, topY, { width: colRWidth, align: 'center' });
+            doc.text(ht.toFixed(2).replace('.', ','), colHTX, topY, { width: colHTWidth, align: 'center' });
 
-            // P.U. - Position CENTRÉE VERTICALEMENT, isolé avec save/restore
-            doc.save();
-            doc.x = undefined;
-            doc.y = undefined;
-            if (!isNaN(centerY) && centerY >= 0) {
-              const puValue = isNaN(pu) ? '0,00' : pu.toFixed(2).replace('.', ',');
-              const validColPUX = isNaN(colPUX) || colPUX < 0 ? 380 : colPUX;
-              const validColPUWidth = isNaN(colPUWidth) || colPUWidth <= 0 ? 45 : colPUWidth;
-              if (!isNaN(validColPUX) && !isNaN(centerY) && !isNaN(validColPUWidth)) {
-                doc.text(puValue, validColPUX, centerY, {
-                  width: validColPUWidth,
-                  align: 'right',
-                  continued: false
-                });
-              }
-            }
-            doc.x = undefined;
-            doc.y = undefined;
-            doc.restore();
-
-            // R. - Position CENTRÉE VERTICALEMENT, isolé avec save/restore
-            doc.save();
-            doc.x = undefined;
-            doc.y = undefined;
-            if (!isNaN(centerY) && centerY >= 0) {
-              const remiseValue = isNaN(montantRemise) ? '0,00' : montantRemise.toFixed(2).replace('.', ',');
-              const validColRX = isNaN(colRX) || colRX < 0 ? 430 : colRX;
-              const validColRWidth = isNaN(colRWidth) || colRWidth <= 0 ? 55 : colRWidth;
-              if (!isNaN(validColRX) && !isNaN(centerY) && !isNaN(validColRWidth)) {
-                doc.text(remiseValue, validColRX, centerY, {
-                  width: validColRWidth,
-                  align: 'right',
-                  continued: false
-                });
-              }
-            }
-            doc.x = undefined;
-            doc.y = undefined;
-            doc.restore();
-
-            // H.T. - Position CENTRÉE VERTICALEMENT, isolé avec save/restore
-            doc.save();
-            doc.x = undefined;
-            doc.y = undefined;
-            if (!isNaN(centerY) && centerY >= 0) {
-              const htValue = isNaN(ht) ? '0,00' : ht.toFixed(2).replace('.', ',');
-              const validColHTX = isNaN(colHTX) || colHTX < 0 ? 490 : colHTX;
-              const validColHTMargin = isNaN(colHTMargin) || colHTMargin < 0 ? 5 : colHTMargin;
-              const validColHTWidth = isNaN(colHTWidth) || colHTWidth <= 0 ? 50 : colHTWidth;
-              const validHTX = validColHTX + validColHTMargin;
-              const validHTWidth = Math.max(0, validColHTWidth - validColHTMargin);
-              if (!isNaN(validHTX) && !isNaN(centerY) && !isNaN(validHTWidth) && validHTWidth > 0) {
-                doc.text(htValue, validHTX, centerY, {
-                  width: validHTWidth,
-                  align: 'right',
-                  continued: false
-                });
-              }
-            }
-            doc.x = undefined;
-            doc.y = undefined;
-            doc.restore();
-
-            // Réf - isolé avec save/restore, positionné en haut
-            doc.save();
-            doc.x = undefined;
-            doc.y = undefined;
-            // Vérifier que toutes les valeurs sont valides
-            const validColRefX = isNaN(colRefX) || colRefX < 0 ? 55 : colRefX;
-            const validYForRef = isNaN(y) || y < 0 ? 0 : y;
-            const validColRefWidth = isNaN(colRefWidth) || colRefWidth <= 0 ? 45 : colRefWidth;
-            if (!isNaN(validColRefX) && !isNaN(validYForRef) && !isNaN(validColRefWidth)) {
-              doc.text(ref || '', validColRefX, validYForRef + 6, { width: validColRefWidth, align: 'left' });
-            }
-            doc.restore();
-
-            // Désignation avec largeur limitée pour ne pas empiéter sur Qté
-            // CRITIQUE : La désignation DOIT s'arrêter avant colQteX (320)
-            // effectiveDesignationWidth = 200 - 15 = 185, donc fin à 105 + 185 = 290
-            // Qté commence à 320, donc marge de 30 points garantie
-            // AFFICHER EN TEXTE CLAIR (sans HTML) pour éviter les problèmes de rendu et NaN
-            doc.save();
-            doc.x = undefined;
-            doc.y = undefined;
-            // Vérifier que toutes les valeurs sont valides
-            const validColDesignationX = isNaN(colDesignationX) || colDesignationX < 0 ? 105 : colDesignationX;
-            const validYForDesignation = isNaN(y) || y < 0 ? 0 : y;
-            const validEffectiveWidth = isNaN(effectiveDesignationWidth) || effectiveDesignationWidth <= 0 ? 185 : effectiveDesignationWidth;
-
-            // Afficher la désignation en texte clair (sans HTML) - utiliser designationPlain
-            // Désignation avec rendu HTML pour supporter le gras, les couleurs et les sauts de ligne
-            if (!isNaN(validColDesignationX) && !isNaN(validYForDesignation) && !isNaN(validEffectiveWidth) && designationHtml) {
-              // TOUJOURS utiliser une hauteur maximale pour le clipping (évite que le texte déborde du tableau)
-              // En mode nomenclature, on utilise validRowHeight calculé dynamiquement
-              const maxHeightForRender = validRowHeight - 8;
-              renderInlineHtml(doc, designationHtml, validColDesignationX, validYForDesignation + 6, validEffectiveWidth, maxHeightForRender);
-            }
-            doc.restore();
-
-            // CRITIQUE : Réinitialiser complètement la position après TOUS les rendus
-            doc.x = undefined;
-            doc.y = undefined;
-
-            // Lignes verticales pour séparer les colonnes (ajustées selon les nouvelles positions)
-            const xPositions = [100, colQteX, colPUX, colRX, colHTX];
-            // Utiliser validRowHeight calculé précédemment
-            const validYForLines = isNaN(y) || y < 0 ? 0 : y;
-            xPositions.forEach(x => {
-              if (!isNaN(x) && x >= 0 && !isNaN(validYForLines) && !isNaN(validRowHeight) && validRowHeight > 0) {
-                doc.moveTo(x, validYForLines).lineTo(x, validYForLines + validRowHeight).stroke('#000');
-              }
-            });
-
-            // Vérifier que rowHeight est valide avant d'incrémenter y
-            // Utiliser validRowHeight calculé précédemment (défini plus haut dans le code)
-            const currentYAfterRender = isNaN(y) || y < 0 ? 0 : y;
-            y = currentYAfterRender + validRowHeight;
-
-            // Vérifier que y est valide après incrément
-            if (isNaN(y) || y < 0) {
-              console.error('❌ [PDF] Erreur valeur y après incrément:', { y, validRowHeight, currentYAfterRender });
-              y = currentYAfterRender + 20; // Utiliser une valeur sûre
-            }
-            // Note: La vérification pour ajouter une nouvelle page est faite AVANT de rendre la ligne (ligne 612)
+            // Mettre à jour currentRowY pour la ligne suivante
+            currentRowY = validY + actualRowHeight;
           });
+          
+          // Mettre à jour y pour être à la fin du tableau fixe
+          y = tableStartY + fixedTableHeight;
         } else {
-          doc.text('Aucune ligne de devis disponible.', 60, y + 10);
-          y += 30;
+          // Si aucune ligne, le tableau fixe est déjà dessiné, juste mettre y à la fin
+          y = tableStartY + fixedTableHeight;
         }
 
         // === BLOC RÉCAPITULATIF HORIZONTAL (ne dépasse pas la moitié de la page, positionné à droite) ===
-        // Calculer la hauteur totale du bloc final (récap + montant + conditions + signatures)
-        // Récap: ~55px, Montant en lettres: ~20px, Conditions: ~65px, Signatures: ~80px = ~220px
-        // Le pied de page commence à 770, donc on doit s'arrêter à 770 - 220 = 550
-        const maxYBeforeFooter = 550; // Position Y maximale avant le bloc final pour éviter chevauchement avec pied de page
-        
-        // Vérifier si le bloc final va dépasser la zone disponible
+        // EXACTEMENT COMME FACTURE CONTRAT : vérification saut de page avant bloc récapitulatif
+        // Note: y devrait déjà être à maxYBeforeFooter grâce au tableau fixe
         if (y > maxYBeforeFooter) {
-          // 1. Dessiner le pied de page sur la page courante
           drawPageFooter();
-          // 2. Ajouter une nouvelle page
           doc.addPage();
-          // 3. Redessiner l'en-tête du document sur la nouvelle page
           y = drawDocumentHeader(false);
         }
+        // S'assurer que y est positionné correctement pour le bloc récapitulatif
+        y = Math.max(y, maxYBeforeFooter);
         y += 10;
         const recapTableY = y;
         const recapTableHeight = 25;

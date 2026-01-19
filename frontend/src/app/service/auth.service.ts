@@ -181,6 +181,9 @@ export class AuthService {
     localStorage.removeItem('user');
     localStorage.removeItem('currentDatabase');
     localStorage.removeItem('userPermissions');
+    // IMPORTANT: éviter que currentSociete (souvent base mère) écrase currentDatabaseName dans l'interceptor
+    localStorage.removeItem('currentSociete');
+    localStorage.removeItem('currentSocieteId');
     this.currentUserSubject.next(null);
     this.documentSocieteSubject.next(null);
     this.currentSocieteSubject.next(null);
@@ -276,11 +279,41 @@ export class AuthService {
       );
   }
 
-  // Changer de société/base de données
+  // Changer de société/base de données (ancienne méthode - gardée pour compatibilité)
   switchDatabase(societeId?: number, databaseName?: string): Observable<any> {
     return this.http.post<{ success: boolean, message: string, data: any }>(`http://localhost:3500/api/societes/switch-database`, {
       societe_id: societeId,
       database_name: databaseName
+    })
+      .pipe(
+        map(response => {
+          return response;
+        }),
+        catchError(error => {
+          console.error('❌ Erreur changement de base de données:', error);
+          return throwError(() => error);
+        })
+      );
+  }
+
+  // Récupérer les bases de données depuis la table db
+  getDatabasesFromTable(): Observable<any[]> {
+    return this.http.get<{ success: boolean, data: any[] }>(`http://localhost:3500/api/database/list-databases`)
+      .pipe(
+        map(response => {
+          return response.data || [];
+        }),
+        catchError(error => {
+          console.error('[AuthService] ❌ Erreur récupération bases depuis table db:', error);
+          return throwError(() => error);
+        })
+      );
+  }
+
+  // Changer de base de données avec db_id (nouvelle méthode)
+  switchDatabaseByDbId(dbId: number): Observable<any> {
+    return this.http.post<{ success: boolean, message: string, data: any }>(`http://localhost:3500/api/database/switch-database`, {
+      db_id: dbId
     })
       .pipe(
         map(response => {

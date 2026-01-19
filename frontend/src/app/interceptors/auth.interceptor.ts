@@ -44,12 +44,12 @@ export class AuthInterceptor implements HttpInterceptor {
     
     if (societeId) {
       headers['x-societe-id'] = societeId;
-    } else {
-      console.warn('⚠️ [AuthInterceptor] No societeId found in localStorage');
     }
     
-    // Ajouter le nom de la base de données (priorité: nom_base de la société > currentDatabaseName)
-    const dbNameToUse = currentSociete?.nom_base || databaseName;
+    // Ajouter le nom de la base de données
+    // IMPORTANT: priorité à currentDatabaseName (db réelle sélectionnée) pour éviter que currentSociete.nom_base
+    // (souvent la base "mère") écrase le choix de l'utilisateur.
+    const dbNameToUse = databaseName || currentSociete?.nom_base;
     if (dbNameToUse) {
       headers['x-database-name'] = dbNameToUse;
     } else {

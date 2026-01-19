@@ -1,0 +1,305 @@
+<div class="container py-4">
+  <div class="page-inner">
+    <!-- En-tête -->
+    <div class="page-header mb-4">
+      <h3 class="fw-bold text-dark">Achats</h3>
+      <ul class="breadcrumbs d-flex align-items-center">
+        <li class="nav-home me-2"><a href="#"><i class="fas fa-home text-primary"></i></a></li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item me-2"><a href="#" class="text-muted">Réception</a></li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item fw-semibold text-muted">Commande → Réception</li>
+      </ul>
+    </div>
+
+    <!-- Actions -->
+    <div class="row mb-3">
+      <div class="col-md-12 text-end">
+        <button class="btn btn-warning" (click)="openTransfertModal()">
+          <i class="fas fa-exchange-alt"></i> Commande → Réception
+        </button>
+      </div>
+    </div>
+
+    <!-- Tableau Réceptions (type=1) -->
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card border-0 shadow-sm rounded-3 mb-3">
+          <div class="card-body">
+            <div class="row mb-3">
+              <div class="col-md-4">
+                <div class="input-group">
+                  <span class="input-group-text"><i class="fas fa-search"></i></span>
+                  <input
+                    type="text"
+                    class="form-control"
+                    placeholder="Rechercher par numéro ou fournisseur..."
+                    [(ngModel)]="searchTerm"
+                    (keyup.enter)="onSearch()"
+                  />
+                  <button class="btn btn-primary" type="button" (click)="onSearch()">
+                    <i class="fas fa-search"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="col-md-2">
+                <select class="form-select" (change)="onPageSizeChange($event)">
+                  <option [value]="10" [selected]="pageSize === 10">10 par page</option>
+                  <option [value]="25" [selected]="pageSize === 25">25 par page</option>
+                  <option [value]="50" [selected]="pageSize === 50">50 par page</option>
+                  <option [value]="100" [selected]="pageSize === 100">100 par page</option>
+                </select>
+              </div>
+              <div class="col-md-6 text-end text-muted">
+                Total: <strong>{{ totalRecords }}</strong>
+              </div>
+            </div>
+
+            <div class="table-responsive" style="position: relative; min-height: 400px;">
+              <div *ngIf="loadingReceptions"
+                   class="text-center my-4"
+                   style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);">
+                <div class="spinner-border text-warning" role="status"></div>
+                <p class="mt-3 text-muted">Chargement des réceptions...</p>
+              </div>
+
+              <table class="table table-hover align-middle" *ngIf="!loadingReceptions">
+                <thead class="table-light">
+                  <tr>
+                    <th>N° Réception</th>
+                    <th>Date</th>
+                    <th>Fournisseur</th>
+                    <th class="text-end">Total HT</th>
+                    <th class="text-end">Total TTC</th>
+                    <th class="text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let r of receptions">
+                    <td class="fw-semibold">{{ r.numero }}</td>
+                    <td>{{ r.date | date:'yyyy-MM-dd' }}</td>
+                    <td>{{ r.fournisseur }}</td>
+                    <td class="text-end">{{ r.total_ht | number:'1.2-2' }}</td>
+                    <td class="text-end">{{ r.total_ttc | number:'1.2-2' }}</td>
+                    <td class="text-center">
+                      <button class="btn btn-sm btn-success me-1" (click)="imprimerReceptionPDF(r.document_id)" title="Imprimer PDF">
+                        <i class="fas fa-print"></i>
+                      </button>
+                      <button class="btn btn-sm btn-primary me-1" (click)="editReception(r.document_id)" title="Modifier">
+                        <i class="fas fa-edit"></i>
+                      </button>
+                      <button class="btn btn-sm btn-danger" (click)="deleteReception(r.document_id, r.numero)" title="Supprimer">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </td>
+                  </tr>
+                  <tr *ngIf="receptions.length === 0">
+                    <td colspan="6" class="text-center text-muted py-4">
+                      Aucune réception trouvée.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mt-3" *ngIf="!loadingReceptions">
+              <div class="text-muted">
+                Page {{ currentPage }} / {{ totalPages }}
+              </div>
+              <div class="btn-group">
+                <button class="btn btn-outline-secondary btn-sm" (click)="onPageChange(currentPage - 1)" [disabled]="currentPage <= 1">
+                  <i class="fas fa-chevron-left"></i>
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" (click)="onPageChange(currentPage + 1)" [disabled]="currentPage >= totalPages">
+                  <i class="fas fa-chevron-right"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grand Modal Transfert + Edition commande -->
+    <div class="modal fade show d-block reception-modal-backdrop" *ngIf="showTransfertModal" tabindex="-1" role="dialog">
+      <div class="modal-dialog modal-xl modal-dialog-centered reception-modal-xl" role="document">
+        <div class="modal-content">
+          <div class="modal-header bg-warning text-dark d-flex align-items-center">
+            <h5 class="modal-title mb-0">
+              <i class="fas fa-exchange-alt"></i> Commande → Réception
+            </h5>
+            <div class="ms-auto d-flex gap-2 align-items-center">
+              <button class="btn btn-success"
+                      [disabled]="!selectedCommande || loadingDetails"
+                      (click)="validateReceptionFromEditedCommande()">
+                <i class="fas fa-check"></i> Valider
+              </button>
+              <button type="button" class="btn-close" aria-label="Close" (click)="closeTransfertModal()"></button>
+            </div>
+          </div>
+          <div class="modal-body">
+            <div class="row mb-2">
+              <div class="col-md-5">
+                <div class="input-group">
+                  <span class="input-group-text"><i class="fas fa-search"></i></span>
+                  <input
+                    type="text"
+                    class="form-control"
+                    placeholder="Rechercher par numéro ou fournisseur..."
+                    [(ngModel)]="modalSearchTerm"
+                    (input)="applyModalFilter()"
+                  />
+                </div>
+              </div>
+              <div class="col-md-2">
+                <select class="form-select" (change)="onModalPageSizeChange($event)">
+                  <option [value]="10" [selected]="modalPageSize === 10">10 / page</option>
+                  <option [value]="25" [selected]="modalPageSize === 25">25 / page</option>
+                  <option [value]="50" [selected]="modalPageSize === 50">50 / page</option>
+                </select>
+              </div>
+              <div class="col-md-5 text-end text-muted small">
+                Sélectionner une commande, puis ajuster les lignes avant validation.
+              </div>
+            </div>
+
+            <div class="row">
+              <!-- Liste commandes -->
+              <div class="col-md-5">
+                <div class="table-responsive" style="min-height: 380px; position: relative;">
+                  <div *ngIf="loadingCommandes"
+                       class="text-center my-4"
+                       style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);">
+                    <div class="spinner-border text-warning" role="status"></div>
+                    <p class="mt-3 text-muted">Chargement des commandes non réceptionnées...</p>
+                  </div>
+
+                  <table class="table table-hover align-middle" *ngIf="!loadingCommandes">
+                    <thead class="table-light">
+                      <tr>
+                        <th>N° Commande</th>
+                        <th>Date</th>
+                        <th>Fournisseur</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        *ngFor="let c of commandesNonReceptionneesPaged"
+                        (click)="selectCommandeForEdit(c)"
+                        style="cursor: pointer;"
+                        [class.table-active]="selectedCommande && selectedCommande.document_id === c.document_id"
+                      >
+                        <td class="fw-semibold">{{ c.numero }}</td>
+                        <td>{{ c.date | date:'yyyy-MM-dd' }}</td>
+                        <td>{{ c.fournisseur }}</td>
+                      </tr>
+                      <tr *ngIf="commandesNonReceptionneesFiltered.length === 0">
+                        <td colspan="3" class="text-center text-muted py-4">
+                          Aucune commande en attente de réception.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- Pagination (comme Client) -->
+                <div *ngIf="!loadingCommandes && modalTotalPages > 1" class="d-flex justify-content-between align-items-center mt-3">
+                  <div class="text-muted">
+                    Affichage de {{ getModalDisplayRange() }} sur {{ commandesNonReceptionneesFiltered.length }} commandes
+                  </div>
+                  <nav>
+                    <ul class="pagination mb-0">
+                      <li class="page-item" [class.disabled]="modalCurrentPage === 1">
+                        <a class="page-link" href="javascript:void(0)" (click)="onModalPageChange(1)" [attr.aria-disabled]="modalCurrentPage === 1">
+                          <i class="fas fa-angle-double-left"></i>
+                        </a>
+                      </li>
+                      <li class="page-item" [class.disabled]="modalCurrentPage === 1">
+                        <a class="page-link" href="javascript:void(0)" (click)="onModalPageChange(modalCurrentPage - 1)" [attr.aria-disabled]="modalCurrentPage === 1">
+                          <i class="fas fa-angle-left"></i>
+                        </a>
+                      </li>
+                      <li *ngFor="let page of getModalPageNumbers()" class="page-item" [class.active]="page === modalCurrentPage">
+                        <a class="page-link" href="javascript:void(0)" (click)="onModalPageChange(page)">{{ page }}</a>
+                      </li>
+                      <li class="page-item" [class.disabled]="modalCurrentPage === modalTotalPages">
+                        <a class="page-link" href="javascript:void(0)" (click)="onModalPageChange(modalCurrentPage + 1)" [attr.aria-disabled]="modalCurrentPage === modalTotalPages">
+                          <i class="fas fa-angle-right"></i>
+                        </a>
+                      </li>
+                      <li class="page-item" [class.disabled]="modalCurrentPage === modalTotalPages">
+                        <a class="page-link" href="javascript:void(0)" (click)="onModalPageChange(modalTotalPages)" [attr.aria-disabled]="modalCurrentPage === modalTotalPages">
+                          <i class="fas fa-angle-double-right"></i>
+                        </a>
+                      </li>
+                    </ul>
+                  </nav>
+                </div>
+              </div>
+
+              <!-- Edition lignes -->
+              <div class="col-md-7">
+                <div class="card border-0 shadow-sm">
+                  <div class="card-header bg-light">
+                    <div class="fw-semibold">
+                      Edition commande:
+                      <span class="text-muted" *ngIf="!selectedCommande">sélectionnez une commande à gauche</span>
+                      <span *ngIf="selectedCommande">{{ selectedCommande.numero }}</span>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    <div *ngIf="loadingDetails" class="text-center my-4">
+                      <div class="spinner-border text-warning" role="status"></div>
+                      <p class="mt-3 text-muted">Chargement des lignes...</p>
+                    </div>
+
+                    <div class="table-responsive" *ngIf="!loadingDetails">
+                      <table class="table table-sm align-middle">
+                        <thead class="table-light">
+                          <tr>
+                            <th style="min-width: 420px;">Article / Désignation</th>
+                            <th class="text-end" style="width: 110px;">Qté</th>
+                            <th class="text-end" style="width: 120px;">P.U.</th>
+                            <th class="text-end" style="width: 110px;">TVA</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr *ngFor="let l of commandeDetails; let i = index">
+                            <td>
+                              <div class="small text-muted mb-1" *ngIf="l.article_cod || l.article_nom">
+                                <strong>{{ l.article_cod }}</strong> {{ l.article_nom }}
+                              </div>
+                            </td>
+                            <td class="text-end">
+                              <input class="form-control form-control-sm text-end" type="number" [(ngModel)]="l.quantite" />
+                            </td>
+                            <td class="text-end">
+                              <input class="form-control form-control-sm text-end" type="number" [(ngModel)]="l.prix" />
+                            </td>
+                            <td class="text-end">
+                              <input class="form-control form-control-sm text-end" type="number" [(ngModel)]="l.taux_tva" />
+                            </td>
+                          </tr>
+                          <tr *ngIf="commandeDetails.length === 0">
+                            <td colspan="4" class="text-center text-muted py-4">
+                              Aucune ligne.
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline-secondary" (click)="closeTransfertModal()">Fermer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+

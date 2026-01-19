@@ -1,9 +1,9 @@
-const sequelize = require('../config/database');
-//import sequelize from '../../config/database.js';
-
+const { getConnection } = require('../config/database');
+const sequelize = require('../config/database'); // Garder pour compatibilité
 
 const getEmailDataByDocumentId = async (document_id, sequelizeConnection = null) => {
-  const connectionToUse = sequelizeConnection || sequelize;
+  // Utiliser la connexion passée, sinon getConnection() pour avoir la connexion active
+  const connectionToUse = sequelizeConnection || getConnection();
 
   // D'abord, vérifier si c'est une livraison ou un retour (dans stock) ou un document vente_document
   const checkStock = await connectionToUse.query(

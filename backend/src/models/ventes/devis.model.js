@@ -1,5 +1,11 @@
 const sequelize = require('../../config/database');
 
+
+const formatToSqlDateTime = (value) => {
+  if (!value) return null;
+  return value.replace('T', ' ') + ':00';
+};
+
 // Récupérer tous les devis avec pagination (optimisé pour les performances)
 // Utilise COUNT(*) OVER() pour éviter une requête séparée de comptage
 const getAllDevis = async (options = {}, sequelizeConnection = null) => {
@@ -380,12 +386,14 @@ const getDevisById = async (id, sequelizeConnection = null) => {
 // Ajouter un devis
 const addDevis = async ({ numero, date, description, part_id, contact_id, etat, type }, sequelizeConnection = null) => {
   const connectionToUse = sequelizeConnection || sequelize;
+  const dateSql = formatToSqlDateTime(date);
+
   const [result] = await connectionToUse.query(
     `INSERT INTO vente_document (numero, date , description , part_id , contact_id , etat, type) 
      OUTPUT INSERTED.document_id 
-     VALUES (:numero, :date , :description , :part_id , :contact_id , :etat, :type)`,
-    {
-      replacements: { numero, date, description, part_id, contact_id, etat: etat !== undefined ? etat : null, type: type || 1 },
+     VALUES (:numero, :dateSql , :description , :part_id , :contact_id , :etat, :type)`,
+    { 
+      replacements: { numero, dateSql, description, part_id, contact_id, etat: etat !== undefined ? etat : null, type: type || 1 },
       type: connectionToUse.QueryTypes.INSERT,
     }
   );
@@ -395,12 +403,14 @@ const addDevis = async ({ numero, date, description, part_id, contact_id, etat, 
 // Ajouter une commande (type=2, etat=NULL)
 const addCommande = async ({ numero, date, description, part_id, contact_id, etat, type }, sequelizeConnection = null) => {
   const connectionToUse = sequelizeConnection || sequelize;
+  const dateSql = formatToSqlDateTime(date);
+
   const [result] = await connectionToUse.query(
     `INSERT INTO vente_document (numero, date , description , part_id , contact_id , etat, type) 
      OUTPUT INSERTED.document_id 
-     VALUES (:numero, :date , :description , :part_id , :contact_id , NULL, :type)`,
+     VALUES (:numero, :dateSql , :description , :part_id , :contact_id , NULL, :type)`,
     {
-      replacements: { numero, date, description, part_id, contact_id, type: type || 2 },
+      replacements: { numero, dateSql, description, part_id, contact_id, type: type || 2 },
       type: connectionToUse.QueryTypes.INSERT,
     }
   );
@@ -433,9 +443,9 @@ const saveDetail = async (detail, sequelizeConnection = null) => {
       // Insertion dans vente_document_detail
       const [result] = await connectionToUse.query(
         `INSERT INTO vente_document_detail 
-         (document_id, article_id, prix, quantite, remise ,remise_montant, taux_tva)
+         (document_id, article_id, prix, quantite, remise ,remise_montant, taux_tva , cr_date)
          OUTPUT INSERTED.id
-         VALUES (:document_id, :article_id, :pu, :qte, :remise ,:remise_montant, :taxe)`,
+         VALUES (:document_id, :article_id, :pu, :qte, :remise ,:remise_montant, :taxe , GETDATE())`,
         {
           replacements: { document_id, article_id, pu, qte, remise, remise_montant, taxe },
           type: sequelize.QueryTypes.INSERT,
@@ -474,7 +484,8 @@ const saveDetail = async (detail, sequelizeConnection = null) => {
              quantite = :qte,
              remise = :remise,
              remise_montant = :remise_montant,
-             taux_tva = :taxe
+             taux_tva = :taxe,
+             cr_date = GETDATE()
          WHERE id = :id`,
         {
           replacements: { article_id, pu, qte, remise, remise_montant, taxe, id },
@@ -562,13 +573,14 @@ const saveInfo = async (info) => {
 
 // Modifier un client
 const updateDevis = async (id, { date, description, part_id, contact_id }) => {
+  const dateSql = formatToSqlDateTime(date);
   await sequelize.query(
     `UPDATE vente_document 
-     SET  date = :date , description = :description , part_id = :part_id ,
+     SET  date = :dateSql , description = :description , part_id = :part_id ,
      contact_id = :contact_id 
      WHERE document_id = :id`,
     {
-      replacements: { id, date, description, part_id, contact_id },
+      replacements: { id, dateSql, description, part_id, contact_id },
       type: sequelize.QueryTypes.UPDATE,
     }
   );
@@ -639,19 +651,24 @@ const transfererDevisVersCommande = async (devisId, numeroCommande, sequelizeCon
       throw new Error(`Devis avec ID ${devisId} non trouvé`);
     }
 
-    // 2. Date du jour
-    const today = new Date().toISOString().split('T')[0];
+    // 2. Date du jour (heure locale, SANS toISOString)
+    const now = new Date();
+    const pad = (n) => n.toString().padStart(2, '0');
+
+    const dateSql =
+      `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ` +
+      `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
     // 3. Créer un nouveau document commande avec parent = document_id du devis
     const [insertResult] = await connectionToUse.query(
       `INSERT INTO vente_document 
        (numero, date, description, part_id, contact_id, etat, type, parent) 
        OUTPUT INSERTED.document_id 
-       VALUES (:numero, :date, :description, :part_id, :contact_id, NULL, :type, :parent)`,
+       VALUES (:numero, :dateSql, :description, :part_id, :contact_id, NULL, :type, :parent)`,
       {
         replacements: {
           numero: numeroCommande,
-          date: today,
+          dateSql,
           description: devis.description || '',
           part_id: devis.part_id,
           contact_id: devis.contact_id,
@@ -674,9 +691,9 @@ const transfererDevisVersCommande = async (devisId, numeroCommande, sequelizeCon
         // Insérer dans vente_document_detail
         const [detailResult] = await connectionToUse.query(
           `INSERT INTO vente_document_detail 
-           (document_id, article_id, prix, quantite, remise, remise_montant, taux_tva)
+           (document_id, article_id, prix, quantite, remise, remise_montant, taux_tva, cr_date)
            OUTPUT INSERTED.id
-           VALUES (:document_id, :article_id, :prix, :quantite, :remise, :remise_montant, :taux_tva)`,
+           VALUES (:document_id, :article_id, :prix, :quantite, :remise, :remise_montant, :taux_tva, GETDATE())`,
           {
             replacements: {
               document_id: nouveauDocumentId,
@@ -685,7 +702,7 @@ const transfererDevisVersCommande = async (devisId, numeroCommande, sequelizeCon
               quantite: detail.quantite,
               remise: detail.remise || 0,
               remise_montant: detail.remise_montant || 0,
-              taux_tva: detail.taux_tva || 0
+              taux_tva: detail.taux_tva || 0,
             },
             type: connectionToUse.QueryTypes.INSERT,
           }
@@ -746,7 +763,7 @@ const transfererDevisVersCommande = async (devisId, numeroCommande, sequelizeCon
     return {
       document_id: nouveauDocumentId,
       numero: numeroCommande,
-      date: today,
+      date: dateSql,
       parent: devisId
     };
 

@@ -26,6 +26,8 @@ export class StockReportingComponent implements OnInit {
   ficheStock: any = null;
   ficheStockLoading: boolean = false;
   ficheStockArticleId: number = 0;
+  ficheStockArticleNom: string = '';
+  ficheStockArticle: string = ''; // Pour le filtre article
   ficheStockArticleInfo: any = null;
   ficheStockMouvements: any[] = [];
   ficheStockCurrentPage: number = 1;
@@ -34,6 +36,15 @@ export class StockReportingComponent implements OnInit {
   ficheStockTotalPages: number = 0;
   ficheStockDateFrom: string = '';
   ficheStockDateTo: string = '';
+  ficheStockSortColumn: string = 'date';
+  ficheStockSortDirection: 'ASC' | 'DESC' = 'DESC';
+  ficheStockHasMore: boolean = true; // Pour le scroll infini
+  ficheStockLoadingMore: boolean = false; // Indicateur de chargement
+  // Auto-complétion articles
+  allArticles: any[] = [];
+  filteredArticles: any[] = [];
+  showArticleAutocomplete: boolean = false;
+  selectedArticleDisplay: string = ''; // Pour afficher le filtre sélectionné
 
   // Chiffre d'affaires
   caArticles: any[] = [];
@@ -43,7 +54,7 @@ export class StockReportingComponent implements OnInit {
   caArticlesPageSize: number = 25;
   caArticlesTotalRecords: number = 0;
   caArticlesTotalPages: number = 0;
-  caArticlesSortColumn: string = 'chiffre_affaires';
+  caArticlesSortColumn: string = 'ca';
   caArticlesSortDirection: 'ASC' | 'DESC' = 'DESC';
   caArticlesDateFrom: string = '';
   caArticlesDateTo: string = '';
@@ -52,6 +63,65 @@ export class StockReportingComponent implements OnInit {
 
   ngOnInit(): void {
     this.getEtatStock();
+    this.loadAllArticles(); // Charger tous les articles pour l'auto-complétion
+  }
+
+  // Charger tous les articles pour l'auto-complétion
+  loadAllArticles(): void {
+    const options: any = {
+      page: 1,
+      pageSize: 10000, // Charger tous les articles
+      orderBy: 'article_nom',
+      orderDirection: 'ASC'
+    };
+
+    this.stockService.getArticlesStock(options).subscribe({
+      next: (response: any) => {
+        this.allArticles = response.data || [];
+      },
+      error: (error) => {
+        console.error('Erreur chargement articles:', error);
+      }
+    });
+  }
+
+  // Auto-complétion des articles
+  onArticleSearchChange(term: string): void {
+    if (!term || term.trim().length === 0) {
+      this.filteredArticles = [];
+      this.showArticleAutocomplete = false;
+      return;
+    }
+
+    term = term.trim().toLowerCase();
+    this.filteredArticles = this.allArticles.filter((article: any) => {
+      const nom = (article.article_nom || '').toLowerCase();
+      const cod = (article.article_cod || '').toLowerCase();
+      return nom.includes(term) || cod.includes(term);
+    }).slice(0, 10); // Limiter à 10 résultats
+
+    this.showArticleAutocomplete = this.filteredArticles.length > 0;
+  }
+
+  selectArticle(article: any): void {
+    this.ficheStockArticle = `${article.article_cod} - ${article.article_nom}`;
+    this.ficheStockArticleId = article.article_id; // Stocker l'ID de l'article
+    this.selectedArticleDisplay = this.ficheStockArticle;
+    this.filteredArticles = [];
+    this.showArticleAutocomplete = false;
+  }
+
+  onArticleInputFocus(): void {
+    if (this.ficheStockArticle && this.filteredArticles.length > 0) {
+      this.showArticleAutocomplete = true;
+    }
+  }
+
+  onArticleInputBlur(): void {
+    // Délai pour permettre le clic sur une suggestion
+    setTimeout(() => {
+      this.showArticleAutocomplete = false;
+    }, 200);
   }
 
   // === ONGLET ÉTAT DE STOCK ===
@@ -113,13 +183,21 @@ export class StockReportingComponent implements OnInit {
 
   // === ONGLET FICHE DE STOCK ===
 
-  getFicheStock(): void {
-    if (!this.ficheStockArticleId) {
-      Swal.fire('Erreur', 'Veuillez saisir un ID d\'article', 'error');
+  getFicheStock(reset: boolean = false): void {
+    if (reset) {
+      this.ficheStockCurrentPage = 1;
+      this.ficheStockMouvements = [];
+      this.ficheStockHasMore = true;
+    }
+
+    if (!this.ficheStockHasMore || this.ficheStockLoading) {
       return;
     }
 
     this.ficheStockLoading = true;
+    if (this.ficheStockCurrentPage > 1) {
+      this.ficheStockLoadingMore = true;
+    }
 
     const options: any = {
       page: this.ficheStockCurrentPage,
@@ -128,32 +206,128 @@ export class StockReportingComponent implements OnInit {
 
     if (this.ficheStockDateFrom) options.dateFrom = this.ficheStockDateFrom;
     if (this.ficheStockDateTo) options.dateTo = this.ficheStockDateTo;
+    
+    // Si un article_id est sélectionné (via auto-complétion), utiliser SEULEMENT l'ID
+    // Ne PAS envoyer les filtres texte article/article_nom
+    if (this.ficheStockArticleId && this.ficheStockArticleId > 0) {
+      options.article_id = this.ficheStockArticleId;
+      console.log('[getFicheStock] article_id sélectionné:', this.ficheStockArticleId);
+      // Ne pas ajouter les filtres texte quand article_id est fourni
+    } else {
+      // Utiliser les filtres texte seulement si article_id n'est pas fourni
+      if (this.ficheStockArticleNom) options.article_nom = this.ficheStockArticleNom;
+      if (this.ficheStockArticle) options.article = this.ficheStockArticle;
+    }
 
-    this.stockService.getFicheStock(this.ficheStockArticleId, options).subscribe({
+    const articleId = this.ficheStockArticleId && this.ficheStockArticleId > 0 ? this.ficheStockArticleId : null;
+
+    console.log('[getFicheStock] Options envoyées:', options);
+
+    this.stockService.getFicheStock(articleId, options).subscribe({
       next: (response: any) => {
+        console.log('[getFicheStock] Réponse reçue:', response);
+        const newMouvements = response.mouvements || [];
+        console.log('[getFicheStock] Mouvements reçus:', newMouvements.length);
+        
+        if (reset) {
+          this.ficheStockMouvements = newMouvements;
+        } else {
+          // Ajouter les nouvelles données aux existantes
+          this.ficheStockMouvements = [...this.ficheStockMouvements, ...newMouvements];
+        }
+
         this.ficheStock = response;
         this.ficheStockArticleInfo = response.article;
-        this.ficheStockMouvements = response.mouvements || [];
         this.ficheStockTotalRecords = response.pagination?.total || 0;
         this.ficheStockTotalPages = response.pagination?.totalPages || 0;
+        
+        console.log('[getFicheStock] Total records:', this.ficheStockTotalRecords);
+        console.log('[getFicheStock] Total pages:', this.ficheStockTotalPages);
+        console.log('[getFicheStock] Mouvements dans le tableau:', this.ficheStockMouvements.length);
+        
+        // Vérifier s'il reste des pages à charger
+        this.ficheStockHasMore = this.ficheStockCurrentPage < this.ficheStockTotalPages;
+        
         this.ficheStockLoading = false;
+        this.ficheStockLoadingMore = false;
       },
       error: (error) => {
         console.error('Erreur chargement fiche stock:', error);
+        console.error('Erreur détaillée:', error.error);
         Swal.fire('Erreur', 'Erreur lors du chargement de la fiche de stock', 'error');
+        this.ficheStockMouvements = reset ? [] : this.ficheStockMouvements;
         this.ficheStockLoading = false;
+        this.ficheStockLoadingMore = false;
       }
     });
   }
 
   onFicheStockSearch(): void {
-    this.ficheStockCurrentPage = 1;
-    this.getFicheStock();
+    // Sauvegarder le filtre article pour l'affichage
+    this.selectedArticleDisplay = this.ficheStockArticle || '';
+    this.getFicheStock(true); // reset = true
+  }
+
+  // Ajouter la méthode pour le scroll infini
+  onFicheStockScroll(event: any): void {
+    const element = event.target;
+    const atBottom = element.scrollHeight - element.scrollTop <= element.clientHeight + 100; // 100px avant la fin
+
+    if (atBottom && this.ficheStockHasMore && !this.ficheStockLoading && !this.ficheStockLoadingMore) {
+      this.ficheStockCurrentPage++;
+      this.getFicheStock(false);
+    }
   }
 
   onFicheStockPageChange(page: number): void {
     this.ficheStockCurrentPage = page;
     this.getFicheStock();
+  }
+
+  onFicheStockSort(column: string): void {
+    if (this.ficheStockSortColumn === column) {
+      this.ficheStockSortDirection = this.ficheStockSortDirection === 'ASC' ? 'DESC' : 'ASC';
+    } else {
+      this.ficheStockSortColumn = column;
+      this.ficheStockSortDirection = 'DESC';
+    }
+    this.ficheStockCurrentPage = 1;
+    // Le tri sera fait côté client pour la fiche de stock
+    this.sortFicheStockMouvements();
+  }
+
+  sortFicheStockMouvements(): void {
+    if (!this.ficheStockMouvements || this.ficheStockMouvements.length === 0) {
+      return;
+    }
+
+    this.ficheStockMouvements.sort((a, b) => {
+      let aValue = a[this.ficheStockSortColumn];
+      let bValue = b[this.ficheStockSortColumn];
+
+      if (aValue === null || aValue === undefined) aValue = '';
+      if (bValue === null || bValue === undefined) bValue = '';
+
+      if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+
+      if (aValue < bValue) {
+        return this.ficheStockSortDirection === 'ASC' ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return this.ficheStockSortDirection === 'ASC' ? 1 : -1;
+      }
+      return 0;
+    });
+  }
+
+  getFicheStockSortIcon(column: string): string {
+    if (this.ficheStockSortColumn !== column) {
+      return 'fa-sort';
+    }
+    return this.ficheStockSortDirection === 'ASC' ? 'fa-sort-up' : 'fa-sort-down';
   }
 
   // === ONGLET CHIFFRE D'AFFAIRES ===
@@ -168,9 +342,6 @@ export class StockReportingComponent implements OnInit {
       orderDirection: this.caArticlesSortDirection,
       search: this.caArticlesSearchTerm
     };
-
-    if (this.caArticlesDateFrom) options.dateFrom = this.caArticlesDateFrom;
-    if (this.caArticlesDateTo) options.dateTo = this.caArticlesDateTo;
 
     this.stockService.getChiffreAffairesArticles(options).subscribe({
       next: (response: any) => {
@@ -221,6 +392,17 @@ export class StockReportingComponent implements OnInit {
     this.activeTab = tab;
     if (tab === 'etat-stock' && this.etatStock.length === 0) {
       this.getEtatStock();
+    } else if (tab === 'fiche-stock' && this.ficheStockMouvements.length === 0) {
+      // Charger toutes les données par défaut pour la fiche de stock
+      this.ficheStockArticleNom = '';
+      this.ficheStockArticle = '';
+      this.ficheStockArticleId = 0;
+      this.selectedArticleDisplay = '';
+      this.ficheStockDateFrom = '';
+      this.ficheStockDateTo = '';
+      this.ficheStockCurrentPage = 1;
+      this.ficheStockHasMore = true;
+      this.getFicheStock(true);
     } else if (tab === 'chiffre-affaires' && this.caArticles.length === 0) {
       this.getChiffreAffairesArticles();
     }
@@ -228,9 +410,9 @@ export class StockReportingComponent implements OnInit {
 
   formatCurrency(amount: number): string {
     return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount || 0);
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount || 0) + ' dh';
   }
 
   formatDate(date: string): string {
@@ -277,97 +459,61 @@ export class StockReportingComponent implements OnInit {
   }
 
   exportEtatStockPDF(): void {
-    // Pour l'instant, on ouvre une nouvelle fenêtre avec les données
-    // Dans une vraie implémentation, on ferait appel à une API backend
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>État de Stock</title>
-            <style>
-              body { font-family: Arial, sans-serif; margin: 20px; }
-              h1 { color: #007bff; text-align: center; }
-              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-              th { background-color: #f8f9fa; font-weight: bold; }
-              .text-end { text-align: right; }
-              .badge { padding: 2px 6px; border-radius: 3px; font-size: 0.8em; }
-              .bg-success { background-color: #d1edff; color: #0d6efd; }
-              .bg-warning { background-color: #fff3cd; color: #856404; }
-              .bg-danger { background-color: #f8d7da; color: #721c24; }
-              @media print { body { margin: 0; } }
-            </style>
-          </head>
-          <body>
-            <h1>État de Stock - ${new Date().toLocaleDateString('fr-FR')}</h1>
-            <table>
-              <thead>
-                <tr>
-                  <th>Code Article</th>
-                  <th>Nom Article</th>
-                  <th>Catégorie</th>
-                  <th>Unité</th>
-                  <th style="text-align: right;">Stock Actuel</th>
-                  <th style="text-align: right;">Prix Moyen</th>
-                  <th style="text-align: right;">Valeur Stock</th>
-                  <th style="text-align: right;">Stock Min</th>
-                  <th style="text-align: right;">Stock Max</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${this.etatStock.map(article => `
-                  <tr>
-                    <td>${article.article_cod}</td>
-                    <td>${article.article_nom}</td>
-                    <td>${article.categorie_nom || '-'}</td>
-                    <td>${article.unite_nom || '-'}</td>
-                    <td style="text-align: right;">
-                      <span class="badge ${article.stock_actuel <= article.stock_minimum ? 'bg-warning' : article.stock_actuel <= 0 ? 'bg-danger' : 'bg-success'}">
-                        ${article.stock_actuel.toFixed(2)}
-                      </span>
-                    </td>
-                    <td style="text-align: right;">${this.formatCurrency(article.prix_moyen)}</td>
-                    <td style="text-align: right;"><strong>${this.formatCurrency(article.valeur_stock)}</strong></td>
-                    <td style="text-align: right;">${article.stock_minimum || 0}</td>
-                    <td style="text-align: right;">${article.stock_maximum || 0}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.print();
-    }
+    const options: any = {
+      page: 1,
+      pageSize: 10000,
+      orderBy: this.etatStockSortColumn,
+      orderDirection: this.etatStockSortDirection,
+      search: this.etatStockSearchTerm
+    };
+    this.stockService.exportEtatStockPDF(options).subscribe({
+      next: (blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `etat-stock-${new Date().toISOString().split('T')[0]}.html`;
+        link.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (error) => {
+        console.error('Erreur export PDF:', error);
+        if (error.status === 401) {
+          Swal.fire('Erreur', 'Token d\'accès requis. Veuillez vous reconnecter.', 'error');
+        } else {
+          Swal.fire('Erreur', error.error?.message || 'Erreur lors de l\'export PDF', 'error');
+        }
+      }
+    });
   }
 
   exportEtatStockExcel(): void {
-    // Pour une vraie implémentation, utiliser xlsx ou une API backend
-    // Pour l'instant, on crée un CSV simple
-    const csvData = [
-      ['Code Article', 'Nom Article', 'Catégorie', 'Unité', 'Stock Actuel', 'Prix Moyen', 'Valeur Stock', 'Stock Min', 'Stock Max'],
-      ...this.etatStock.map(article => [
-        article.article_cod,
-        article.article_nom,
-        article.categorie_nom || '',
-        article.unite_nom || '',
-        article.stock_actuel,
-        article.prix_moyen,
-        article.valeur_stock,
-        article.stock_minimum || 0,
-        article.stock_maximum || 0
-      ])
-    ];
-
-    this.downloadCSV(csvData, 'etat-stock.csv');
+    const options: any = {
+      page: 1,
+      pageSize: 10000,
+      orderBy: this.etatStockSortColumn,
+      orderDirection: this.etatStockSortDirection,
+      search: this.etatStockSearchTerm
+    };
+    this.stockService.exportEtatStockExcel(options).subscribe({
+      next: (blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `etat-stock-${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (error) => {
+        console.error('Erreur export Excel:', error);
+        Swal.fire('Erreur', 'Erreur lors de l\'export Excel', 'error');
+      }
+    });
   }
 
   // === EXPORT FICHE DE STOCK ===
 
   exportFicheStock(format: 'pdf' | 'excel'): void {
-    if (!this.ficheStockArticleInfo || !this.ficheStockMouvements || this.ficheStockMouvements.length === 0) {
+    if (!this.ficheStockMouvements || this.ficheStockMouvements.length === 0) {
       Swal.fire('Erreur', 'Aucune donnée à exporter', 'error');
       return;
     }
@@ -380,92 +526,120 @@ export class StockReportingComponent implements OnInit {
   }
 
   exportFicheStockPDF(): void {
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(`
+    // Exporter uniquement les données visibles (ficheStockMouvements)
+    if (!this.ficheStockMouvements || this.ficheStockMouvements.length === 0) {
+      Swal.fire('Erreur', 'Aucune donnée à exporter', 'error');
+      return;
+    }
+
+    // Générer le PDF avec les données visibles uniquement
+    const htmlContent = this.generateFicheStockPDFHTML(this.ficheStockMouvements);
+    
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const filename = `fiche-stock-${new Date().toISOString().split('T')[0]}.html`;
+    link.download = filename;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  generateFicheStockPDFHTML(mouvements: any[]): string {
+    const articleDisplay = this.selectedArticleDisplay ? `<div class="mb-2"><strong>Article :</strong> <span style="color: #007bff; font-weight: bold;">${this.selectedArticleDisplay}</span></div>` : '';
+    const dateFromDisplay = this.ficheStockDateFrom ? `<div class="mb-2"><strong>Date du :</strong> ${this.formatDate(this.ficheStockDateFrom)}</div>` : '';
+    const dateToDisplay = this.ficheStockDateTo ? `<div class="mb-2"><strong>Date au :</strong> ${this.formatDate(this.ficheStockDateTo)}</div>` : '';
+
+    return `
+      <!DOCTYPE html>
         <html>
           <head>
-            <title>Fiche de Stock - ${this.ficheStockArticleInfo.article_cod}</title>
+        <meta charset="utf-8">
+        <title>Fiche de Stock</title>
             <style>
               body { font-family: Arial, sans-serif; margin: 20px; }
-              h1 { color: #007bff; text-align: center; }
-              .article-info { background-color: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px; }
+          h1 { color: #007bff; text-align: center; margin-bottom: 20px; }
+          .filter-info { background-color: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px; border-left: 4px solid #007bff; }
               table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-              th, td { border: 1px solid #ddd; padding: 6px; text-align: left; font-size: 0.9em; }
-              th { background-color: #f8f9fa; font-weight: bold; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 11px; }
+          th { background-color: #343a40; color: white; font-weight: bold; }
               .text-end { text-align: right; }
               .text-success { color: #198754; font-weight: bold; }
               .text-danger { color: #dc3545; font-weight: bold; }
-              @media print { body { margin: 0; } }
+          @page { margin: 1cm; }
+          @media print {
+            body { margin: 0; }
+            .filter-info { page-break-inside: avoid; }
+          }
             </style>
           </head>
           <body>
             <h1>Fiche de Stock</h1>
-            <div class="article-info">
-              <h3>${this.ficheStockArticleInfo.article_cod} - ${this.ficheStockArticleInfo.article_nom}</h3>
-              <p><strong>Stock actuel:</strong> ${this.ficheStockArticleInfo.stock_actuel.toFixed(2)}</p>
-              <p><strong>Catégorie:</strong> ${this.ficheStockArticleInfo.categorie_nom || '-'}</p>
-              <p><strong>Unité:</strong> ${this.ficheStockArticleInfo.unite_nom || '-'}</p>
-              <p><strong>Total mouvements:</strong> ${this.ficheStockTotalRecords}</p>
+        <div class="filter-info">
+          ${articleDisplay}
+          ${dateFromDisplay}
+          ${dateToDisplay}
             </div>
             <table>
               <thead>
                 <tr>
+              <th>Dépôt</th>
                   <th>Date</th>
                   <th>Type</th>
-                  <th>Document</th>
-                  <th>Description</th>
-                  <th style="text-align: right;">Entrée</th>
-                  <th style="text-align: right;">Sortie</th>
-                  <th style="text-align: right;">Stock Final</th>
-                  <th style="text-align: right;">Prix Unit.</th>
-                  <th style="text-align: right;">Valeur</th>
-                  <th>Partenaire</th>
+              <th>Numéro</th>
+              <th>Tiers</th>
+              <th class="text-end">Entrée</th>
+              <th class="text-end">Sortie</th>
+              <th class="text-end">Solde</th>
                 </tr>
               </thead>
               <tbody>
-                ${this.ficheStockMouvements.map(mvt => `
-                  <tr>
-                    <td>${this.formatDate(mvt.date_mouvement)}</td>
-                    <td>${mvt.type_mouvement}</td>
-                    <td>${mvt.numero_document}</td>
-                    <td>${mvt.description}</td>
-                    <td style="text-align: right;" class="text-success">${mvt.quantite_entree > 0 ? '+' + mvt.quantite_entree.toFixed(2) : ''}</td>
-                    <td style="text-align: right;" class="text-danger">${mvt.quantite_sortie > 0 ? '-' + mvt.quantite_sortie.toFixed(2) : ''}</td>
-                    <td style="text-align: right;"><strong>${mvt.stock_apres_mouvement.toFixed(2)}</strong></td>
-                    <td style="text-align: right;">${this.formatCurrency(mvt.prix_unitaire)}</td>
-                    <td style="text-align: right;">${this.formatCurrency(mvt.valeur_mouvement)}</td>
-                    <td>${mvt.partenaire_nom || '-'}</td>
+            ${mouvements.map(item => `
+              <tr>
+                <td>${item.depot || '-'}</td>
+                <td>${item.date ? this.formatDate(item.date) : ''}</td>
+                <td>${item.type || '-'}</td>
+                <td>${item.numero || '-'}</td>
+                <td>${item.tiers || '-'}</td>
+                <td class="text-end text-success">${item.entree && item.entree > 0 ? Number(item.entree || 0).toFixed(2) : '0'}</td>
+                <td class="text-end text-danger">${item.sortie && item.sortie > 0 ? Number(item.sortie || 0).toFixed(2) : '0'}</td>
+                <td class="text-end"><strong>${Number(item.solde || 0).toFixed(2)}</strong></td>
                   </tr>
                 `).join('')}
               </tbody>
             </table>
+        <div style="margin-top: 20px; text-align: center; color: #6c757d; font-size: 12px;">
+          Total: ${mouvements.length} mouvement(s) - Généré le ${new Date().toLocaleDateString('fr-FR')}
+        </div>
           </body>
         </html>
-      `);
-      printWindow.document.close();
-      printWindow.print();
-    }
+    `;
   }
 
   exportFicheStockExcel(): void {
-    const csvData = [
-      ['Date', 'Type', 'Document', 'Description', 'Entrée', 'Sortie', 'Stock Final', 'Prix Unit.', 'Valeur', 'Partenaire'],
-      ...this.ficheStockMouvements.map(mvt => [
-        this.formatDate(mvt.date_mouvement),
-        mvt.type_mouvement,
-        mvt.numero_document,
-        mvt.description,
-        mvt.quantite_entree || '',
-        mvt.quantite_sortie || '',
-        mvt.stock_apres_mouvement,
-        mvt.prix_unitaire,
-        mvt.valeur_mouvement,
-        mvt.partenaire_nom || ''
-      ])
-    ];
-
-    this.downloadCSV(csvData, `fiche-stock-${this.ficheStockArticleInfo.article_cod}.csv`);
+    const articleId = this.ficheStockArticleId && this.ficheStockArticleId > 0 ? this.ficheStockArticleId : null;
+    const options: any = {
+      page: 1,
+      pageSize: 10000,
+      dateFrom: this.ficheStockDateFrom,
+      dateTo: this.ficheStockDateTo,
+      article_nom: this.ficheStockArticleNom
+    };
+    this.stockService.exportFicheStockExcel(articleId, options).subscribe({
+      next: (blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const filename = articleId ? `fiche-stock-${articleId}-${new Date().toISOString().split('T')[0]}.csv` : `fiche-stock-${new Date().toISOString().split('T')[0]}.csv`;
+        link.download = filename;
+        link.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (error) => {
+        console.error('Erreur export Excel:', error);
+        Swal.fire('Erreur', 'Erreur lors de l\'export Excel', 'error');
+      }
+    });
   }
 
   // === EXPORT CHIFFRE D'AFFAIRES ===
@@ -484,87 +658,55 @@ export class StockReportingComponent implements OnInit {
   }
 
   exportChiffreAffairesPDF(): void {
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      const dateRange = this.caArticlesDateFrom && this.caArticlesDateTo
-        ? `du ${this.formatDate(this.caArticlesDateFrom)} au ${this.formatDate(this.caArticlesDateTo)}`
-        : 'toutes périodes';
-
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>Chiffre d'Affaires par Article</title>
-            <style>
-              body { font-family: Arial, sans-serif; margin: 20px; }
-              h1 { color: #007bff; text-align: center; }
-              .periode { text-align: center; color: #6c757d; margin-bottom: 20px; }
-              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-              th { background-color: #f8f9fa; font-weight: bold; }
-              .text-end { text-align: right; }
-              .badge { padding: 2px 6px; border-radius: 3px; font-size: 0.8em; }
-              .bg-success { background-color: #d1edff; color: #0d6efd; }
-              .bg-warning { background-color: #fff3cd; color: #856404; }
-              .bg-danger { background-color: #f8d7da; color: #721c24; }
-              @media print { body { margin: 0; } }
-            </style>
-          </head>
-          <body>
-            <h1>Chiffre d'Affaires par Article</h1>
-            <div class="periode">Période: ${dateRange}</div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Code Article</th>
-                  <th>Nom Article</th>
-                  <th>Catégorie</th>
-                  <th style="text-align: right;">Qté Vendue</th>
-                  <th style="text-align: right;">Chiffre d'Affaires</th>
-                  <th style="text-align: right;">Prix Moyen</th>
-                  <th style="text-align: right;">Marge Moyenne</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${this.caArticles.map(article => `
-                  <tr>
-                    <td>${article.article_cod}</td>
-                    <td>${article.article_nom}</td>
-                    <td>${article.categorie_nom || '-'}</td>
-                    <td style="text-align: right;">${article.quantite_vendue.toFixed(2)}</td>
-                    <td style="text-align: right;"><strong>${this.formatCurrency(article.chiffre_affaires)}</strong></td>
-                    <td style="text-align: right;">${this.formatCurrency(article.prix_moyen_vente)}</td>
-                    <td style="text-align: right;">
-                      <span class="badge ${article.marge_moyenne >= 20 ? 'bg-success' : article.marge_moyenne >= 10 ? 'bg-warning' : 'bg-danger'}">
-                        ${article.marge_moyenne.toFixed(1)}%
-                      </span>
-                    </td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.print();
-    }
+    const options: any = {
+      page: 1,
+      pageSize: 10000,
+      orderBy: this.caArticlesSortColumn,
+      orderDirection: this.caArticlesSortDirection,
+      search: this.caArticlesSearchTerm
+    };
+    this.stockService.exportChiffreAffairesPDF(options).subscribe({
+      next: (blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `chiffre-affaires-articles-${new Date().toISOString().split('T')[0]}.html`;
+        link.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (error) => {
+        console.error('Erreur export PDF:', error);
+        if (error.status === 401) {
+          Swal.fire('Erreur', 'Token d\'accès requis. Veuillez vous reconnecter.', 'error');
+        } else {
+          Swal.fire('Erreur', error.error?.message || 'Erreur lors de l\'export PDF', 'error');
+        }
+      }
+    });
   }
 
   exportChiffreAffairesExcel(): void {
-    const csvData = [
-      ['Code Article', 'Nom Article', 'Catégorie', 'Qté Vendue', 'Chiffre d\'Affaires', 'Prix Moyen', 'Marge Moyenne (%)'],
-      ...this.caArticles.map(article => [
-        article.article_cod,
-        article.article_nom,
-        article.categorie_nom || '',
-        article.quantite_vendue,
-        article.chiffre_affaires,
-        article.prix_moyen_vente,
-        article.marge_moyenne
-      ])
-    ];
-
-    this.downloadCSV(csvData, 'chiffre-affaires-articles.csv');
+    const options: any = {
+      page: 1,
+      pageSize: 10000,
+      orderBy: this.caArticlesSortColumn,
+      orderDirection: this.caArticlesSortDirection,
+      search: this.caArticlesSearchTerm
+    };
+    this.stockService.exportChiffreAffairesExcel(options).subscribe({
+      next: (blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `chiffre-affaires-articles-${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+        window.URL.revokeObjectURL(url);
+      },
+      error: (error) => {
+        console.error('Erreur export Excel:', error);
+        Swal.fire('Erreur', 'Erreur lors de l\'export Excel', 'error');
+      }
+    });
   }
 
   // === UTILITAIRE POUR TÉLÉCHARGEMENT CSV ===

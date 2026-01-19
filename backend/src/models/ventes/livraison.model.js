@@ -598,10 +598,20 @@ const getLivraisonById = async (id, sequelizeConnection = null) => {
   return result;
 };
 
+
+
 // Ajouter une nouvelle livraison dans stock (pour transfert depuis commande)
 const addLivraisonFromCommande = async ({ numero, date, description, part_id, contact_id, type = 2, etat = 1, parent = null }, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
   const { getCompteurCurrent } = require('../../services/compteur.service');
+
+     // 2. Date du jour (heure locale, SANS toISOString)
+     const now = new Date();
+     const pad = (n) => n.toString().padStart(2, '0');
+ 
+     const dateSql =
+       `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ` +
+       `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
   // Utiliser une transaction pour garantir l'atomicité
   return await sequelize.transaction(async (t) => {
@@ -620,12 +630,13 @@ const addLivraisonFromCommande = async ({ numero, date, description, part_id, co
         numeroFinal = `BL${anneeCourte}-${compteurActuel.toString().padStart(4, '0')}`;
       }
 
+     // const dateSql = formatToSqlDateTime(date);
       // Construire la requête dynamiquement selon les champs fournis
       let columns = 'numero, date, description, part_id, employe_id, type, etat';
-      let values = ':numero, :date, :description, :part_id, :employe_id, :type, :etat';
+      let values = ':numero, :dateSql, :description, :part_id, :employe_id, :type, :etat';
       let replacements = {
         numero: numeroFinal,
-        date: date || null,
+        dateSql,
         description: description || null,
         part_id: part_id || null,
         employe_id: contact_id || null,
@@ -729,9 +740,9 @@ const saveDetailStock = async (detail, sequelizeConnection = null) => {
 
   // Utiliser une requête simple avec paramètres
   const query = `
-    INSERT INTO stock_detail (stock_id, article_id, quantite, prix, taux_tva, description, sens, remise, remise_montant)
+    INSERT INTO stock_detail (stock_id, article_id, quantite, prix, taux_tva,  sens, remise, remise_montant , cr_date)
     OUTPUT INSERTED.id
-    VALUES (:stock_id, :article_id, :quantite, :prix, :taux_tva, :description, :sens, :remise, :remise_montant)
+    VALUES (:stock_id, :article_id, :quantite, :prix, :taux_tva,  :sens, :remise, :remise_montant , GETDATE())
   `;
 
   const replacements = {
@@ -740,7 +751,6 @@ const saveDetailStock = async (detail, sequelizeConnection = null) => {
     quantite: quantite,
     prix: prix,
     taux_tva: taux_tva,
-    description: descriptionLimited,
     sens: sens,
     remise: remiseValue || 0, // Toujours 0 si null/undefined
     remise_montant: remiseMontantValue || 0 // Toujours 0 si null/undefined
@@ -821,7 +831,8 @@ const updateDetailStock = async (id, detail, sequelizeConnection = null) => {
         taux_tva = :taux_tva,
         description = :description,
         remise = :remise,
-        remise_montant = :remise_montant
+        remise_montant = :remise_montant ,
+        cr_date = GETDATE()
     WHERE id = :id
   `;
 
@@ -851,7 +862,9 @@ const updateDetailStock = async (id, detail, sequelizeConnection = null) => {
 // Ajouter une nouvelle livraison (ancienne méthode - pour compatibilité) avec transaction
 const addLivraison = async ({ date, description, part_id, contact_id, date_fin, etat = 3, type = 3, parent = null }, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
-
+ 
+  //const dateSql = formatToSqlDateTime(date);
+  const dateSql = formatToSqlDateTime(date);
   // Utiliser une transaction pour garantir le rollback en cas d'erreur
   return await sequelize.transaction(async (t) => {
     try {
@@ -859,7 +872,7 @@ const addLivraison = async ({ date, description, part_id, contact_id, date_fin, 
       let columns = 'date, description, part_id, contact_id, date_fin, etat';
       let values = ':date, :description, :part_id, :contact_id, :date_fin, :etat';
       let replacements = {
-        date: date || null,
+        date: dateSql || null,
         description: description || null,
         part_id: part_id || null,
         contact_id: contact_id || null,
@@ -948,9 +961,9 @@ const saveDetail = async (detail, sequelizeConnection = null) => {
 
   const query = `
     INSERT INTO vente_document_detail 
-    (document_id, article_id, qte, pu, remise, remise_montant, ht, tva, ttc, description)
+    (document_id, article_id, qte, pu, remise, remise_montant, ht, tva, ttc, description, cr_date)
     OUTPUT INSERTED.detail_id
-    VALUES (:document_id, :article_id, :qte, :pu, :remise, :remise_montant, :ht, :tva, :ttc, :description)
+    VALUES (:document_id, :article_id, :qte, :pu, :remise, :remise_montant, :ht, :tva, :ttc, :description, GETDATE())
   `;
 
   try {
@@ -965,7 +978,8 @@ const saveDetail = async (detail, sequelizeConnection = null) => {
         ht: ht || 0,
         tva: tva || 0,
         ttc: ttc || 0,
-        description: description || ''
+        description: description || '',
+        cr_date: GETDATE()
       },
       type: sequelize.QueryTypes.INSERT
     });
@@ -1037,13 +1051,14 @@ const saveInfo = async (info, sequelizeConnection = null) => {
 const updateLivraison = async (id, { date, description, part_id, contact_id, date_fin }, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
 
+  const dateSql = formatToSqlDateTime(date);
   await sequelize.query(
     `UPDATE stock 
-     SET date = :date, description = :description, part_id = :part_id, 
+     SET date = :dateSql, description = :description, part_id = :part_id, 
          contact_id = :contact_id, date_fin = :date_fin
      WHERE id = :id`,
     {
-      replacements: { id, date, description, part_id, contact_id, date_fin }
+      replacements: { id, dateSql, description, part_id, contact_id, date_fin }
     }
   );
 };
@@ -1509,8 +1524,8 @@ const transfererCommandeVersFacturation = async (commandeId, factureDate, partId
       // 7. Copier les détails dans stock_detail pour la deuxième livraison
       for (const detail of details) {
         await sequelize.query(
-          `INSERT INTO stock_detail (stock_id, article_id, quantite, prix, taux_tva, description, sens, remise, remise_montant)
-           VALUES (:stock_id, :article_id, :quantite, :prix, :taux_tva, :description, -1, :remise, :remise_montant)`,
+          `INSERT INTO stock_detail (stock_id, article_id, quantite, prix, taux_tva, description, sens, remise, remise_montant, cr_date)
+           VALUES (:stock_id, :article_id, :quantite, :prix, :taux_tva, :description, -1, :remise, :remise_montant , GETDATE())`,
           {
             replacements: {
               stock_id: stockId2,

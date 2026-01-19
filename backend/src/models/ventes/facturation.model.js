@@ -249,7 +249,7 @@ const getFactureReportById = async (factureId, sequelizeConnection = null) => {
       LEFT JOIN partenaire_identifiant pi ON pi.part_id = p.part_id AND pi.identifiant_type = 8
       LEFT JOIN adresse a ON a.part_id = p.part_id
       LEFT JOIN ville v ON v.id = a.ville
-      LEFT JOIN stock s ON s.id = f.facture_id 
+      LEFT JOIN stock s ON s.facture_id = f.facture_id 
       WHERE f.facture_id = :factureId
     `;
 
@@ -300,8 +300,9 @@ const getFactureReportById = async (factureId, sequelizeConnection = null) => {
         (sd.quantite * sd.prix * (1 + ISNULL(sd.taux_tva, 0))) AS total_ttc,
         :numero_livraison AS numero_livraison
       FROM stock_detail sd
+      LEFT JOIN stock s ON s.id = sd.stock_id
       LEFT JOIN article a ON a.article_id = sd.article_id
-      WHERE sd.stock_id = :factureId
+      WHERE s.facture_id = :factureId
       ORDER BY sd.id
     `;
 

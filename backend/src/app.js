@@ -13,7 +13,9 @@ app.use('/factures', express.static(path.join(__dirname, 'public', 'factures')))
 app.use('/factures-fournisseur', express.static(path.join(__dirname, 'public', 'factures-fournisseur')));
 app.use('/retours', express.static(path.join(__dirname, 'public', 'retours')));
 app.use('/avoirs', express.static(path.join(__dirname, 'public', 'avoirs')));
+app.use('/receptions', express.static(path.join(__dirname, 'public', 'receptions')));
 app.use('/interventions', express.static(path.join(__dirname, 'public', 'interventions')));
+app.use('/stock-historique', express.static(path.join(__dirname, 'public', 'stock-historique')));
 
 // Import des routes
 const userRoutes = require('./routes/user.routes');
@@ -30,9 +32,11 @@ const facturationRoutes = require('./routes/ventes/facturation.routes');
 const avoirRoutes = require('./routes/ventes/avoir.routes');
 const retourRoutes = require('./routes/ventes/retour.routes');
 const contratRoutes = require('./routes/ventes/contrat.routes');
+const venteReportingRoutes = require('./routes/ventes/vente-reporting.routes');
 // ✅ Finance
 const caisseRoutes = require('./routes/finance/caisse.routes');
 const reglementRoutes = require('./routes/finance/reglement.routes');
+const financeReportingRoutes = require('./routes/finance/finance-reporting.routes');
 // ✅ Achats
 const bonCommandeRoutes = require('./routes/achats/bon-commande.routes');
 const factureFournisseurRoutes = require('./routes/achats/facture-fournisseur.routes');
@@ -46,9 +50,10 @@ const pdfRoutes = require('./routes/pdf.routes');
 const caissePdfRoutes = require('./routes/caisse-pdf.routes');
 const facturationPdfRoutes = require('./routes/facturation-pdf.routes');
 const retourPdfRoutes = require('./routes/retour-pdf.routes');
-const commandePdfRoutes = require('./routes/commande-pdf.routes');
+const { router: commandePdfRoutes, publicRouter: commandePdfPublicRoutes } = require('./routes/commande-pdf.routes');
 const avoirPdfRoutes = require('./routes/avoir-pdf.routes');
 const factureFournisseurPdfRoutes = require('./routes/achats/facture-fournisseur-pdf.routes');
+const receptionPdfRoutes = require('./routes/reception-pdf.routes');
 
 // ✅ Authentification
 const authRoutes = require('./routes/auth.routes');
@@ -78,17 +83,27 @@ app.use('/api/facturations', authenticateToken, facturationRoutes);
 app.use('/api/avoirs', authenticateToken, avoirRoutes);
 app.use('/api/retours', authenticateToken, retourRoutes);
 app.use('/api/contrats', authenticateToken, contratRoutes);
+app.use('/api/vente/reporting', authenticateToken, venteReportingRoutes);
 // ✅ Finance
 app.use('/api/caisse', authenticateToken, caisseRoutes);
 app.use('/api/reglement', authenticateToken, reglementRoutes);
 app.use('/api/reglements', authenticateToken, reglementRoutes); // Alias pour compatibilité frontend
+app.use('/api/finance/reporting', authenticateToken, financeReportingRoutes);
 // ✅ Achats
 app.use('/api/bon-commande', authenticateToken, bonCommandeRoutes);
 app.use('/api/achats', authenticateToken, bonCommandeRoutes); // Alias pour compatibilité frontend
 app.use('/api/factures-fournisseur', authenticateToken, factureFournisseurRoutes);
+const receptionRoutes = require('./routes/achats/reception.routes');
+app.use('/api/receptions', authenticateToken, receptionRoutes);
 // ✅ Stock
 const stockRoutes = require('./routes/stock.routes');
 app.use('/api/stock', authenticateToken, stockRoutes);
+const { router: entreeStockRoutes, publicRouter: entreeStockPublicRoutes } = require('./routes/stock/entree-stock.routes');
+app.use('/api/stock', authenticateToken, entreeStockRoutes);
+app.use('/entrees-stock', entreeStockPublicRoutes); // Routes publiques pour servir les PDFs
+const { router: sortieStockRoutes, publicRouter: sortieStockPublicRoutes } = require('./routes/stock/sortie-stock.routes');
+app.use('/api/stock', authenticateToken, sortieStockRoutes);
+app.use('/sorties-stock', sortieStockPublicRoutes); // Routes publiques pour servir les PDFs
 // ✅ Interventions
 const interventionRoutes = require('./routes/intervention.routes');
 app.use('/api/interventions', interventionRoutes); // Webhook Telegram sans auth
@@ -109,9 +124,11 @@ app.use('/api/pdf', authenticateToken, pdfRoutes);
 app.use('/api/caisse-pdf', authenticateToken, caissePdfRoutes);
 app.use('/api/facturation-pdf', authenticateToken, facturationPdfRoutes);
 app.use('/api/retour-pdf', authenticateToken, retourPdfRoutes);
-app.use('/api/commande-pdf', authenticateToken, commandePdfRoutes);
+app.use('/commandes', commandePdfPublicRoutes); // Routes publiques pour servir les PDFs
+app.use('/api/commande-pdf', authenticateToken, commandePdfRoutes); // Routes API avec authentification
 app.use('/api/avoir-pdf', authenticateToken, avoirPdfRoutes);
 app.use('/api/facture-fournisseur-pdf', authenticateToken, factureFournisseurPdfRoutes);
+app.use('/api/reception-pdf', authenticateToken, receptionPdfRoutes);
 
 // ✅ Generation / Impression Chèque
 const chequePdfRoutes = require('./routes/generation/cheque.routes');

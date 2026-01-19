@@ -322,6 +322,10 @@ const getRetourById = async (id, sequelizeConnection = null) => {
     clientInfo: clientInfo || null
   };
 };
+const formatToSqlDateTime = (value) => {
+  if (!value) return null;
+  return new Date(value).toISOString().slice(0, 19).replace('T', ' ');
+};
 
 // Ajouter un nouveau retour dans stock (type = 5)
 const addRetourFromCommande = async ({ numero, date, description, part_id, contact_id, type = 5, etat = 1, parent = null }, sequelizeConnection = null) => {
@@ -345,12 +349,13 @@ const addRetourFromCommande = async ({ numero, date, description, part_id, conta
         numeroFinal = `RT${anneeCourte}-${compteurActuel.toString().padStart(4, '0')}`;
       }
 
+      const dateSql = formatToSqlDateTime(date);
       // Construire la requête dynamiquement selon les champs fournis
       let columns = 'numero, date, description, part_id, employe_id, type, etat';
       let values = ':numero, :date, :description, :part_id, :employe_id, :type, :etat';
       let replacements = {
         numero: numeroFinal,
-        date: date || null,
+        date: dateSql || null,
         description: description || null,
         part_id: part_id || null,
         employe_id: contact_id || null,
@@ -442,9 +447,9 @@ const saveDetailStock = async (detail, sequelizeConnection = null) => {
   return await sequelize.transaction(async (t) => {
     try {
       const query = `
-        INSERT INTO stock_detail (stock_id, article_id, quantite, prix, taux_tva, description, sens, remise)
+        INSERT INTO stock_detail (stock_id, article_id, quantite, prix, taux_tva, description, sens, remise , cr_date)
         OUTPUT INSERTED.id
-        VALUES (:stock_id, :article_id, :quantite, :prix, :taux_tva, :description, :sens, :remise)
+        VALUES (:stock_id, :article_id, :quantite, :prix, :taux_tva, :description, :sens, :remise, GETDATE())
       `;
 
       const [results] = await sequelize.query(query, {
@@ -510,7 +515,8 @@ const updateDetailStock = async (id, detail, sequelizeConnection = null) => {
         prix = :prix,
         taux_tva = :taux_tva,
         description = :description,
-        remise = :remise
+        remise = :remise,
+        cr_date  = GETDATE()
     WHERE id = :id
   `;
 

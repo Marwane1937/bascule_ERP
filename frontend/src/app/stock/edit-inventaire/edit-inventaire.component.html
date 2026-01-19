@@ -1,0 +1,350 @@
+<div class="container py-4">
+    <div class="page-inner">
+        <!-- En-tête -->
+        <div class="page-header mb-4">
+            <h3 class="fw-bold text-dark">📦 Édition Inventaire <span class="text-dark">#{{inventaire?.numero || 'N/A'}}</span></h3>
+            <ul class="breadcrumbs d-flex align-items-center">
+                <li class="nav-home me-2"><a href="#"><i class="fas fa-home text-primary"></i></a></li>
+                <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+                <li class="nav-item me-2"><a href="#" class="text-muted">Stock</a></li>
+                <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+                <li class="nav-item fw-semibold text-muted">Édition Inventaire</li>
+            </ul>
+        </div>
+
+        <!-- Informations inventaire -->
+        <div class="row mb-3">
+            <div class="col-md-12">
+                <div class="card border-0 shadow-sm rounded-3">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <p class="mb-1"><strong>Numéro:</strong> {{inventaire?.numero || 'N/A'}}</p>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label"><strong>Date:</strong></label>
+                                <input 
+                                    type="datetime-local" 
+                                    class="form-control form-control-sm" 
+                                    [value]="inventaire?.date | date:'yyyy-MM-ddTHH:mm'"
+                                    (change)="updateDate($event)"
+                                   >
+                            </div>
+                            <div class="col-md-4">
+                                <p class="mb-1"><strong>Description:</strong> {{inventaire?.description || 'N/A'}}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sélection du mode de saisie -->
+        <div class="row mb-3">
+            <div class="col-md-12">
+                <div class="card border-0 shadow-sm rounded-3">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">Mode de saisie (obligatoire)</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="btn-group w-100" role="group">
+                            <button 
+                                type="button" 
+                                class="btn btn-lg"
+                                [class.btn-primary]="modeSaisie === 'excel'"
+                                [class.btn-outline-primary]="modeSaisie !== 'excel'"
+                                (click)="modeSaisie = 'excel'">
+                                <i class="fas fa-file-excel me-2"></i> Mode 1: Import Excel
+                            </button>
+                            <button 
+                                type="button" 
+                                class="btn btn-lg"
+                                [class.btn-success]="modeSaisie === 'douchette'"
+                                [class.btn-outline-success]="modeSaisie !== 'douchette'"
+                                (click)="modeSaisie = 'douchette'; focusBarcodeInput()">
+                                <i class="fas fa-barcode me-2"></i> Mode 2: Saisie manuelle par douchette
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mode Excel -->
+        <div *ngIf="modeSaisie === 'excel'" class="row mb-3">
+            <div class="col-md-12">
+                <div class="card border-0 shadow-sm rounded-3">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">📊 Import Excel</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <button class="btn btn-outline-primary" (click)="downloadExcelTemplate()">
+                                    <i class="fas fa-download me-2"></i> Télécharger le template Excel
+                                </button>
+                            </div>
+                            <div class="col-md-6">
+                                <input 
+                                    type="file" 
+                                    #fileInput
+                                    class="form-control" 
+                                    accept=".xlsx,.xls"
+                                    (change)="onFileSelected($event)">
+                            </div>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Le fichier Excel doit être généré à partir de la requête SQL: <code>SELECT * FROM v_stock_calcul</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mode Douchette -->
+        <div *ngIf="modeSaisie === 'douchette'" class="row mb-3">
+            <div class="col-md-12">
+                <div class="card border-0 shadow-sm rounded-3">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">📱 Saisie par douchette</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <label class="form-label">Scanner le code-barres:</label>
+                                <input 
+                                    type="text" 
+                                    #barcodeInput
+                                    class="form-control form-control-lg" 
+                                    placeholder="Scannez ou saisissez le code-barres..."
+                                    [(ngModel)]="barcodeValue"
+                                    (keyup.enter)="onBarcodeInput($event)"
+                                    autofocus>
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <button class="btn btn-primary w-100" (click)="focusBarcodeInput()">
+                                    <i class="fas fa-barcode me-2"></i> Activer le scanner
+                                </button>
+                            </div>
+                        </div>
+                        <div class="alert alert-warning mt-3">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Scannez le code-barres de chaque article. La quantité sera automatiquement incrémentée si l'article existe déjà.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Liste des lignes d'inventaire -->
+        <div class="row mb-3">
+            <div class="col-md-12">
+                <div class="card border-0 shadow-sm rounded-3">
+                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">📋 Lignes d'inventaire ({{lignesInventaire.length}})</h5>
+                        <div>
+                            <button class="btn btn-danger btn-sm me-2" (click)="viderTableau()" [disabled]="saving || loading || lignesInventaire.length === 0">
+                                <i class="fas fa-trash-alt me-2"></i> Vider tableau
+                            </button>
+                            <button class="btn btn-success btn-sm me-2" (click)="enregistrerLignes()" [disabled]="saving || loading || lignesInventaire.length === 0">
+                                <i class="fas fa-save me-2"></i>
+                                <span *ngIf="!saving">Enregistrer</span>
+                                <span *ngIf="saving">
+                                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                    Enregistrement...
+                                </span>
+                            </button>
+                            <button class="btn btn-primary btn-sm" (click)="validerInventaire()" [disabled]="loading || lignesInventaire.length === 0">
+                                <i class="fas fa-check-circle me-2"></i> Valider
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body" style="position: relative;">
+                        <!-- Loader overlay -->
+                        <div *ngIf="saving" class="text-center py-4" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Enregistrement...</span>
+                            </div>
+                            <p class="mt-2 text-muted mb-0">Enregistrement en cours...</p>
+                        </div>
+                        
+                        <div class="table-responsive" style="max-height: 500px; overflow-y: auto;" [style.opacity]="saving ? '0.5' : '1'">
+                            <table class="table table-striped table-hover">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Code Article</th>
+                                        <th>Nom Article</th>
+                                        <th class="text-center">Quantité</th>
+                                        <th class="text-center" style="width: 100px;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngIf="lignesInventaire.length === 0 && !saving">
+                                        <td colspan="4" class="text-center py-4">
+                                            <p class="text-muted mb-0">Aucune ligne d'inventaire. Utilisez l'import Excel ou la douchette pour ajouter des articles.</p>
+                                        </td>
+                                    </tr>
+                                    <tr *ngFor="let ligne of lignesInventaire; let i = index">
+                                        <td>{{ligne.article_cod}}</td>
+                                        <td>{{ligne.article_nom}}</td>
+                                        <td class="text-center">
+                                            <input 
+                                                type="number" 
+                                                class="form-control form-control-sm text-center" 
+                                                [(ngModel)]="ligne.quantite"
+                                                min="0"
+                                                step="0.01"
+                                                [disabled]="saving"
+                                                style="width: 100px; margin: 0 auto;">
+                                        </td>
+                                        <td class="text-center">
+                                            <button class="btn btn-danger btn-sm" (click)="removeLigne(i)" [disabled]="saving" title="Supprimer">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de comparaison -->
+<div class="modal fade" id="comparaisonModal" tabindex="-1" [class.show]="showComparaisonModal" [style.display]="showComparaisonModal ? 'block' : 'none'">
+    <div class="modal-dialog modal-fullscreen-lg-down modal-xl modal-dialog-scrollable comparaison-modal-dialog">
+        <div class="modal-content comparaison-modal-content">
+            <div class="modal-header comparaison-modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-chart-line me-2"></i> Résultat de la comparaison
+                </h5>
+                <button type="button" class="btn-close btn-close-white" (click)="closeComparaisonModal()"></button>
+            </div>
+            <div class="modal-body comparaison-modal-body">
+                <!-- Barre de recherche et pagination -->
+                <div class="row mb-4">
+                    <div class="col-md-5">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-search"></i></span>
+                            <input
+                                type="text"
+                                class="form-control"
+                                placeholder="Rechercher par code ou nom..."
+                                [(ngModel)]="searchTerm"
+                                (keyup.enter)="onSearch()">
+                            <button class="btn btn-primary" type="button" (click)="onSearch()">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" [(ngModel)]="pageSize" (change)="currentPage = 1">
+                            <option [value]="25">25 par page</option>
+                            <option [value]="50">50 par page</option>
+                            <option [value]="100">100 par page</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Tableau de comparaison -->
+                <div class="table-responsive comparaison-table-container">
+                    <table class="table table-striped table-hover comparaison-table">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th (click)="onSort('article_cod')" class="sortable">
+                                    Code Article
+                                    <i class="fas ms-1" [ngClass]="sortColumn === 'article_cod' ? (sortDirection === 'ASC' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
+                                </th>
+                                <th (click)="onSort('article_nom')" class="sortable">
+                                    Nom du produit
+                                    <i class="fas ms-1" [ngClass]="sortColumn === 'article_nom' ? (sortDirection === 'ASC' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
+                                </th>
+                                <th (click)="onSort('stock_physique')" class="sortable text-center">
+                                    Stock Physique
+                                    <i class="fas ms-1" [ngClass]="sortColumn === 'stock_physique' ? (sortDirection === 'ASC' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
+                                </th>
+                                <th (click)="onSort('stock_reel')" class="sortable text-center">
+                                    Stock Réel
+                                    <i class="fas ms-1" [ngClass]="sortColumn === 'stock_reel' ? (sortDirection === 'ASC' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
+                                </th>
+                                <th (click)="onSort('ecart')" class="sortable text-center">
+                                    Écart
+                                    <i class="fas ms-1" [ngClass]="sortColumn === 'ecart' ? (sortDirection === 'ASC' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr *ngIf="getFilteredData().length === 0">
+                                <td colspan="5" class="text-center py-4">
+                                    <p class="text-muted mb-0">Aucun résultat trouvé</p>
+                                </td>
+                            </tr>
+                            <tr *ngFor="let item of getFilteredData()">
+                                <td>{{item.article_cod}}</td>
+                                <td>{{item.article_nom}}</td>
+                                <td class="text-center">{{item.stock_physique | number:'1.0-0'}}</td>
+                                <td class="text-center">{{item.stock_reel | number:'1.0-0'}}</td>
+                                <td class="text-center">
+                                    <span [ngClass]="getEcartClass(item.ecart)">
+                                        {{item.ecart | number:'1.0-0'}}
+                                    </span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                <div *ngIf="totalPages > 1" class="d-flex justify-content-between align-items-center mt-3">
+                    <div class="text-muted">
+                        Affichage de {{ (currentPage - 1) * pageSize + 1 }}-{{ (currentPage * pageSize > totalRecords ? totalRecords : currentPage * pageSize) }} sur {{ totalRecords }} résultats
+                    </div>
+                    <nav>
+                        <ul class="pagination mb-0">
+                            <li class="page-item" [class.disabled]="currentPage === 1">
+                                <a class="page-link" href="javascript:void(0)" (click)="onPageChange(1)">
+                                    <i class="fas fa-angle-double-left"></i>
+                                </a>
+                            </li>
+                            <li class="page-item" [class.disabled]="currentPage === 1">
+                                <a class="page-link" href="javascript:void(0)" (click)="onPageChange(currentPage - 1)">
+                                    <i class="fas fa-angle-left"></i>
+                                </a>
+                            </li>
+                            <li *ngFor="let page of getPageNumbers()" class="page-item" [class.active]="page === currentPage">
+                                <a class="page-link" href="javascript:void(0)" (click)="onPageChange(page)">{{ page }}</a>
+                            </li>
+                            <li class="page-item" [class.disabled]="currentPage === totalPages">
+                                <a class="page-link" href="javascript:void(0)" (click)="onPageChange(currentPage + 1)">
+                                    <i class="fas fa-angle-right"></i>
+                                </a>
+                            </li>
+                            <li class="page-item" [class.disabled]="currentPage === totalPages">
+                                <a class="page-link" href="javascript:void(0)" (click)="onPageChange(totalPages)">
+                                    <i class="fas fa-angle-double-right"></i>
+                                </a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+            <div class="modal-footer comparaison-modal-footer">
+                <button class="btn btn-success me-2" (click)="exportComparaisonExcel()">
+                    <i class="fas fa-file-excel me-2"></i> Exporter en Excel
+                </button>
+                <button class="btn btn-warning me-2" (click)="validationFinale()" [disabled]="loading || inventaire?.etat === 1">
+                    <i class="fas fa-check-double me-2"></i> Validation Finale
+                </button>
+                <button type="button" class="btn btn-secondary" (click)="closeComparaisonModal()">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Backdrop pour le modal -->
+<div class="modal-backdrop fade" [class.show]="showComparaisonModal" [style.display]="showComparaisonModal ? 'block' : 'none'" (click)="closeComparaisonModal()"></div>
+

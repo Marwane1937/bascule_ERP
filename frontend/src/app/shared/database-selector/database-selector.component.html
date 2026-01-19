@@ -2,9 +2,9 @@
   <div class="selector-container" (click)="toggleDropdown()">
     <div class="selected-database">
       <div class="database-info">
-        <i class="fas fa-building"></i>
+        <i class="fas fa-database"></i>
         <span class="database-name">
-          {{ currentSociete ? currentSociete.nom : 'Sélectionner une société' }}
+          {{ currentDatabase ? currentDatabase.name : 'Sélectionner une base de données' }}
         </span>
       </div>
       <i class="fas fa-chevron-down" [class.rotated]="showDropdown"></i>
@@ -13,7 +13,7 @@
 
   <div class="dropdown" *ngIf="showDropdown" (clickOutside)="closeDropdown()">
     <div class="dropdown-header">
-      <h4>Choisir une société</h4>
+      <h4>Choisir une base de données</h4>
       <button class="close-btn" (click)="closeDropdown()">
         <i class="fas fa-times"></i>
       </button>
@@ -22,26 +22,26 @@
     <div class="dropdown-content">
       <div *ngIf="isLoading" class="loading">
         <div class="spinner"></div>
-        Chargement des sociétés...
+        Chargement des bases de données...
       </div>
 
-      <div *ngIf="!isLoading && societes.length === 0" class="no-data">
-        Aucune société trouvée
+      <div *ngIf="!isLoading && databases.length === 0" class="no-data">
+        Aucune base de données trouvée
       </div>
 
-      <div *ngIf="!isLoading && societes.length > 0" class="databases-list">
+      <div *ngIf="!isLoading && databases.length > 0" class="databases-list">
         <div 
-          *ngFor="let societe of societes" 
+          *ngFor="let database of databases" 
           class="database-item"
-          [class.selected]="currentSociete && currentSociete.id === societe.id"
-          (click)="selectSociete(societe)"
+          [class.selected]="currentDatabase && currentDatabase.id === database.id"
+          (click)="selectDatabase(database)"
         >
           <div class="database-details">
-            <div class="database-name">{{ societe.nom }}</div>
-            <div class="database-technical">{{ societe.nom_base }}</div>
+            <div class="database-name">{{ database.name }}</div>
+            <div class="database-technical">{{ database.dbname }} ({{ database.dbuser }})</div>
           </div>
           <div class="database-status">
-            <i class="fas fa-circle" [class.active]="currentSociete && currentSociete.id === societe.id"></i>
+            <i class="fas fa-circle" [class.active]="currentDatabase && currentDatabase.id === database.id"></i>
           </div>
         </div>
       </div>

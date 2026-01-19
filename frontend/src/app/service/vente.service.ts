@@ -1,0 +1,79 @@
+import { Injectable } from '@angular/core';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Observable } from 'rxjs';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class VenteService {
+  private apiUrl = 'http://localhost:3500/api/vente';
+
+  constructor(private http: HttpClient) { }
+
+  // ============= REPORTING VENTE =============
+
+  /**
+   * Récupérer le grand livre
+   */
+  getGrandLivre(options: any = {}): Observable<any> {
+    let params = new HttpParams();
+    if (options.page) params = params.set('page', options.page.toString());
+    if (options.pageSize) params = params.set('pageSize', options.pageSize.toString());
+    if (options.orderBy) params = params.set('orderBy', options.orderBy);
+    if (options.orderDirection) params = params.set('orderDirection', options.orderDirection);
+    if (options.search) params = params.set('search', options.search);
+    if (options.dateFrom) params = params.set('dateFrom', options.dateFrom);
+    if (options.dateTo) params = params.set('dateTo', options.dateTo);
+
+    return this.http.get(`${this.apiUrl}/reporting/grand-livre`, { params });
+  }
+
+  /**
+   * Récupérer les factures par client
+   */
+  getFacturesByClient(options: any = {}): Observable<any> {
+    let params = new HttpParams();
+    if (options.page) params = params.set('page', options.page.toString());
+    if (options.pageSize) params = params.set('pageSize', options.pageSize.toString());
+    if (options.orderBy) params = params.set('orderBy', options.orderBy);
+    if (options.orderDirection) params = params.set('orderDirection', options.orderDirection);
+    if (options.search) params = params.set('search', options.search);
+    if (options.dateFrom) params = params.set('dateFrom', options.dateFrom);
+    if (options.dateTo) params = params.set('dateTo', options.dateTo);
+
+    return this.http.get(`${this.apiUrl}/reporting/factures-client`, { params });
+  }
+
+  /**
+   * Récupérer le chiffre d'affaires par article
+   */
+  getChiffreAffairesArticles(options: any = {}): Observable<any> {
+    let params = new HttpParams();
+    if (options.page) params = params.set('page', options.page.toString());
+    if (options.pageSize) params = params.set('pageSize', options.pageSize.toString());
+    if (options.orderBy) params = params.set('orderBy', options.orderBy);
+    if (options.orderDirection) params = params.set('orderDirection', options.orderDirection);
+    if (options.search) params = params.set('search', options.search);
+    if (options.dateFrom) params = params.set('dateFrom', options.dateFrom);
+    if (options.dateTo) params = params.set('dateTo', options.dateTo);
+
+    return this.http.get(`${this.apiUrl}/reporting/ca-articles`, { params });
+  }
+
+  /**
+   * Récupérer le chiffre d'affaires par client
+   */
+  getChiffreAffairesClients(options: any = {}): Observable<any> {
+    let params = new HttpParams();
+    if (options.page) params = params.set('page', options.page.toString());
+    if (options.pageSize) params = params.set('pageSize', options.pageSize.toString());
+    if (options.orderBy) params = params.set('orderBy', options.orderBy);
+    if (options.orderDirection) params = params.set('orderDirection', options.orderDirection);
+    if (options.search) params = params.set('search', options.search);
+    if (options.dateFrom) params = params.set('dateFrom', options.dateFrom);
+    if (options.dateTo) params = params.set('dateTo', options.dateTo);
+
+    return this.http.get(`${this.apiUrl}/reporting/ca-clients`, { params });
+  }
+}
+

@@ -2,15 +2,38 @@ const databaseSwitchService = require('../services/database-switch.service');
 const Societe = require('../models/societe.model');
 
 class DatabaseSwitchController {
-  // Changer de base de données
+  // Changer de base de données (nouvelle méthode avec db_id)
   async switchDatabase(req, res) {
     try {
-      const { societe_id } = req.body;
+      const { db_id, societe_id } = req.body;
       
+      // Si db_id est fourni, utiliser la nouvelle méthode avec la table db
+      if (db_id) {
+        const result = await databaseSwitchService.switchDatabaseByDbId(db_id);
+        
+        if (result.success) {
+          res.json({
+            success: true,
+            message: result.message,
+            data: {
+              database: result.database,
+              dbConfig: result.dbConfig
+            }
+          });
+        } else {
+          res.status(500).json({
+            success: false,
+            message: result.message
+          });
+        }
+        return;
+      }
+      
+      // Ancienne méthode avec societe_id (gardée pour compatibilité)
       if (!societe_id) {
         return res.status(400).json({
           success: false,
-          message: 'ID de société requis'
+          message: 'ID de base de données (db_id) ou ID de société (societe_id) requis'
         });
       }
 
@@ -91,10 +114,10 @@ class DatabaseSwitchController {
     }
   }
 
-  // Lister les bases de données disponibles
+  // Lister les bases de données disponibles depuis la table db
   async listDatabases(req, res) {
     try {
-      const result = await databaseSwitchService.listAvailableDatabases();
+      const result = await databaseSwitchService.listDatabasesFromTable();
       
       if (result.success) {
         res.json({
@@ -104,7 +127,7 @@ class DatabaseSwitchController {
       } else {
         res.status(500).json({
           success: false,
-          message: result.message
+          message: result.message || 'Erreur lors de la récupération des bases'
         });
       }
     } catch (error) {

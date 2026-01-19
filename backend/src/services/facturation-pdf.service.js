@@ -403,22 +403,25 @@ class FacturationPdfService {
         // === FONCTION: Dessiner l'en-tête du tableau des articles ===
         const drawTableHeader = (y) => {
           const lightGrayColor = '#E0E0E0';
-          doc.roundedRect(50, y, 510, articlesTableHeaderHeight, tableBorderRadius).fill(lightGrayColor).stroke('#000');
-          doc.lineWidth(1).roundedRect(50, y, 510, articlesTableHeaderHeight, tableBorderRadius).stroke('#000');
+          const tableStartX = 40; // Tableau commence à X=40 (marge gauche) - COMME LIVRAISON
+          const tableWidth = 525; // Largeur totale du tableau (595 - 40 marge gauche) - COMME LIVRAISON
+          doc.roundedRect(tableStartX, y, tableWidth, articlesTableHeaderHeight, tableBorderRadius).fill(lightGrayColor).stroke('#000');
+          doc.lineWidth(1).roundedRect(tableStartX, y, tableWidth, articlesTableHeaderHeight, tableBorderRadius).stroke('#000');
           doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
 
-          const colRefX = 50;
-          const colDesignationX = 100;
-          const colQteX = 350;
-          const colPUX = 410;
-          const colRX = 460;
-          const colHTX = 510;
+          // Colonnes redimensionnées pour mieux utiliser l'espace disponible - COMME LIVRAISON
+          const colRefX = 40;
           const colRefWidth = 50;
-          const colDesignationWidth = 250;
-          const colQteWidth = 60;
-          const colPUWidth = 50;
-          const colRWidth = 50;
-          const colHTWidth = 50;
+          const colDesignationX = 90; // 40 + 50
+          const colDesignationWidth = 280; // Colonne Désignation considérablement élargie - COMME LIVRAISON
+          const colQteX = 370; // 90 + 280
+          const colQteWidth = 45; // Légèrement réduit - COMME LIVRAISON
+          const colPUX = 415; // 370 + 45
+          const colPUWidth = 45; // Légèrement réduit - COMME LIVRAISON
+          const colRX = 460; // 415 + 45
+          const colRWidth = 35; // Réduit - COMME LIVRAISON
+          const colHTX = 500; // 460 + 35 + 5 (marge)
+          const colHTWidth = 50; // Réduit pour tenir dans la page - COMME LIVRAISON
 
           doc.text('Réf', colRefX, y + 6, { width: colRefWidth, align: 'center' });
           doc.text('Désignation', colDesignationX, y + 6, { width: colDesignationWidth, align: 'center' });
@@ -469,20 +472,22 @@ class FacturationPdfService {
         let y = drawDocumentHeader(true);
         y = drawTableHeader(y);
 
-        // Positions des colonnes
-        const colRefX = 50;
-        const colDesignationX = 100;
-        const colQteX = 350;
-        const colPUX = 410;
-        const colRX = 460;
-        const colHTX = 510;
+        // Positions des colonnes (tableau occupe toute la largeur disponible - commence à X=40, largeur totale 525px) - COMME LIVRAISON
+        const tableStartX = 40; // Tableau commence à X=40 (marge gauche) - COMME LIVRAISON
+        const tableWidth = 525; // Largeur totale du tableau (595 - 40 marge gauche) - COMME LIVRAISON
+        const colRefX = 40;
         const colRefWidth = 50;
-        const colDesignationWidth = 250;
+        const colDesignationX = 90; // 40 + 50
+        const colDesignationWidth = 280; // Colonne Désignation considérablement élargie - COMME LIVRAISON
         const colDesignationPadding = 8;
-        const colQteWidth = 60;
-        const colPUWidth = 50;
-        const colRWidth = 50;
-        const colHTWidth = 50;
+        const colQteX = 370; // 90 + 280
+        const colQteWidth = 45; // Légèrement réduit - COMME LIVRAISON
+        const colPUX = 415; // 370 + 45
+        const colPUWidth = 45; // Légèrement réduit - COMME LIVRAISON
+        const colRX = 460; // 415 + 45
+        const colRWidth = 35; // Réduit - COMME LIVRAISON
+        const colHTX = 500; // 460 + 35 + 5 (marge)
+        const colHTWidth = 50; // Réduit pour tenir dans la page - COMME LIVRAISON
 
         doc.font('Helvetica').fillColor('#000').stroke('#000');
         let totalHT = 0, totalTVA = 0, totalTTC = 0, totalReduction = 0;
@@ -559,21 +564,6 @@ class FacturationPdfService {
             console.log(`[facturation-pdf] Affichage remise: ${remiseValueText} ${remiseSymbol}`);
           }
 
-          const colRefX = 50;
-          const colDesignationX = 100;
-          const colQteX = 350;
-          const colPUX = 410;
-          const colRX = 460;
-          const colHTX = 510;
-
-          const colRefWidth = 50;
-          const colDesignationWidth = 250;
-          const colDesignationPadding = 8;
-          const colQteWidth = 60;
-          const colPUWidth = 50;
-          const colRWidth = 50;
-          const colHTWidth = 50;
-
           const designationHtml = designation || '';
           const designationPlain = designationHtml
             .replace(/<h[1-6][^>]*>/gi, '\n').replace(/<\/h[1-6]>/gi, '\n')
@@ -613,15 +603,15 @@ class FacturationPdfService {
           const validY = isNaN(y) || y < 0 ? 0 : y;
           const centerY = validY + (rowHeight / 2) - 3;
 
-          // Rectangle de la ligne
-          doc.roundedRect(50, validY, 510, rowHeight, tableBorderRadius).stroke('#000');
+          // Rectangle de la ligne - COMME LIVRAISON
+          doc.roundedRect(tableStartX, validY, tableWidth, rowHeight, tableBorderRadius).stroke('#000');
 
-          // Lignes verticales de séparation des colonnes
-          doc.moveTo(100, validY).lineTo(100, validY + rowHeight).stroke('#000'); // Après Réf
-          doc.moveTo(350, validY).lineTo(350, validY + rowHeight).stroke('#000'); // Après Désignation
-          doc.moveTo(410, validY).lineTo(410, validY + rowHeight).stroke('#000'); // Après Qté
-          doc.moveTo(460, validY).lineTo(460, validY + rowHeight).stroke('#000'); // Après P.U.
-          doc.moveTo(510, validY).lineTo(510, validY + rowHeight).stroke('#000'); // Après R.
+          // Lignes verticales de séparation des colonnes - COMME LIVRAISON
+          doc.moveTo(90, validY).lineTo(90, validY + rowHeight).stroke('#000'); // Après Réf (40 + 50)
+          doc.moveTo(370, validY).lineTo(370, validY + rowHeight).stroke('#000'); // Après Désignation (90 + 280)
+          doc.moveTo(415, validY).lineTo(415, validY + rowHeight).stroke('#000'); // Après Qté (370 + 45)
+          doc.moveTo(460, validY).lineTo(460, validY + rowHeight).stroke('#000'); // Après P.U. (415 + 45)
+          doc.moveTo(500, validY).lineTo(500, validY + rowHeight).stroke('#000'); // Après R. (460 + 35)
 
           // Contenu de la ligne
           doc.font('Helvetica').fontSize(9).fillColor('#000');

@@ -58,6 +58,7 @@ export class DevisComponent implements OnInit, AfterViewInit {
     private cdr: ChangeDetectorRef
   ) {}
 
+
   ngOnInit(): void {
     this.initForm(); // Initialiser le formulaire en premier
     
@@ -81,11 +82,15 @@ export class DevisComponent implements OnInit, AfterViewInit {
 
   initForm(): void {
     // Date d'aujourd'hui au format YYYY-MM-DD
-    const today = new Date();
-    const todayString = today.toISOString().split('T')[0];
+   const now = new Date();
+   const pad = (n: number) => n.toString().padStart(2, '0');
+   const datetimeLocal =
+     `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T` +
+     `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+   
     
     this.DevisForm = this.fb.group({
-      date: [todayString, Validators.required],
+      date: [datetimeLocal, Validators.required],
       description: [''],
       part_id: [0],
       contact_id: [0],

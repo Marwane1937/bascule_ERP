@@ -1,0 +1,584 @@
+<div class="container py-4">
+  <div class="page-inner">
+
+    <!-- En-tête -->
+    <div class="page-header mb-4">
+      <h3 class="fw-bold text-dark">Reporting Vente</h3>
+      <ul class="breadcrumbs d-flex align-items-center">
+        <li class="nav-home me-2"><a href="#"><i class="fas fa-home text-primary"></i></a></li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item me-2"><a href="#" class="text-muted">Ventes</a></li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item fw-semibold text-muted">Reporting</li>
+      </ul>
+    </div>
+
+    <!-- Onglets -->
+    <div class="row mb-4">
+      <div class="col-12">
+        <ul class="nav nav-tabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" [class.active]="activeTab === 'grand-livre'"
+                    (click)="switchTab('grand-livre')" type="button">
+              <i class="fas fa-book me-2"></i>Grand livre
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" [class.active]="activeTab === 'factures-client'"
+                    (click)="switchTab('factures-client')" type="button">
+              <i class="fas fa-file-invoice me-2"></i>Factures par client
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" [class.active]="activeTab === 'ca-articles'"
+                    (click)="switchTab('ca-articles')" type="button">
+              <i class="fas fa-chart-line me-2"></i>Chiffre d'affaires par article
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" [class.active]="activeTab === 'ca-clients'"
+                    (click)="switchTab('ca-clients')" type="button">
+              <i class="fas fa-users me-2"></i>Chiffre d'affaires par client
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Contenu des onglets -->
+    <div class="tab-content">
+
+      <!-- === ONGLET GRAND LIVRE === -->
+      <div class="tab-pane fade" [class.show]="activeTab === 'grand-livre'" [class.active]="activeTab === 'grand-livre'">
+
+        <!-- Barre de recherche et filtres -->
+        <div class="row mb-3">
+          <div class="col-md-3">
+            <div class="input-group">
+              <span class="input-group-text"><i class="fas fa-search"></i></span>
+              <input type="text" class="form-control" placeholder="Rechercher..."
+                     [(ngModel)]="grandLivreSearchTerm" (keyup.enter)="onGrandLivreSearch()">
+              <button class="btn btn-primary" type="button" (click)="onGrandLivreSearch()">
+                <i class="fas fa-search"></i>
+              </button>
+            </div>
+          </div>
+          <div class="col-md-2">
+            <input type="date" class="form-control" placeholder="Date début"
+                   [(ngModel)]="grandLivreDateFrom" (change)="getGrandLivre()">
+          </div>
+          <div class="col-md-2">
+            <input type="date" class="form-control" placeholder="Date fin"
+                   [(ngModel)]="grandLivreDateTo" (change)="getGrandLivre()">
+          </div>
+          <div class="col-md-2">
+            <select class="form-select" [(ngModel)]="grandLivrePageSize" (change)="getGrandLivre()">
+              <option [value]="10">10 par page</option>
+              <option [value]="25">25 par page</option>
+              <option [value]="50">50 par page</option>
+              <option [value]="100">100 par page</option>
+            </select>
+          </div>
+          <div class="col-md-3 text-end">
+            <div class="btn-export-group">
+              <button class="btn-export-pdf" (click)="exportGrandLivre('pdf')" title="Exporter PDF">
+                <i class="fas fa-file-pdf"></i> PDF
+              </button>
+              <button class="btn-export-excel" (click)="exportGrandLivre('excel')" title="Exporter Excel">
+                <i class="fas fa-file-excel"></i> Excel
+              </button>
+              <button class="btn btn-outline-primary" (click)="getGrandLivre()">
+                <i class="fas fa-sync-alt"></i> Actualiser
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tableau Grand Livre -->
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Grand livre</h5>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                  <tr>
+                    <th (click)="onGrandLivreSort('date')" class="sortable">
+                      Date
+                      <i class="fas ms-1" [class]="getGrandLivreSortIcon('date')"></i>
+                    </th>
+                    <th (click)="onGrandLivreSort('numero')" class="sortable">
+                      Document
+                      <i class="fas ms-1" [class]="getGrandLivreSortIcon('numero')"></i>
+                    </th>
+                    <th (click)="onGrandLivreSort('client')" class="sortable">
+                      Client
+                      <i class="fas ms-1" [class]="getGrandLivreSortIcon('client')"></i>
+                    </th>
+                    <th>Description</th>
+                    <th (click)="onGrandLivreSort('total_ht')" class="sortable text-end">
+                      Montant HT
+                      <i class="fas ms-1" [class]="getGrandLivreSortIcon('total_ht')"></i>
+                    </th>
+                    <th class="text-end">TVA</th>
+                    <th class="text-end">Montant TTC</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngIf="grandLivreLoading">
+                    <td colspan="7" class="text-center py-4">
+                      <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Chargement...</span>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr *ngIf="!grandLivreLoading && grandLivre.length === 0">
+                    <td colspan="7" class="text-center py-4 text-muted">
+                      <i class="fas fa-inbox fa-2x mb-2"></i><br>
+                      Aucune donnée trouvée
+                    </td>
+                  </tr>
+                  <tr *ngFor="let item of grandLivre">
+                    <td>{{ formatDate(item.date) }}</td>
+                    <td><strong>{{ item.numero || item.facture_num || '-' }}</strong></td>
+                    <td>{{ item.client || item.nom || '-' }}</td>
+                    <td>{{ item.description || '-' }}</td>
+                    <td class="text-end">{{ formatCurrency(item.total_ht || item.facture_ht || 0) }}</td>
+                    <td class="text-end">{{ formatCurrency(item.total_tva || item.facture_tva || 0) }}</td>
+                    <td class="text-end"><strong>{{ formatCurrency(item.total_ttc || (item.facture_ht || 0) + (item.facture_tva || 0)) }}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination Grand Livre -->
+            <div class="d-flex justify-content-between align-items-center mt-3" *ngIf="grandLivreTotalPages > 1">
+              <div class="text-muted">
+                Affichage de {{ getDisplayRange(grandLivreCurrentPage, grandLivrePageSize, grandLivreTotalRecords) }}
+                sur {{ grandLivreTotalRecords }} éléments
+              </div>
+              <nav aria-label="Pagination grand livre">
+                <ul class="pagination pagination-sm mb-0">
+                  <li class="page-item" [class.disabled]="grandLivreCurrentPage === 1">
+                    <a class="page-link" href="#" (click)="onGrandLivrePageChange(grandLivreCurrentPage - 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-left"></i>
+                    </a>
+                  </li>
+                  <li class="page-item" [class.active]="page === grandLivreCurrentPage"
+                      *ngFor="let page of getPageNumbers(grandLivreTotalPages, grandLivreCurrentPage)">
+                    <a class="page-link" href="#" (click)="onGrandLivrePageChange(page); $event.preventDefault()">
+                      {{ page }}
+                    </a>
+                  </li>
+                  <li class="page-item" [class.disabled]="grandLivreCurrentPage === grandLivreTotalPages">
+                    <a class="page-link" href="#" (click)="onGrandLivrePageChange(grandLivreCurrentPage + 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-right"></i>
+                    </a>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- === ONGLET FACTURES PAR CLIENT === -->
+      <div class="tab-pane fade" [class.show]="activeTab === 'factures-client'" [class.active]="activeTab === 'factures-client'">
+
+        <!-- Barre de recherche et filtres -->
+        <div class="row mb-3">
+          <div class="col-md-3">
+            <div class="input-group">
+              <span class="input-group-text"><i class="fas fa-search"></i></span>
+              <input type="text" class="form-control" placeholder="Rechercher par client..."
+                     [(ngModel)]="facturesClientSearchTerm" (keyup.enter)="onFacturesClientSearch()">
+              <button class="btn btn-primary" type="button" (click)="onFacturesClientSearch()">
+                <i class="fas fa-search"></i>
+              </button>
+            </div>
+          </div>
+          <div class="col-md-2">
+            <input type="date" class="form-control" placeholder="Date début"
+                   [(ngModel)]="facturesClientDateFrom" (change)="getFacturesClient()">
+          </div>
+          <div class="col-md-2">
+            <input type="date" class="form-control" placeholder="Date fin"
+                   [(ngModel)]="facturesClientDateTo" (change)="getFacturesClient()">
+          </div>
+          <div class="col-md-2">
+            <select class="form-select" [(ngModel)]="facturesClientPageSize" (change)="getFacturesClient()">
+              <option [value]="10">10 par page</option>
+              <option [value]="25">25 par page</option>
+              <option [value]="50">50 par page</option>
+              <option [value]="100">100 par page</option>
+            </select>
+          </div>
+          <div class="col-md-3 text-end">
+            <div class="btn-export-group">
+              <button class="btn-export-pdf" (click)="exportFacturesClient('pdf')" title="Exporter PDF">
+                <i class="fas fa-file-pdf"></i> PDF
+              </button>
+              <button class="btn-export-excel" (click)="exportFacturesClient('excel')" title="Exporter Excel">
+                <i class="fas fa-file-excel"></i> Excel
+              </button>
+              <button class="btn btn-outline-primary" (click)="getFacturesClient()">
+                <i class="fas fa-sync-alt"></i> Actualiser
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tableau Factures par Client -->
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Factures par client</h5>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                  <tr>
+                    <th (click)="onFacturesClientSort('facture_num')" class="sortable">
+                      Numéro Facture
+                      <i class="fas ms-1" [class]="getFacturesClientSortIcon('facture_num')"></i>
+                    </th>
+                    <th (click)="onFacturesClientSort('facture_dat')" class="sortable">
+                      Date
+                      <i class="fas ms-1" [class]="getFacturesClientSortIcon('facture_dat')"></i>
+                    </th>
+                    <th (click)="onFacturesClientSort('nom')" class="sortable">
+                      Client
+                      <i class="fas ms-1" [class]="getFacturesClientSortIcon('nom')"></i>
+                    </th>
+                    <th (click)="onFacturesClientSort('facture_ht')" class="sortable text-end">
+                      Montant HT
+                      <i class="fas ms-1" [class]="getFacturesClientSortIcon('facture_ht')"></i>
+                    </th>
+                    <th class="text-end">TVA</th>
+                    <th class="text-end">Montant TTC</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngIf="facturesClientLoading">
+                    <td colspan="6" class="text-center py-4">
+                      <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Chargement...</span>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr *ngIf="!facturesClientLoading && facturesClient.length === 0">
+                    <td colspan="6" class="text-center py-4 text-muted">
+                      <i class="fas fa-inbox fa-2x mb-2"></i><br>
+                      Aucune facture trouvée
+                    </td>
+                  </tr>
+                  <tr *ngFor="let facture of facturesClient">
+                    <td><strong>{{ facture.facture_num || '-' }}</strong></td>
+                    <td>{{ formatDate(facture.facture_dat) }}</td>
+                    <td>{{ facture.nom || '-' }}</td>
+                    <td class="text-end">{{ formatCurrency(facture.facture_ht || 0) }}</td>
+                    <td class="text-end">{{ formatCurrency(facture.facture_tva || 0) }}</td>
+                    <td class="text-end"><strong>{{ formatCurrency((facture.facture_ht || 0) + (facture.facture_tva || 0)) }}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination Factures par Client -->
+            <div class="d-flex justify-content-between align-items-center mt-3" *ngIf="facturesClientTotalPages > 1">
+              <div class="text-muted">
+                Affichage de {{ getDisplayRange(facturesClientCurrentPage, facturesClientPageSize, facturesClientTotalRecords) }}
+                sur {{ facturesClientTotalRecords }} éléments
+              </div>
+              <nav aria-label="Pagination factures client">
+                <ul class="pagination pagination-sm mb-0">
+                  <li class="page-item" [class.disabled]="facturesClientCurrentPage === 1">
+                    <a class="page-link" href="#" (click)="onFacturesClientPageChange(facturesClientCurrentPage - 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-left"></i>
+                    </a>
+                  </li>
+                  <li class="page-item" [class.active]="page === facturesClientCurrentPage"
+                      *ngFor="let page of getPageNumbers(facturesClientTotalPages, facturesClientCurrentPage)">
+                    <a class="page-link" href="#" (click)="onFacturesClientPageChange(page); $event.preventDefault()">
+                      {{ page }}
+                    </a>
+                  </li>
+                  <li class="page-item" [class.disabled]="facturesClientCurrentPage === facturesClientTotalPages">
+                    <a class="page-link" href="#" (click)="onFacturesClientPageChange(facturesClientCurrentPage + 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-right"></i>
+                    </a>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- === ONGLET CHIFFRE D'AFFAIRES PAR ARTICLE === -->
+      <div class="tab-pane fade" [class.show]="activeTab === 'ca-articles'" [class.active]="activeTab === 'ca-articles'">
+
+        <!-- Barre de recherche et filtres -->
+        <div class="row mb-3">
+          <div class="col-md-3">
+            <div class="input-group">
+              <span class="input-group-text"><i class="fas fa-search"></i></span>
+              <input type="text" class="form-control" placeholder="Rechercher par code ou nom..."
+                     [(ngModel)]="caArticlesSearchTerm" (keyup.enter)="onChiffreAffairesArticlesSearch()">
+              <button class="btn btn-primary" type="button" (click)="onChiffreAffairesArticlesSearch()">
+                <i class="fas fa-search"></i>
+              </button>
+            </div>
+          </div>
+          <div class="col-md-2">
+            <input type="date" class="form-control" placeholder="Date début"
+                   [(ngModel)]="caArticlesDateFrom" (change)="getChiffreAffairesArticles()">
+          </div>
+          <div class="col-md-2">
+            <input type="date" class="form-control" placeholder="Date fin"
+                   [(ngModel)]="caArticlesDateTo" (change)="getChiffreAffairesArticles()">
+          </div>
+          <div class="col-md-2">
+            <select class="form-select" [(ngModel)]="caArticlesPageSize" (change)="getChiffreAffairesArticles()">
+              <option [value]="10">10 par page</option>
+              <option [value]="25">25 par page</option>
+              <option [value]="50">50 par page</option>
+              <option [value]="100">100 par page</option>
+            </select>
+          </div>
+          <div class="col-md-3 text-end">
+            <div class="btn-export-group">
+              <button class="btn-export-pdf" (click)="exportChiffreAffairesArticles('pdf')" title="Exporter PDF">
+                <i class="fas fa-file-pdf"></i> PDF
+              </button>
+              <button class="btn-export-excel" (click)="exportChiffreAffairesArticles('excel')" title="Exporter Excel">
+                <i class="fas fa-file-excel"></i> Excel
+              </button>
+              <button class="btn btn-outline-primary" (click)="getChiffreAffairesArticles()">
+                <i class="fas fa-sync-alt"></i> Actualiser
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tableau Chiffre d'Affaires par Article -->
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Chiffre d'affaires par article</h5>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                  <tr>
+                    <th (click)="onChiffreAffairesArticlesSort('article_cod')" class="sortable">
+                      Code Article
+                      <i class="fas ms-1" [class]="getChiffreAffairesArticlesSortIcon('article_cod')"></i>
+                    </th>
+                    <th (click)="onChiffreAffairesArticlesSort('article_nom')" class="sortable">
+                      Nom Article
+                      <i class="fas ms-1" [class]="getChiffreAffairesArticlesSortIcon('article_nom')"></i>
+                    </th>
+                    <th>Catégorie</th>
+                    <th (click)="onChiffreAffairesArticlesSort('quantite_vendue')" class="sortable text-end">
+                      Qté Vendue
+                      <i class="fas ms-1" [class]="getChiffreAffairesArticlesSortIcon('quantite_vendue')"></i>
+                    </th>
+                    <th (click)="onChiffreAffairesArticlesSort('chiffre_affaires')" class="sortable text-end">
+                      Chiffre d'Affaires
+                      <i class="fas ms-1" [class]="getChiffreAffairesArticlesSortIcon('chiffre_affaires')"></i>
+                    </th>
+                    <th class="text-end">Prix Moyen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngIf="caArticlesLoading">
+                    <td colspan="6" class="text-center py-4">
+                      <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Chargement...</span>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr *ngIf="!caArticlesLoading && caArticles.length === 0">
+                    <td colspan="6" class="text-center py-4 text-muted">
+                      <i class="fas fa-chart-line fa-2x mb-2"></i><br>
+                      Aucune donnée de vente trouvée
+                    </td>
+                  </tr>
+                  <tr *ngFor="let article of caArticles">
+                    <td><strong>{{ article.article_cod }}</strong></td>
+                    <td>{{ article.article_nom }}</td>
+                    <td>{{ article.categorie_nom || '-' }}</td>
+                    <td class="text-end">{{ article.quantite_vendue | number:'1.0-2' }}</td>
+                    <td class="text-end"><strong class="text-success">{{ formatCurrency(article.chiffre_affaires) }}</strong></td>
+                    <td class="text-end">{{ formatCurrency(article.prix_moyen_vente) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination Chiffre d'Affaires par Article -->
+            <div class="d-flex justify-content-between align-items-center mt-3" *ngIf="caArticlesTotalPages > 1">
+              <div class="text-muted">
+                Affichage de {{ getDisplayRange(caArticlesCurrentPage, caArticlesPageSize, caArticlesTotalRecords) }}
+                sur {{ caArticlesTotalRecords }} éléments
+              </div>
+              <nav aria-label="Pagination CA articles">
+                <ul class="pagination pagination-sm mb-0">
+                  <li class="page-item" [class.disabled]="caArticlesCurrentPage === 1">
+                    <a class="page-link" href="#" (click)="onChiffreAffairesArticlesPageChange(caArticlesCurrentPage - 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-left"></i>
+                    </a>
+                  </li>
+                  <li class="page-item" [class.active]="page === caArticlesCurrentPage"
+                      *ngFor="let page of getPageNumbers(caArticlesTotalPages, caArticlesCurrentPage)">
+                    <a class="page-link" href="#" (click)="onChiffreAffairesArticlesPageChange(page); $event.preventDefault()">
+                      {{ page }}
+                    </a>
+                  </li>
+                  <li class="page-item" [class.disabled]="caArticlesCurrentPage === caArticlesTotalPages">
+                    <a class="page-link" href="#" (click)="onChiffreAffairesArticlesPageChange(caArticlesCurrentPage + 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-right"></i>
+                    </a>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- === ONGLET CHIFFRE D'AFFAIRES PAR CLIENT === -->
+      <div class="tab-pane fade" [class.show]="activeTab === 'ca-clients'" [class.active]="activeTab === 'ca-clients'">
+
+        <!-- Barre de recherche et filtres -->
+        <div class="row mb-3">
+          <div class="col-md-3">
+            <div class="input-group">
+              <span class="input-group-text"><i class="fas fa-search"></i></span>
+              <input type="text" class="form-control" placeholder="Rechercher par client..."
+                     [(ngModel)]="caClientsSearchTerm" (keyup.enter)="onChiffreAffairesClientsSearch()">
+              <button class="btn btn-primary" type="button" (click)="onChiffreAffairesClientsSearch()">
+                <i class="fas fa-search"></i>
+              </button>
+            </div>
+          </div>
+          <div class="col-md-2">
+            <input type="date" class="form-control" placeholder="Date début"
+                   [(ngModel)]="caClientsDateFrom" (change)="getChiffreAffairesClients()">
+          </div>
+          <div class="col-md-2">
+            <input type="date" class="form-control" placeholder="Date fin"
+                   [(ngModel)]="caClientsDateTo" (change)="getChiffreAffairesClients()">
+          </div>
+          <div class="col-md-2">
+            <select class="form-select" [(ngModel)]="caClientsPageSize" (change)="getChiffreAffairesClients()">
+              <option [value]="10">10 par page</option>
+              <option [value]="25">25 par page</option>
+              <option [value]="50">50 par page</option>
+              <option [value]="100">100 par page</option>
+            </select>
+          </div>
+          <div class="col-md-3 text-end">
+            <div class="btn-export-group">
+              <button class="btn-export-pdf" (click)="exportChiffreAffairesClients('pdf')" title="Exporter PDF">
+                <i class="fas fa-file-pdf"></i> PDF
+              </button>
+              <button class="btn-export-excel" (click)="exportChiffreAffairesClients('excel')" title="Exporter Excel">
+                <i class="fas fa-file-excel"></i> Excel
+              </button>
+              <button class="btn btn-outline-primary" (click)="getChiffreAffairesClients()">
+                <i class="fas fa-sync-alt"></i> Actualiser
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tableau Chiffre d'Affaires par Client -->
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Chiffre d'affaires par client</h5>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                  <tr>
+                    <th (click)="onChiffreAffairesClientsSort('client_nom')" class="sortable">
+                      Client
+                      <i class="fas ms-1" [class]="getChiffreAffairesClientsSortIcon('client_nom')"></i>
+                    </th>
+                    <th (click)="onChiffreAffairesClientsSort('nombre_factures')" class="sortable text-end">
+                      Nombre Factures
+                      <i class="fas ms-1" [class]="getChiffreAffairesClientsSortIcon('nombre_factures')"></i>
+                    </th>
+                    <th (click)="onChiffreAffairesClientsSort('chiffre_affaires')" class="sortable text-end">
+                      Chiffre d'Affaires
+                      <i class="fas ms-1" [class]="getChiffreAffairesClientsSortIcon('chiffre_affaires')"></i>
+                    </th>
+                    <th class="text-end">Montant Moyen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngIf="caClientsLoading">
+                    <td colspan="4" class="text-center py-4">
+                      <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Chargement...</span>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr *ngIf="!caClientsLoading && caClients.length === 0">
+                    <td colspan="4" class="text-center py-4 text-muted">
+                      <i class="fas fa-users fa-2x mb-2"></i><br>
+                      Aucune donnée trouvée
+                    </td>
+                  </tr>
+                  <tr *ngFor="let client of caClients">
+                    <td><strong>{{ client.client_nom || '-' }}</strong></td>
+                    <td class="text-end">{{ client.nombre_factures || 0 }}</td>
+                    <td class="text-end"><strong class="text-success">{{ formatCurrency(client.chiffre_affaires) }}</strong></td>
+                    <td class="text-end">{{ formatCurrency(client.montant_moyen) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination Chiffre d'Affaires par Client -->
+            <div class="d-flex justify-content-between align-items-center mt-3" *ngIf="caClientsTotalPages > 1">
+              <div class="text-muted">
+                Affichage de {{ getDisplayRange(caClientsCurrentPage, caClientsPageSize, caClientsTotalRecords) }}
+                sur {{ caClientsTotalRecords }} éléments
+              </div>
+              <nav aria-label="Pagination CA clients">
+                <ul class="pagination pagination-sm mb-0">
+                  <li class="page-item" [class.disabled]="caClientsCurrentPage === 1">
+                    <a class="page-link" href="#" (click)="onChiffreAffairesClientsPageChange(caClientsCurrentPage - 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-left"></i>
+                    </a>
+                  </li>
+                  <li class="page-item" [class.active]="page === caClientsCurrentPage"
+                      *ngFor="let page of getPageNumbers(caClientsTotalPages, caClientsCurrentPage)">
+                    <a class="page-link" href="#" (click)="onChiffreAffairesClientsPageChange(page); $event.preventDefault()">
+                      {{ page }}
+                    </a>
+                  </li>
+                  <li class="page-item" [class.disabled]="caClientsCurrentPage === caClientsTotalPages">
+                    <a class="page-link" href="#" (click)="onChiffreAffairesClientsPageChange(caClientsCurrentPage + 1); $event.preventDefault()">
+                      <i class="fas fa-chevron-right"></i>
+                    </a>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+
+

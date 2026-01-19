@@ -27,41 +27,36 @@ export class AppComponent implements OnInit {
   ) {}
   
   ngOnInit(): void {
-    // Si pas connecté, rediriger vers la page de login
-    if (!this.authService.isAuthenticated()) {
-      this.router.navigate(['/login']);
-      return;
-    }
+    /**
+     * IMPORTANT:
+     * On ne doit PAS "return" quand l'utilisateur n'est pas connecté.
+     * Sinon, après login (navigation vers /Dashbord), ngOnInit() du root ne se relance pas
+     * et le menu ne se charge qu'après refresh.
+     */
 
-    // PRIORITÉ 1: S'assurer que les permissions sont chargées depuis localStorage
-    // Les permissions sont chargées dans le constructeur de AuthService via checkStoredAuth()
-    const initialPermissions = this.authService.getUserPermissions();
-    const currentUser = this.authService.getCurrentUser();
-
-    // Écouter les changements de permissions
-    // BehaviorSubject émet immédiatement la valeur actuelle lors de l'abonnement
+    // Écouter les changements de permissions (après login, elles arrivent via AuthService.login)
     this.authService.userPermissions$.subscribe((permissions) => {
-      // Si on a des permissions, TOUJOURS charger/filtrer les catégories
-      if (permissions && permissions.length > 0) {
+      if (this.authService.isAuthenticated() && permissions && permissions.length > 0) {
         // Si les catégories sont déjà chargées, filtrer immédiatement
         if (this.menuCategories.length > 0) {
           this.filterMenuCategories();
-          
-          // Forcer la détection de changement
-          setTimeout(() => {
-            this.cdr.detectChanges();
-          }, 0);
+          setTimeout(() => this.cdr.detectChanges(), 0);
         } else {
-          // Si les catégories ne sont pas encore chargées, les charger maintenant
+          // Sinon, charger les catégories maintenant
           this.loadMenuCategories();
         }
       }
     });
 
-    // PRIORITÉ 2: Charger les catégories de menu seulement si on a des permissions
-    // Si on a des permissions, charger les catégories immédiatement
-    if (initialPermissions && initialPermissions.length > 0) {
-      this.loadMenuCategories();
+    // Si pas connecté, rediriger vers la page de login (sans return)
+    if (!this.authService.isAuthenticated()) {
+      this.router.navigate(['/login']);
+    } else {
+      // Si déjà connecté au démarrage (refresh), charger le menu si permissions disponibles
+      const initialPermissions = this.authService.getUserPermissions();
+      if (initialPermissions && initialPermissions.length > 0) {
+        this.loadMenuCategories();
+      }
     }
 
     // Nettoyer les overlays et backdrops à chaque changement de route

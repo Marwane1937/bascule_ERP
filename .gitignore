@@ -32,9 +32,55 @@ Thumbs.db
 frontend/dist/
 frontend/.angular/
 
-# Backend
-backend/public/devis/
+# Backend - Fichiers temporaires et générés
+backend/public/devis/*.pdf
+backend/public/factures/*.pdf
+backend/public/commandes/*.pdf
+backend/public/livraisons/*.pdf
+backend/public/retours/*.pdf
+backend/public/avoirs/*.pdf
+backend/public/caisses/*.pdf
+backend/public/interventions/*.pdf
 backend/tmp/
+backend/src/public/**/*.pdf
+
+# Fichiers de test et développement
+backend/test_*.js
+backend/temp_*.js
+backend/*-example.*
+backend/counters_output.txt
+backend/src/chatlog.json
+backend/src/config/test.js
+backend/src/check-admin.js
+backend/index.js
+
+# Documentation temporaire (garder seulement README.md)
+CORRECTIONS_*.md
+DIAGNOSTIC_*.md
+GUIDE-*.md
+LINKEDIN_*.md
+OPTIMISATIONS_*.md
+PROBLEME_*.md
+README-AUTH.md
+
+# Scripts SQL temporaires
+*.sql
+!backend/sql/create_intervention_tables.sql
+
+# Dossiers dupliqués
+backend/backend/
+backend/controllers/
+backend/routes/
+backend/services/
+backend/frontend/
+frontend/backend/
+
+# Fichiers frontend de test
+**/*.spec.ts
+
+# Fichiers de backup
+**/*.backup.ts
+**/*.backup.js
 
 # Test coverage
 coverage/

@@ -9,62 +9,60 @@ interface Societe {
   actif: boolean;
 }
 
+interface Database {
+  id: number;
+  name: string;
+  dbuser: string;
+  dbpass: string;
+  dbname: string;
+  dbtype?: string;
+}
+
 @Component({
   selector: 'app-database-selector',
   templateUrl: './database-selector.component.html',
   styleUrls: ['./database-selector.component.css']
 })
 export class DatabaseSelectorComponent implements OnInit {
-  societes: Societe[] = [];
-  currentSociete: Societe | null = null;
+  databases: Database[] = [];
+  currentDatabase: Database | null = null;
   isLoading = false;
   showDropdown = false;
 
   constructor(private authService: AuthService) { }
 
   ngOnInit(): void {
-    // garder la sélection si déjà enregistrée
-    this.authService.currentSociete$.subscribe(s => {
-      if (s) {
-        this.currentSociete = s;
-      }
-    });
-    this.loadSocietes();
+    this.loadDatabases();
   }
 
-  loadSocietes(): void {
+  loadDatabases(): void {
     this.isLoading = true;
 
-    // Récupérer la liste des bases de données disponibles
-    this.authService.getAvailableDatabases().subscribe({
-      next: (societes) => {
-        this.societes = societes || [];
+    // Récupérer la liste des bases de données depuis la table db
+    this.authService.getDatabasesFromTable().subscribe({
+      next: (databases) => {
+        this.databases = databases || [];
 
         // Restaurer la sélection précédente
-        if (!this.currentSociete && this.societes.length > 0) {
-          const savedName = localStorage.getItem('currentDatabaseName');
-          const savedFromLocal = savedName ? this.societes.find(s => s.nom_base === savedName) : null;
-
-          // Fallback sur la première base si rien n'est sauvegardé
-          const initial = this.authService.getCurrentSociete() || savedFromLocal || this.societes[0];
-
-          this.currentSociete = initial;
-          this.authService.changeSociete(initial);
+        if (this.databases.length > 0) {
+          const savedId = localStorage.getItem('currentDatabaseId');
+          if (savedId) {
+            const saved = this.databases.find(db => db.id === parseInt(savedId));
+            if (saved) {
+              this.currentDatabase = saved;
+            }
+          }
+          
+          // Si aucune sélection sauvegardée, prendre la première
+          if (!this.currentDatabase && this.databases.length > 0) {
+            this.currentDatabase = this.databases[0];
+          }
         }
         this.isLoading = false;
       },
       error: (error) => {
         console.error('[DatabaseSelector] ❌ Erreur chargement bases de données:', error);
-        console.error('[DatabaseSelector] Status:', error.status);
-        console.error('[DatabaseSelector] Error body:', error.error);
         this.isLoading = false;
-
-        // Fallback sur mock si erreur
-        const mockSocietes = [
-          { id: 1, nom: 'CactusErp_SNMR', nom_base: 'CactusErp_SNMR', actif: true },
-          { id: 2, nom: 'CactusErp_Test', nom_base: 'CactusErp_SNMR_Test01', actif: true }
-        ];
-        this.societes = mockSocietes;
       }
     });
   }
@@ -73,29 +71,30 @@ export class DatabaseSelectorComponent implements OnInit {
     this.showDropdown = !this.showDropdown;
   }
 
-  selectSociete(societe: Societe): void {
-    // Vérifier si c'est déjà la société sélectionnée
-    if (this.currentSociete && this.currentSociete.id === societe.id) {
+  selectDatabase(database: Database): void {
+    // Vérifier si c'est déjà la base sélectionnée
+    if (this.currentDatabase && this.currentDatabase.id === database.id) {
       this.showDropdown = false;
       return;
     }
 
     // Afficher la confirmation
-    this.showConfirmationDialog(societe);
+    this.showConfirmationDialog(database);
   }
 
-  showConfirmationDialog(societe: Societe): void {
+  showConfirmationDialog(database: Database): void {
     Swal.fire({
       title: 'Changement de base de données',
       html: `
         <div style="text-align: left;">
-          <p><strong>Voulez-vous vraiment vous connecter à la société :</strong></p>
+          <p><strong>Voulez-vous vraiment vous connecter à la base de données :</strong></p>
           <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0;">
-            <p><strong>Société :</strong> ${societe.nom}</p>
-            <p><strong>Base de données :</strong> ${societe.nom_base}</p>
+            <p><strong>Nom :</strong> ${database.name}</p>
+            <p><strong>Base de données :</strong> ${database.dbname}</p>
+            <p><strong>Utilisateur :</strong> ${database.dbuser}</p>
           </div>
           <p style="color: #dc3545; font-size: 14px;">
-            ⚠️ <strong>Attention :</strong> Vous allez être déconnecté et reconnecté automatiquement.
+            ⚠️ <strong>Attention :</strong> Les credentials seront mis à jour dans le fichier .env et l'application sera rechargée.
           </p>
         </div>
       `,
@@ -108,20 +107,20 @@ export class DatabaseSelectorComponent implements OnInit {
       width: '500px'
     }).then((result) => {
       if (result.isConfirmed) {
-        this.proceedWithDatabaseSwitch(societe);
+        this.proceedWithDatabaseSwitch(database);
       } else {
         this.showDropdown = false;
       }
     });
   }
 
-  proceedWithDatabaseSwitch(societe: Societe): void {
+  proceedWithDatabaseSwitch(database: Database): void {
     this.isLoading = true;
 
     // Afficher un message de chargement
     Swal.fire({
       title: 'Changement en cours...',
-      text: `Connexion à ${societe.nom}`,
+      text: `Connexion à ${database.name}`,
       icon: 'info',
       allowOutsideClick: false,
       showConfirmButton: false,
@@ -130,33 +129,31 @@ export class DatabaseSelectorComponent implements OnInit {
       }
     });
 
-    // Passer le nom de la base de données pour la création automatique si nécessaire
-    this.authService.switchDatabase(undefined, societe.nom_base).subscribe({
+    // Utiliser la nouvelle méthode avec db_id
+    this.authService.switchDatabaseByDbId(database.id).subscribe({
       next: (response) => {
         // Fermer le message de chargement
         Swal.close();
 
-        // Mettre à jour l'ID réel retourné par le backend (si création auto)
-        if (response.data && response.data.societe) {
-          societe.id = response.data.societe.id;
-        }
-
-        // Sauvegarder le nom de la base pour la prochaine fois
-        localStorage.setItem('currentDatabaseName', societe.nom_base);
+        // Sauvegarder l'ID de la base sélectionnée
+        localStorage.setItem('currentDatabaseId', database.id.toString());
+        // IMPORTANT: stocker le vrai nom technique de la base (dbname), pas le label (name)
+        localStorage.setItem('currentDatabaseName', database.dbname);
+        // Optionnel: garder le label pour affichage/debug
+        localStorage.setItem('currentDatabaseLabel', database.name);
 
         // Afficher un message de succès
         Swal.fire({
           title: 'Succès !',
-          text: `Connexion à ${societe.nom} réussie`,
+          text: `Connexion à ${database.name} réussie. Vous allez être redirigé vers la page de connexion.`,
           icon: 'success',
           timer: 2000,
           showConfirmButton: false
         }).then(() => {
-          // Mettre à jour et persister la société courante puis forcer reconnexion
-          this.currentSociete = societe;
-          this.authService.changeSociete(societe);
-          this.showDropdown = false;
+          // Déconnecter l'utilisateur
           this.authService.logout();
+          
+          // Rediriger vers la page de login
           window.location.href = '/login';
         });
       },

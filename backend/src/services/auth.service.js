@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const sequelize = require('../config/database');
+const { getConnection } = require('../config/database');
+const sequelize = require('../config/database'); // Garder pour compatibilité
 const databaseSwitchService = require('./database-switch.service');
 
 class AuthService {
@@ -45,7 +46,8 @@ class AuthService {
   // Authentification utilisateur
   async login(username, password, databaseName = null) {
     // Variable pour suivre si on a créé une connexion temporaire
-    let connectionToUse = sequelize;
+    // Utiliser getConnection() pour avoir la connexion active si aucune base spécifique n'est fournie
+    let connectionToUse = databaseName ? null : getConnection();
     let temporaryConnection = false;
     
     try {
@@ -314,7 +316,9 @@ class AuthService {
     try {
       console.log('[AuthService] 🔍 Récupération info utilisateur ID:', userId);
       
-      const [users] = await sequelize.query(`
+      // Utiliser getConnection() pour avoir la connexion active
+      const connectionToUse = getConnection();
+      const [users] = await connectionToUse.query(`
         SELECT id, nom, login, type, etat 
         FROM users 
         WHERE id = :userId AND etat = 1

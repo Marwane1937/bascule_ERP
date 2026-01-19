@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { StockService } from '../../service/stock.service';
 import Swal from 'sweetalert2';
 
@@ -10,32 +11,33 @@ import Swal from 'sweetalert2';
 export class StockInventaireComponent implements OnInit {
 
   // Données
-  articles: any[] = [];
-  inventaireData: { [key: number]: number } = {}; // article_id => stock_reel
+  inventaires: any[] = [];
 
   // État
   loading: boolean = false;
-  saving: boolean = false;
 
   // Pagination
   currentPage: number = 1;
-  pageSize: number = 50;
+  pageSize: number = 25;
   totalRecords: number = 0;
   totalPages: number = 1;
 
   // Recherche et tri
   searchTerm: string = '';
-  sortColumn: string = 'article_nom';
-  sortDirection: 'ASC' | 'DESC' = 'ASC';
+  sortColumn: string = 'date';
+  sortDirection: 'ASC' | 'DESC' = 'DESC';
 
-  constructor(private stockService: StockService) { }
+  constructor(
+    private stockService: StockService,
+    private router: Router
+  ) { }
 
   ngOnInit(): void {
-    this.getArticlesPourInventaire();
+    this.getInventaires();
   }
 
-  // Récupération des articles pour inventaire
-  getArticlesPourInventaire(): void {
+  // Récupération des inventaires (type=20)
+  getInventaires(): void {
     this.loading = true;
 
     const options: any = {
@@ -43,27 +45,20 @@ export class StockInventaireComponent implements OnInit {
       pageSize: this.pageSize,
       orderBy: this.sortColumn,
       orderDirection: this.sortDirection,
-      search: this.searchTerm
+      search: this.searchTerm,
+      type: 20 // Type 20 pour inventaire
     };
 
-    this.stockService.getArticlesStock(options).subscribe({
+    this.stockService.getAllStockDocuments(options).subscribe({
       next: (response: any) => {
-        this.articles = response.data || [];
+        this.inventaires = response.data || [];
         this.totalRecords = response.pagination?.total || 0;
         this.totalPages = response.pagination?.totalPages || 1;
-
-        // Initialiser les champs de stock réel avec les valeurs actuelles
-        this.articles.forEach(article => {
-          if (!this.inventaireData[article.article_id]) {
-            this.inventaireData[article.article_id] = article.stock_normal || 0;
-          }
-        });
-
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement articles inventaire:', error);
-        Swal.fire('Erreur', 'Erreur lors du chargement des articles', 'error');
+        console.error('Erreur chargement inventaires:', error);
+        Swal.fire('Erreur', 'Erreur lors du chargement des inventaires', 'error');
         this.loading = false;
       }
     });
@@ -72,7 +67,7 @@ export class StockInventaireComponent implements OnInit {
   // Recherche
   onSearch(): void {
     this.currentPage = 1;
-    this.getArticlesPourInventaire();
+    this.getInventaires();
   }
 
   // Tri
@@ -84,7 +79,7 @@ export class StockInventaireComponent implements OnInit {
       this.sortDirection = 'DESC';
     }
     this.currentPage = 1;
-    this.getArticlesPourInventaire();
+    this.getInventaires();
   }
 
   getSortIcon(column: string): string {
@@ -98,7 +93,7 @@ export class StockInventaireComponent implements OnInit {
   onPageChange(page: number): void {
     if (page >= 1 && page <= this.totalPages) {
       this.currentPage = page;
-      this.getArticlesPourInventaire();
+      this.getInventaires();
     }
   }
 
@@ -125,119 +120,56 @@ export class StockInventaireComponent implements OnInit {
     return `${start}-${end}`;
   }
 
-  // Gestion des données d'inventaire
-  onStockReelChange(articleId: number, event: any): void {
-    const value = parseFloat(event.target.value) || 0;
-    this.inventaireData[articleId] = Math.max(0, value);
+  // Navigation vers l'édition
+  editInventaire(id: number): void {
+    this.router.navigate(['/Edit-Inventaire', id]);
   }
 
-  getStockReel(articleId: number): number {
-    return this.inventaireData[articleId] || 0;
-  }
-
-  getEcart(article: any): number {
-    const stockReel = this.getStockReel(article.article_id);
-    const stockTheorique = article.stock_normal || 0;
-    return stockReel - stockTheorique;
-  }
-
-  // Validation de l'inventaire
-  validerInventaire(): void {
-    // Vérifier qu'il y a des données à sauvegarder
-    const hasData = Object.values(this.inventaireData).some(value => value >= 0);
-
-    if (!hasData) {
-      Swal.fire('Erreur', 'Aucune donnée d\'inventaire à sauvegarder', 'error');
-      return;
-    }
-
-    // Demander confirmation
+  // Créer un nouvel inventaire (en-tête avec type=20)
+  creerInventaire(): void {
     Swal.fire({
-      title: 'Validation de l\'inventaire',
-      text: 'Cette action va mettre à jour le stock initial avec les quantités saisies. Cette opération est irréversible.',
-      icon: 'warning',
+      title: 'Créer un Inventaire',
+      text: 'Voulez-vous créer un nouvel inventaire ?',
+      icon: 'question',
       showCancelButton: true,
-      confirmButtonText: 'Oui, valider',
+      confirmButtonText: 'Oui, créer',
       cancelButtonText: 'Annuler',
       input: 'text',
       inputPlaceholder: 'Description de l\'inventaire (optionnel)',
       inputValidator: (value) => {
-        if (!value) {
-          return 'Veuillez saisir une description pour l\'inventaire';
-        }
-        return null;
+        return null; // Description optionnelle
       }
     }).then((result) => {
       if (result.isConfirmed) {
-        const description = result.value;
-        this.executerInventaire(description);
-      }
-    });
-  }
-
-  private executerInventaire(description: string): void {
-    this.saving = true;
-
-    // Préparer les données d'inventaire
-    const inventaireData = this.articles.map(article => ({
-      article_id: article.article_id,
-      stock_reel: this.getStockReel(article.article_id),
-      stock_theorique: article.stock_normal || 0,
-      ecart: this.getEcart(article)
-    })).filter(item => item.stock_reel >= 0); // Ne garder que les articles avec des données valides
-
-    this.stockService.createInventaire(inventaireData, description).subscribe({
-      next: (response: any) => {
-        Swal.fire('Succès', response.message || 'Inventaire validé avec succès', 'success');
-
-        // Réinitialiser les données et recharger
-        this.inventaireData = {};
-        this.getArticlesPourInventaire();
-
-        this.saving = false;
-      },
-      error: (error) => {
-        console.error('Erreur validation inventaire:', error);
-        Swal.fire('Erreur', error.error?.message || 'Erreur lors de la validation de l\'inventaire', 'error');
-        this.saving = false;
-      }
-    });
-  }
-
-  // Réinitialiser l'inventaire
-  reinitialiserInventaire(): void {
-    Swal.fire({
-      title: 'Réinitialiser',
-      text: 'Voulez-vous remettre tous les champs à leur valeur actuelle ?',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Oui, réinitialiser',
-      cancelButtonText: 'Annuler'
-    }).then((result) => {
-      if (result.isConfirmed) {
-        this.inventaireData = {};
-        this.articles.forEach(article => {
-          this.inventaireData[article.article_id] = article.stock_normal || 0;
+        const description = result.value || 'Inventaire de stock';
+        this.stockService.createInventaireHeader(description).subscribe({
+          next: (response: any) => {
+            Swal.fire({
+              icon: 'success',
+              title: 'Succès',
+              text: `Inventaire ${response.numero || ''} créé avec succès !`,
+              timer: 2000,
+              showConfirmButton: false
+            });
+            
+            // Recharger la liste
+            this.getInventaires();
+            
+            // Rediriger vers la page d'édition
+            if (response.id || response.document_id) {
+              this.router.navigate(['/Edit-Inventaire', response.id || response.document_id]);
+            }
+          },
+          error: (err) => {
+            Swal.fire({
+              icon: 'error',
+              title: 'Erreur',
+              text: `Une erreur s'est produite lors de la création de l'inventaire: ${err.error?.message || err.message || 'Erreur inconnue'}`
+            });
+          }
         });
       }
     });
-  }
-
-  // Méthodes de calcul pour le résumé
-  getTotalArticles(): number {
-    return this.articles.length;
-  }
-
-  getTotalStockTheorique(): number {
-    return this.articles.reduce((total, article) => total + (article.stock_normal || 0), 0);
-  }
-
-  getTotalStockReel(): number {
-    return this.articles.reduce((total, article) => total + this.getStockReel(article.article_id), 0);
-  }
-
-  getTotalEcart(): number {
-    return this.articles.reduce((total, article) => total + this.getEcart(article), 0);
   }
 }
 

@@ -55,6 +55,8 @@ import { BonCommandeComponent } from './achat/bon-commande/bon-commande.componen
 import { EditBonCommandeComponent } from './achat/edit/edit-bon-commande/edit-bon-commande.component';
 import { NotificationComponent } from './notification/notification.component';
 import { FactureFournisseurComponent } from './achat/facture-fournisseur/facture-fournisseur.component';
+import { ReceptionComponent } from './achat/reception/reception.component';
+import { EditReceptionComponent } from './achat/edit/edit-reception/edit-reception.component';
 
 // Import des composants Stock
 import { StockEntreeComponent } from './stock/stock-entree/stock-entree.component';
@@ -62,6 +64,11 @@ import { StockSortieComponent } from './stock/stock-sortie/stock-sortie.componen
 import { StockInventaireComponent } from './stock/stock-inventaire/stock-inventaire.component';
 import { StockHistoriqueComponent } from './stock/stock-historique/stock-historique.component';
 import { StockReportingComponent } from './stock/stock-reporting/stock-reporting.component';
+import { VenteReportingComponent } from './vente/vente-reporting/vente-reporting.component';
+import { FinanceReportingComponent } from './finance/finance-reporting/finance-reporting.component';
+import { EditEntreeStockComponent } from './stock/edit-entree-stock/edit-entree-stock.component';
+import { EditSortieStockComponent } from './stock/edit-sortie-stock/edit-sortie-stock.component';
+import { EditInventaireComponent } from './stock/edit-inventaire/edit-inventaire.component';
 
 // Import des composants Interventions
 import { InterventionListComponent } from './interventions/intervention-list.component';
@@ -122,12 +129,19 @@ import { CompteurComponent } from './base/compteur/compteur.component';
     EditBonCommandeComponent,
     NotificationComponent,
     FactureFournisseurComponent,
+    ReceptionComponent,
+    EditReceptionComponent,
     // Composants Stock
     StockEntreeComponent,
     StockSortieComponent,
     StockInventaireComponent,
     StockHistoriqueComponent,
     StockReportingComponent,
+    VenteReportingComponent,
+    FinanceReportingComponent,
+    EditEntreeStockComponent,
+    EditSortieStockComponent,
+    EditInventaireComponent,
     InterventionListComponent,
     InterventionFormComponent,
     VilleComponent,

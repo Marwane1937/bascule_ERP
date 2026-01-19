@@ -13,11 +13,50 @@ const fs = require('fs');
  * Ce service est séparé du service de devis pour éviter toute confusion
  */
 
-// Toutes les routes nécessitent une authentification
-router.use(authenticateToken);
-
 // Middleware pour injecter la connexion appropriée
 router.use(databaseInjector.injectConnection.bind(databaseInjector));
+
+// Créer un router séparé pour les routes publiques (sans authentification)
+const publicRouter = express.Router();
+
+// Servir un PDF de commande directement via GET (route publique)
+publicRouter.get('/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    const path = require('path');
+    const fs = require('fs');
+
+    // Vérifier que le nom de fichier est valide (éviter les attaques path traversal)
+    if (!filename || !filename.endsWith('.pdf') || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({ success: false, message: 'Nom de fichier invalide' });
+    }
+
+    const commandeDir = path.join(__dirname, '..', 'public', 'commandes');
+    const pdfPath = path.join(commandeDir, filename);
+
+    // Vérifier si le fichier existe
+    if (!fs.existsSync(pdfPath)) {
+      return res.status(404).json({ success: false, message: 'PDF introuvable' });
+    }
+
+    // Servir le fichier PDF
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    const fileStream = fs.createReadStream(pdfPath);
+    fileStream.pipe(res);
+
+  } catch (error) {
+    console.error('Erreur lors de la récupération du PDF commande :', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur récupération PDF commande',
+      error: error.message
+    });
+  }
+});
+
+// Toutes les autres routes nécessitent une authentification
+router.use(authenticateToken);
 
 // Générer un PDF de commande
 router.post('/generate', async (req, res) => {
@@ -49,6 +88,7 @@ router.post('/generate', async (req, res) => {
     });
   }
 });
+
 
 // Envoi du PDF de commande en pièce jointe via WhatsApp Cloud API
 router.post('/send-whatsapp', async (req, res) => {
@@ -195,5 +235,9 @@ router.post('/send-whatsapp', async (req, res) => {
   }
 });
 
-module.exports = router;
+// Exporter les deux routers : router (protégé) et publicRouter (public)
+module.exports = {
+  router, // Routes avec authentification (/api/commande-pdf/*)
+  publicRouter // Routes publiques (/commandes/*)
+};
 
