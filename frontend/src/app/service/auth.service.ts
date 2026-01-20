@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { BehaviorSubject, Observable, throwError, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 
 export interface User {
   id: number;
@@ -47,7 +48,7 @@ export interface LoginResponse {
   providedIn: 'root'
 })
 export class AuthService {
-  private apiUrl = 'http://localhost:3500/api/auth';
+  private apiUrl = `${environment.apiUrl}/auth`;
   private currentUserSubject = new BehaviorSubject<User | null>(null);
   private documentSocieteSubject = new BehaviorSubject<DocumentSociete | null>(null);
   private currentSocieteSubject = new BehaviorSubject<Societe | null>(null);
@@ -237,7 +238,7 @@ export class AuthService {
 
   // Mettre à jour les documents de la société (accepte FormData ou Partial<DocumentSociete>)
   updateDocumentSociete(documentData: FormData | Partial<DocumentSociete>): Observable<DocumentSociete> {
-    return this.http.post<{ success: boolean, data: DocumentSociete }>(`http://localhost:3500/api/document-societe/`, documentData)
+    return this.http.post<{ success: boolean, data: DocumentSociete }>(`${environment.apiUrl}/document-societe/`, documentData)
       .pipe(
         map(response => {
           this.documentSocieteSubject.next(response.data);
@@ -253,7 +254,7 @@ export class AuthService {
 
   // Récupérer toutes les sociétés
   getAllSocietes(): Observable<Societe[]> {
-    return this.http.get<{ success: boolean, data: Societe[] }>(`http://localhost:3500/api/societes`)
+    return this.http.get<{ success: boolean, data: Societe[] }>(`${environment.apiUrl}/societes`)
       .pipe(
         map(response => response.data),
         catchError(error => {
@@ -265,7 +266,7 @@ export class AuthService {
 
   // Récupérer toutes les bases de données disponibles
   getAvailableDatabases(): Observable<Societe[]> {
-    return this.http.get<{ success: boolean, data: Societe[] }>(`http://localhost:3500/api/societes/available-databases`)
+    return this.http.get<{ success: boolean, data: Societe[] }>(`${environment.apiUrl}/societes/available-databases`)
       .pipe(
         map(response => {
           return response.data;
@@ -281,7 +282,7 @@ export class AuthService {
 
   // Changer de société/base de données (ancienne méthode - gardée pour compatibilité)
   switchDatabase(societeId?: number, databaseName?: string): Observable<any> {
-    return this.http.post<{ success: boolean, message: string, data: any }>(`http://localhost:3500/api/societes/switch-database`, {
+    return this.http.post<{ success: boolean, message: string, data: any }>(`${environment.apiUrl}/societes/switch-database`, {
       societe_id: societeId,
       database_name: databaseName
     })
@@ -298,7 +299,7 @@ export class AuthService {
 
   // Récupérer les bases de données depuis la table db
   getDatabasesFromTable(): Observable<any[]> {
-    return this.http.get<{ success: boolean, data: any[] }>(`http://localhost:3500/api/database/list-databases`)
+    return this.http.get<{ success: boolean, data: any[] }>(`${environment.apiUrl}/database/list-databases`)
       .pipe(
         map(response => {
           return response.data || [];
@@ -312,7 +313,7 @@ export class AuthService {
 
   // Changer de base de données avec db_id (nouvelle méthode)
   switchDatabaseByDbId(dbId: number): Observable<any> {
-    return this.http.post<{ success: boolean, message: string, data: any }>(`http://localhost:3500/api/database/switch-database`, {
+    return this.http.post<{ success: boolean, message: string, data: any }>(`${environment.apiUrl}/database/switch-database`, {
       db_id: dbId
     })
       .pipe(
@@ -399,7 +400,7 @@ export class AuthService {
 
   // Recharger les permissions depuis le serveur
   reloadPermissions(userId: number): Observable<UserPermission[]> {
-    return this.http.get<{ success: boolean; data: UserPermission[] }>(`http://localhost:3500/api/user-permissions/${userId}`)
+    return this.http.get<{ success: boolean; data: UserPermission[] }>(`${environment.apiUrl}/user-permissions/${userId}`)
       .pipe(
         map(response => {
           if (response.success) {

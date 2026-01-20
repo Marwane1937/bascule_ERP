@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
 
 export interface Intervention {
   id?: number;
@@ -97,7 +98,7 @@ export interface InterventionFormData {
   providedIn: 'root'
 })
 export class InterventionService {
-  private apiUrl = 'http://localhost:3500/api/interventions';
+  private apiUrl = `${environment.apiUrl}/interventions`;
   private httpHeaders = new HttpHeaders().set('Content-Type', 'application/json');
 
   constructor(private http: HttpClient) { }

@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, throwError } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 
 export interface User {
   id: number;
@@ -25,7 +26,7 @@ export interface LoginResponse {
   providedIn: 'root'
 })
 export class UnifiedAuthService {
-  private apiUrl = 'http://localhost:3500/api/unified-auth';
+  private apiUrl = `${environment.apiUrl}/unified-auth`;
   private currentUserSubject = new BehaviorSubject<User | null>(null);
   
   public currentUser$ = this.currentUserSubject.asObservable();
@@ -153,7 +154,7 @@ export class UnifiedAuthService {
 
   // Obtenir le statut de connexion
   getConnectionStatus(): Observable<any> {
-    return this.http.get<{success: boolean, data: any}>(`http://localhost:3500/api/database/connection-status`)
+    return this.http.get<{success: boolean, data: any}>(`${environment.apiUrl}/database/connection-status`)
       .pipe(
         map(response => response.data),
         catchError(error => {

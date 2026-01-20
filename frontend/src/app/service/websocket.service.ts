@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Subject } from 'rxjs';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
@@ -14,7 +15,9 @@ export class WebSocketService {
   }
 
   connect(): void {
-    this.ws = new WebSocket('ws://localhost:3500');
+    // Convertir http:// en ws:// pour WebSocket
+    const wsUrl = environment.apiUrl.replace('http://', 'ws://').replace('/api', '');
+    this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
     };

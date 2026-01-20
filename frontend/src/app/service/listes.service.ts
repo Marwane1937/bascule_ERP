@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
 
 export interface Liste {
   id: number;
@@ -18,7 +19,7 @@ export interface GroupId {
   providedIn: 'root'
 })
 export class ListesService {
-  private apiUrl = 'http://localhost:3500/api/listes';
+  private apiUrl = `${environment.apiUrl}/listes`;
   private httpHeaders = new HttpHeaders().set('Content-Type', 'application/json');
 
   constructor(private http: HttpClient) {}

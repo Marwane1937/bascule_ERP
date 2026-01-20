@@ -1,12 +1,13 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
 
 @Injectable({
     providedIn: 'root'
 })
 export class ChequeGenerationService {
-    private apiUrl = 'http://localhost:3500/api/generation/cheque';
+    private apiUrl = `${environment.apiUrl}/generation/cheque`;
 
     constructor(private http: HttpClient) { }
 

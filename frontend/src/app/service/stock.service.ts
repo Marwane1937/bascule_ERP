@@ -1,12 +1,13 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class StockService {
-  public apiUrl = 'http://localhost:3500/api';
+  public apiUrl = environment.apiUrl;
   private stockBaseUrl = `${this.apiUrl}/stock`;
   httpHeaders = new HttpHeaders().set('Content-Type', 'application/json');
 

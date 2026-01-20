@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
 
 export interface UserPermission {
   id?: number;
@@ -24,7 +25,7 @@ export interface MenuCategory {
   providedIn: 'root'
 })
 export class UserPermissionsService {
-  private apiUrl = 'http://localhost:3500/api/user-permissions';
+  private apiUrl = `${environment.apiUrl}/user-permissions`;
   private httpHeaders = new HttpHeaders().set('Content-Type', 'application/json');
 
   constructor(private http: HttpClient) {}

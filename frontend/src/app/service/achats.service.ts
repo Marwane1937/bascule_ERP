@@ -1,12 +1,13 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class AchatsService {
-  public apiUrl = 'http://localhost:3500/api';
+  public apiUrl = environment.apiUrl;
   // Route backend pour les achats (bon de commande)
   private achatsBaseUrl = `${this.apiUrl}/achats`;
   httpHeaders = new HttpHeaders().set('Content-Type', 'application/json');
@@ -172,7 +173,7 @@ export class AchatsService {
 
   // Générer le PDF de réception
   generateReceptionPDF(document_id: number, withStamp: boolean = false): Observable<any> {
-    return this.http.post<any>('http://localhost:3500/api/reception-pdf/generate', {
+    return this.http.post<any>(`${environment.apiUrl}/reception-pdf/generate`, {
       document_id,
       withStamp: !!withStamp
     });
