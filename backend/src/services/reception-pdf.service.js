@@ -1,6 +1,7 @@
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
+const { renderFormattedText } = require('./pdf-format-helper');
 
 /**
  * Service dédié à la génération de PDF pour les BONS DE RÉCEPTION
@@ -168,18 +169,25 @@ class ReceptionPdfService {
         doc.pipe(writeStream);
 
         // === ENTÊTE ENTREPRISE ===
+        // Récupérer la taille du logo depuis la configuration
+        const logoSize = options.documentSociete?.logoSize || { width: 100, height: null };
+        const imageOptions = { width: logoSize.width };
+        if (logoSize.height) {
+          imageOptions.height = logoSize.height;
+        }
+        
         if (options.documentSociete && options.documentSociete.logo) {
           try {
             const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-            doc.image(logoBuffer, 50, 20, { width: 100 });
+            doc.image(logoBuffer, 50, 20, imageOptions);
           } catch (error) {
             console.warn('Erreur affichage logo personnalisé, utilisation du logo par défaut:', error);
             const logoPath = path.join(__dirname, '..', 'public', 'Cactus.png');
-            if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
+            if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
           }
         } else {
           const logoPath = path.join(__dirname, '..', 'public', 'Cactus.png');
-          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
+          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
         }
 
         if (options.documentSociete && options.documentSociete.entete) {
@@ -506,31 +514,20 @@ class ReceptionPdfService {
         doc.rect(0, footerY, 595, footerHeight).fill('#f3f5ef');
 
         if (options.documentSociete && options.documentSociete.pied_page) {
-          const piedPageText = htmlToPlainText(options.documentSociete.pied_page);
-          const lines = piedPageText.split('\n').filter(l => l.trim());
-          if (lines.length > 0) {
-            doc.font('Helvetica').fontSize(7).fillColor('#000');
-            lines.forEach((line, index) => {
-              doc.text(line.trim(), 50, footerStartY + (index * footerLineSpacing), { width: 495, align: 'center' });
+          const piedPage = options.documentSociete.pied_page;
+          // Vérifier si c'est un objet JSON ou du texte brut
+          if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
+            renderFormattedText(doc, piedPage, {
+              startX: 50,
+              startY: footerStartY,
+              defaultFontSize: 7,
+              defaultColor: '#000000',
+              defaultFont: 'Helvetica',
+              defaultAlign: 'center',
+              defaultLineSpacing: footerLineSpacing,
+              width: 495
             });
-          } else {
-            doc.font('Helvetica').fontSize(7).fillColor('#000');
-            doc.text(piedPageText, 50, footerStartY, { width: 495, align: 'center' });
           }
-        } else {
-          doc.font('Helvetica').fontSize(7).fillColor('#000');
-          doc.text(
-            'SARL au capital 500 000.00 DHS - allée des orangers Derb Najat Rue 4 N°67 RDC Ain Sebaa Casablanca',
-            50, footerStartY, { width: 495, align: 'center' }
-          );
-          doc.text(
-            'Tel : 0522672135 - Fax 0522672143 - RC120431TP37951465 IF : 1680027 Email : info@lesbasculesmondial.com',
-            50, footerStartY + footerLineSpacing, { width: 495, align: 'center' }
-          );
-          doc.text(
-            'RIB 007 780 000368400000157019 - CNSS : 6463814 ICE : 000079494000078',
-            50, footerStartY + (footerLineSpacing * 2), { width: 495, align: 'center' }
-          );
         }
 
         const withStamp = !!options.withStamp;

@@ -6,6 +6,16 @@ const databaseSwitchService = require('./database-switch.service');
 
 class AuthService {
   constructor() {
+    // Validation du JWT_SECRET en production
+    if (process.env.NODE_ENV === 'production') {
+      if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-secret-key') {
+        throw new Error('❌ [SECURITY] JWT_SECRET doit être configuré en production et ne peut pas être la valeur par défaut');
+      }
+      if (process.env.JWT_SECRET.length < 32) {
+        console.warn('⚠️ [SECURITY] JWT_SECRET est trop court (minimum 32 caractères recommandé)');
+      }
+    }
+    
     this.jwtSecret = process.env.JWT_SECRET || 'your-secret-key';
     this.jwtExpiresIn = process.env.JWT_EXPIRES_IN || '24h';
   }
@@ -46,34 +56,98 @@ class AuthService {
   // Authentification utilisateur
   async login(username, password, databaseName = null) {
     // Variable pour suivre si on a créé une connexion temporaire
-    // Utiliser getConnection() pour avoir la connexion active si aucune base spécifique n'est fournie
-    let connectionToUse = databaseName ? null : getConnection();
+    let connectionToUse = null;
     let temporaryConnection = false;
     
     try {
       console.log('[AuthService] 🔍 Recherche utilisateur avec login:', username);
-      console.log('[AuthService] Database name:', databaseName);
+      console.log('[AuthService] Database name fourni:', databaseName);
       
-      // Si un nom de base est fourni, créer une connexion à cette base
-      if (databaseName) {
-        console.log('[AuthService] 🔄 Création connexion vers base:', databaseName);
+      // Recharger le .env pour avoir les dernières valeurs
+      const path = require('path');
+      delete require.cache[require.resolve('dotenv')];
+      const dotenv = require('dotenv');
+      dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: true });
+      
+      const defaultDbName = process.env.DB_NAME?.trim();
+      console.log('[AuthService] 🔍 Base par défaut du .env:', defaultDbName);
+      
+      // Si aucun databaseName n'est fourni, utiliser la base du .env
+      if (!databaseName) {
+        console.log('[AuthService] 🔄 Utilisation de la base par défaut du .env');
+        connectionToUse = getConnection();
+        console.log('[AuthService] ✅ Connexion à la base par défaut:', defaultDbName);
+      } 
+      // Si databaseName est fourni et différent de la base du .env, chercher dans la table db
+      else if (databaseName.trim() !== defaultDbName) {
+        console.log('[AuthService] 🔄 Base différente fournie, recherche dans la table db:', databaseName);
         const databaseSwitchService = require('./database-switch.service');
-        const { Sequelize } = require('sequelize');
-        const path = require('path');
-        require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
+        const { Sequelize, QueryTypes } = require('sequelize');
+        
+        // Essayer de récupérer les credentials depuis la table db
+        let dbUser = process.env.DB_USER;
+        let dbPassword = process.env.DB_PASSWORD;
+        let dbHost = process.env.DB_HOST;
+        let dbInstance = process.env.DB_INSTANCE;
+        
+        try {
+          // Créer une connexion temporaire vers la base config pour lire la table db
+          const configConnection = databaseSwitchService.createConfigConnection();
+          await configConnection.authenticate();
+          
+          // Chercher les credentials dans la table db pour cette base
+          const dbResult = await configConnection.query(`
+            SELECT dbuser, dbpass, dbname, name 
+            FROM db 
+            WHERE dbname = :databaseName OR name = :databaseName
+          `, {
+            replacements: { databaseName: databaseName.trim() },
+            type: QueryTypes.SELECT
+          });
+          
+          await configConnection.close();
+          
+          // Normaliser le résultat
+          let dbConfig = null;
+          if (Array.isArray(dbResult) && dbResult.length === 2 && Array.isArray(dbResult[0])) {
+            dbConfig = dbResult[0].length > 0 ? dbResult[0][0] : null;
+          } else if (Array.isArray(dbResult) && dbResult.length > 0) {
+            dbConfig = dbResult[0];
+            if (Array.isArray(dbConfig) && dbConfig.length > 0) {
+              dbConfig = dbConfig[0];
+            }
+          } else if (!Array.isArray(dbResult) && typeof dbResult === 'object' && dbResult !== null && dbResult.dbuser) {
+            dbConfig = dbResult;
+          }
+          
+          if (dbConfig && dbConfig.dbuser && dbConfig.dbpass) {
+            console.log('[AuthService] ✅ Credentials trouvés dans la table db pour', databaseName);
+            dbUser = dbConfig.dbuser;
+            dbPassword = dbConfig.dbpass;
+          } else {
+            console.log('[AuthService] ⚠️ Aucune config trouvée dans la table db pour', databaseName);
+            console.log('[AuthService] ⚠️ Utilisation des credentials du .env (peut échouer si les permissions diffèrent)');
+          }
+        } catch (dbTableError) {
+          console.log('[AuthService] ⚠️ Erreur lecture table db, utilisation des credentials du .env:', dbTableError.message);
+        }
+        
+        console.log('[AuthService] 🔍 DB_USER:', dbUser);
+        console.log('[AuthService] 🔍 DB_HOST:', dbHost);
+        console.log('[AuthService] 🔍 DB_INSTANCE:', dbInstance);
         
         connectionToUse = new Sequelize(
-          databaseName,
-          process.env.DB_USER,
-          process.env.DB_PASSWORD,
+          databaseName.trim(),
+          dbUser,
+          dbPassword,
           {
-            host: process.env.DB_HOST,
+            host: dbHost,
             dialect: 'mssql',
             dialectOptions: {
               options: {
                 encrypt: false,
                 trustServerCertificate: true,
-                instanceName: process.env.DB_INSTANCE,
+                instanceName: dbInstance,
               }
             },
             logging: false
@@ -85,6 +159,12 @@ class AuthService {
         // Tester la connexion
         await connectionToUse.authenticate();
         console.log('[AuthService] ✅ Connexion à', databaseName, 'réussie');
+      }
+      // Si databaseName est fourni mais identique à la base du .env, utiliser la connexion par défaut
+      else {
+        console.log('[AuthService] 🔄 Base fournie identique à la base du .env, utilisation de la connexion par défaut');
+        connectionToUse = getConnection();
+        console.log('[AuthService] ✅ Connexion à la base par défaut:', defaultDbName);
       }
       
       // Récupérer l'utilisateur depuis la table users existante

@@ -1,6 +1,7 @@
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
+const { renderFormattedText } = require('./pdf-format-helper');
 
 /**
  * Service dédié à la génération de PDF pour les rapports de CAISSE
@@ -111,39 +112,44 @@ async function genererCaissePDF(caisseData, options = {}) {
       let pageNumber = 1;
 
       // === EN-TÊTE ENTREPRISE (même format que facturation) ===
+      // Récupérer la taille du logo depuis la configuration
+      const logoSize = options.documentSociete?.logoSize || { width: 100, height: null };
+      const imageOptions = { width: logoSize.width };
+      if (logoSize.height) {
+        imageOptions.height = logoSize.height;
+      }
+      
       // Utiliser le logo personnalisé si disponible, sinon le logo par défaut
       if (options.documentSociete && options.documentSociete.logo) {
         try {
           const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-          doc.image(logoBuffer, 50, 20, { width: 100 });
+          doc.image(logoBuffer, 50, 20, imageOptions);
         } catch (error) {
           console.warn('Erreur affichage logo personnalisé, utilisation du logo par défaut:', error);
           const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
+          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
         }
       } else {
         const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-        if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
+        if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
       }
 
-      // Utiliser l'en-tête personnalisé si disponible
+      // Utiliser l'en-tête personnalisé si disponible - à côté du logo
       if (options.documentSociete && options.documentSociete.entete) {
-        // Parser l'en-tête HTML et l'afficher
-        const enteteText = htmlToPlainText(options.documentSociete.entete);
-        const enteteLines = enteteText.split('\n');
-        let yPos = 30;
-        enteteLines.forEach(line => {
-          if (line.trim()) {
-            doc.fontSize(10).font('Helvetica-Bold').text(line.trim(), 160, yPos);
-            yPos += 12;
-          }
-        });
-      } else {
-        // En-tête par défaut à droite du logo (ajusté pour logo de 100px)
-        doc.fontSize(11).fillColor('#046ba7').font('Helvetica-Bold').text('Balances et Bascules Pont Bascule Electronique', 160, 30);
-        doc.font('Helvetica').fontSize(10)
-          .text('Mecanique - Vente et Reparation - Entretien', 160, 45)
-          .text('Etalonnage Logiciels de Gestion', 160, 58);
+        const entete = options.documentSociete.entete;
+        // Vérifier si c'est un objet JSON ou du texte brut
+        if (typeof entete === 'object' || (typeof entete === 'string' && entete.trim())) {
+          renderFormattedText(doc, entete, {
+            startX: 160,
+            startY: 20,
+            defaultFontSize: 10,
+            defaultColor: '#046ba7',
+            defaultFont: 'Helvetica-Bold',
+            defaultAlign: 'left',
+            defaultLineSpacing: 12,
+            width: 435
+          });
+        }
       }
 
       // Ligne de séparation horizontale
@@ -335,30 +341,20 @@ async function genererCaissePDF(caisseData, options = {}) {
       doc.moveTo(50, separatorLineY).lineTo(545, separatorLineY).stroke();
 
       if (options.documentSociete && options.documentSociete.pied_page) {
-        const piedPageText = htmlToPlainText(options.documentSociete.pied_page);
-        doc.font('Helvetica').fontSize(7).fillColor('#000');
-        doc.text(piedPageText, 50, footerStartY, { width: 495, align: 'center' });
-      } else {
-        // Pied de page par défaut - toutes les informations centrées sur la première page
-        doc.font('Helvetica').fontSize(7).fillColor('#000');
-
-        // Ligne 1 : SARL au capital et adresse - centrée
-        doc.text(
-          'SARL au capital 500 000.00 DHS - allée des orangers Derb Najat Rue 4 N°67 RDC Ain Sebaa Casablanca',
-          50, footerStartY, { width: 495, align: 'center' }
-        );
-
-        // Ligne 2 : Téléphone, Fax, RC, IF, Email - centrée
-        doc.text(
-          'Tel: 0522672135 - Fax 0522672143 - RC120431TP37951465 IF: 1680027 Email: info@lesbasculesmondial.com',
-          50, footerStartY + footerLineSpacing * 2, { width: 495, align: 'center' }
-        );
-
-        // Ligne 3 : RIB, CNSS, ICE - centrée (dernière ligne, doit être sur la première page)
-        doc.text(
-          'RIB 007 780 000368400000157019 - CNSS: 6463814 ICE: 000079494000078',
-          50, footerStartY + (footerLineSpacing * 4), { width: 495, align: 'center' }
-        );
+        const piedPage = options.documentSociete.pied_page;
+        // Vérifier si c'est un objet JSON ou du texte brut
+        if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
+          renderFormattedText(doc, piedPage, {
+            startX: 50,
+            startY: footerStartY,
+            defaultFontSize: 7,
+            defaultColor: '#000000',
+            defaultFont: 'Helvetica',
+            defaultAlign: 'center',
+            defaultLineSpacing: 5,
+            width: 495
+          });
+        }
       }
 
       doc.end();
@@ -401,39 +397,44 @@ async function genererRapportCaissePDF(donnees, options = {}) {
       doc.pipe(stream);
 
       // === ENTÊTE ENTREPRISE (même format que facturation) ===
+      // Récupérer la taille du logo depuis la configuration
+      const logoSize2 = options.documentSociete?.logoSize || { width: 100, height: null };
+      const imageOptions2 = { width: logoSize2.width };
+      if (logoSize2.height) {
+        imageOptions2.height = logoSize2.height;
+      }
+      
       // Utiliser le logo personnalisé si disponible, sinon le logo par défaut
       if (options.documentSociete && options.documentSociete.logo) {
         try {
           const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-          doc.image(logoBuffer, 50, 20, { width: 100 });
+          doc.image(logoBuffer, 50, 20, imageOptions2);
         } catch (error) {
           console.warn('Erreur affichage logo personnalisé, utilisation du logo par défaut:', error);
           const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
+          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions2);
         }
       } else {
         const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-        if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
+        if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions2);
       }
 
-      // Utiliser l'en-tête personnalisé si disponible
+      // Utiliser l'en-tête personnalisé si disponible - à côté du logo
       if (options.documentSociete && options.documentSociete.entete) {
-        // Parser l'en-tête HTML et l'afficher
-        const enteteText = htmlToPlainText(options.documentSociete.entete);
-        const enteteLines = enteteText.split('\n');
-        let yPos = 30;
-        enteteLines.forEach(line => {
-          if (line.trim()) {
-            doc.fontSize(10).font('Helvetica-Bold').text(line.trim(), 160, yPos);
-            yPos += 12;
-          }
-        });
-      } else {
-        // En-tête par défaut à droite du logo (ajusté pour logo de 100px)
-        doc.fontSize(11).fillColor('#046ba7').font('Helvetica-Bold').text('Balances et Bascules Pont Bascule Electronique', 160, 30);
-        doc.font('Helvetica').fontSize(10)
-          .text('Mecanique - Vente et Reparation - Entretien', 160, 45)
-          .text('Etalonnage Logiciels de Gestion', 160, 58);
+        const entete = options.documentSociete.entete;
+        // Vérifier si c'est un objet JSON ou du texte brut
+        if (typeof entete === 'object' || (typeof entete === 'string' && entete.trim())) {
+          renderFormattedText(doc, entete, {
+            startX: 160,
+            startY: 20,
+            defaultFontSize: 10,
+            defaultColor: '#046ba7',
+            defaultFont: 'Helvetica-Bold',
+            defaultAlign: 'left',
+            defaultLineSpacing: 12,
+            width: 435
+          });
+        }
       }
 
       // Ligne de séparation horizontale
@@ -597,36 +598,20 @@ async function genererRapportCaissePDF(donnees, options = {}) {
         doc.rect(0, footerY, 595, footerHeight).fill('#FFFFFF');
 
         if (options.documentSociete && options.documentSociete.pied_page) {
-          const piedPageText = htmlToPlainText(options.documentSociete.pied_page);
-          doc.font('Helvetica').fontSize(7).fillColor('#000');
-          doc.text(piedPageText, 50, footerStartY, { width: 495, align: 'left' });
-        } else {
-          // Pied de page par défaut avec toutes les informations selon l'image 2
-          doc.font('Helvetica').fontSize(7).fillColor('#000');
-
-          // Section supérieure - alignée à gauche
-          // Ligne 1 : SARL au capital et adresse
-          doc.text(
-            'SARL au capital 500 000.00 DHS - allée des orangers Derb Najat Rue 4 N°67 RDC Ain Sebaa Casablanca',
-            50, footerStartY, { width: 495, align: 'left' }
-          );
-
-          // Ligne 2 : Téléphone, Fax, RC, IF, Email
-          doc.text(
-            'Tel: 0522672135 - Fax 0522672143 - RC120431TP37951465 IF: 1680027 Email: info@lesbasculesmondial.com',
-            50, footerStartY + footerLineSpacing * 2, { width: 495, align: 'left' }
-          );
-
-          // Ligne de séparation noire épaisse
-          doc.strokeColor('#000').lineWidth(1.5);
-          doc.moveTo(50, separatorLineY).lineTo(545, separatorLineY).stroke();
-
-          // Section inférieure - centrée
-          // RIB, CNSS, ICE
-          doc.text(
-            'RIB 007 780 000368400000157019 - CNSS: 6463814 ICE: 000079494000078',
-            50, separatorLineY + 5, { width: 495, align: 'center' }
-          );
+          const piedPage = options.documentSociete.pied_page;
+          // Vérifier si c'est un objet JSON ou du texte brut
+          if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
+            renderFormattedText(doc, piedPage, {
+              startX: 50,
+              startY: footerStartY,
+              defaultFontSize: 7,
+              defaultColor: '#000000',
+              defaultFont: 'Helvetica',
+              defaultAlign: 'left',
+              defaultLineSpacing: 5,
+              width: 495
+            });
+          }
         }
 
         footerDrawn = true; // Marquer comme dessiné
@@ -1058,17 +1043,22 @@ async function genererCaissePDFByEmploye(caisseData, employeId, options = {}) {
         doc.image(logoPath, 50, 30, { width: 70 });
       }
 
-      // Utiliser l'en-tête personnalisé si disponible
+      // Utiliser l'en-tête personnalisé si disponible - à côté du logo
       if (options.documentSociete && options.documentSociete.entete) {
-        const enteteText = htmlToPlainText(options.documentSociete.entete);
-        const enteteLines = enteteText.split('\n');
-        let yPos = 30;
-        enteteLines.forEach(line => {
-          if (line.trim()) {
-            doc.fontSize(10).font('Helvetica-Bold').text(line.trim(), 130, yPos);
-            yPos += 12;
-          }
-        });
+        const entete = options.documentSociete.entete;
+        // Vérifier si c'est un objet JSON ou du texte brut
+        if (typeof entete === 'object' || (typeof entete === 'string' && entete.trim())) {
+          renderFormattedText(doc, entete, {
+            startX: 130,
+            startY: 20,
+            defaultFontSize: 10,
+            defaultColor: '#046ba7',
+            defaultFont: 'Helvetica-Bold',
+            defaultAlign: 'left',
+            defaultLineSpacing: 12,
+            width: 435
+          });
+        }
       } else {
         doc.fontSize(10).font('Helvetica-Bold').text('CACTUS INFORMATIQUE', 130, 30);
         doc.font('Helvetica').fontSize(9)
@@ -1177,15 +1167,20 @@ async function genererCaissePDFByEmploye(caisseData, employeId, options = {}) {
       const footerY = pageHeight - 50;
 
       if (options.documentSociete && options.documentSociete.pied_page) {
-        const piedPageText = htmlToPlainText(options.documentSociete.pied_page);
-        const piedPageLines = piedPageText.split('\n');
-        let footerYPos = footerY;
-        piedPageLines.forEach(line => {
-          if (line.trim()) {
-            doc.fontSize(8).font('Helvetica').text(line.trim(), 50, footerYPos, { align: 'center', width: 500 });
-            footerYPos += 10;
-          }
-        });
+        const piedPage = options.documentSociete.pied_page;
+        // Vérifier si c'est un objet JSON ou du texte brut
+        if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
+          renderFormattedText(doc, piedPage, {
+            startX: 50,
+            startY: footerY,
+            defaultFontSize: 8,
+            defaultColor: '#000000',
+            defaultFont: 'Helvetica',
+            defaultAlign: 'center',
+            defaultLineSpacing: 10,
+            width: 500
+          });
+        }
       } else {
         doc.fontSize(8).font('Helvetica').fillColor('#666')
           .text('Document généré le ' + new Date().toLocaleDateString('fr-FR'), 50, footerY, { align: 'center', width: 500 });
@@ -1700,17 +1695,24 @@ async function genererRapportCaisseGroup2000_3000PDF(donnees, options = {}) {
       doc.pipe(stream);
 
       // === ENTÊTE ENTREPRISE ===
+      // Récupérer la taille du logo depuis la configuration
+      const logoSize3 = options.documentSociete?.logoSize || { width: 100, height: null };
+      const imageOptions3 = { width: logoSize3.width };
+      if (logoSize3.height) {
+        imageOptions3.height = logoSize3.height;
+      }
+      
       if (options.documentSociete && options.documentSociete.logo) {
         try {
           const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-          doc.image(logoBuffer, 50, 20, { width: 100 });
+          doc.image(logoBuffer, 50, 20, imageOptions3);
         } catch (error) {
           const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
+          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions3);
         }
       } else {
         const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-        if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
+        if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions3);
       }
 
       if (options.documentSociete && options.documentSociete.entete) {
@@ -1841,14 +1843,20 @@ async function genererRapportCaisseGroup2000_3000PDF(donnees, options = {}) {
       doc.moveTo(50, footerY + 2).lineTo(545, footerY + 2).stroke();
 
       if (options.documentSociete && options.documentSociete.pied_page) {
-        const piedPageText = htmlToPlainText(options.documentSociete.pied_page);
-        doc.font('Helvetica').fontSize(7).fillColor('#000');
-        doc.text(piedPageText, 50, footerY + 10, { width: 495, align: 'center' });
-      } else {
-        doc.font('Helvetica').fontSize(7).fillColor('#000');
-        doc.text('SARL au capital 500 000.00 DHS - allée des orangers Derb Najat Rue 4 N°67 RDC Ain Sebaa Casablanca', 50, footerY + 10, { width: 495, align: 'center' });
-        doc.text('Tel: 0522672135 - Fax 0522672143 - RC120431TP37951465 IF: 1680027 Email: info@lesbasculesmondial.com', 50, footerY + 20, { width: 495, align: 'center' });
-        doc.text('RIB 007 780 000368400000157019 - CNSS: 6463814 ICE: 000079494000078', 50, footerY + 30, { width: 495, align: 'center' });
+        const piedPage = options.documentSociete.pied_page;
+        // Vérifier si c'est un objet JSON ou du texte brut
+        if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
+          renderFormattedText(doc, piedPage, {
+            startX: 50,
+            startY: footerY + 10,
+            defaultFontSize: 7,
+            defaultColor: '#000000',
+            defaultFont: 'Helvetica',
+            defaultAlign: 'center',
+            defaultLineSpacing: 10,
+            width: 495
+          });
+        }
       }
 
       doc.end();
@@ -1938,11 +1946,19 @@ async function genererInterventionPDF(interventionId, options = {}) {
       });
 
       // --- En-tête (Logo et infos entreprise) ---
+      // Récupérer la taille du logo depuis la configuration
+      const logoSize4 = options.documentSociete?.logoSize || { width: 100, height: null };
+      const imageOptions4 = { width: logoSize4.width };
+      if (logoSize4.height) {
+        imageOptions4.height = logoSize4.height;
+      }
+      
       if (options.documentSociete && options.documentSociete.logo) {
         try {
+          const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
           const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
-          doc.image(logoBuffer, 50, 20, { width: 100 });
+          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions4);
+          doc.image(logoBuffer, 50, 20, imageOptions4);
         } catch (error) {
           console.warn('Erreur affichage logo personnalisé, utilisation du logo par défaut:', error);
           // Fallback au logo par défaut si besoin
@@ -2089,14 +2105,21 @@ async function genererInterventionPDF(interventionId, options = {}) {
         doc.strokeColor('#000').lineWidth(1.5);
         doc.moveTo(50, footerY + 2).lineTo(545, footerY + 2).stroke(); // Ligne de séparation
 
-        doc.font('Helvetica').fontSize(7).fillColor('#000');
         if (options.documentSociete && options.documentSociete.pied_page) {
-          const piedPageText = htmlToPlainText(options.documentSociete.pied_page);
-          doc.text(piedPageText, 50, footerY + 10, { width: 495, align: 'center' });
-        } else {
-          doc.text('SARL au capital 500 000.00 DHS - allée des orangers Derb Najat Rue 4 N°67 RDC Ain Sebaa Casablanca', 50, footerY + 10, { width: 495, align: 'center' });
-          doc.text('Tel: 0522672135 - Fax 0522672143 - RC120431TP37951465 IF: 1680027 Email: info@lesbasculesmondial.com', 50, footerY + 20, { width: 495, align: 'center' });
-          doc.text('RIB 007 780 000368400000157019 - CNSS: 6463814 ICE: 000079494000078', 50, footerY + 30, { width: 495, align: 'center' });
+          const piedPage = options.documentSociete.pied_page;
+          // Vérifier si c'est un objet JSON ou du texte brut
+          if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
+            renderFormattedText(doc, piedPage, {
+              startX: 50,
+              startY: footerY + 10,
+              defaultFontSize: 7,
+              defaultColor: '#000000',
+              defaultFont: 'Helvetica',
+              defaultAlign: 'center',
+              defaultLineSpacing: 10,
+              width: 495
+            });
+          }
         }
       };
 

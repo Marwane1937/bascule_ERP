@@ -4,20 +4,87 @@ const emailService = require('../services/email.service');
 const { getEmailDataByDocumentId } = require('../models/email.model');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const databaseInjector = require('../middleware/database-injector.middleware');
-const documentSocieteService = require('../services/document_societe.service');
+const pdfConfigService = require('../services/pdf-config.service');
 const path = require('path');
 const https = require('https');
 const fs = require('fs');
 
 // utilise les méthodes de emailService directement
 
-// Toutes les routes nécessitent une authentification
-router.use(authenticateToken);
+// Route GET publique pour servir les PDFs depuis le cache mémoire ou le disque
+// Cette route est publique car elle est appelée via window.open() qui n'envoie pas les headers d'authentification
+router.get('/:folder/:filename', async (req, res) => {
+  try {
+    const { folder, filename } = req.params;
+    
+    console.log(`[PDF Route] 🔍 Requête GET pour: ${folder}/${filename}`);
+    
+    // Valider le nom de fichier (sécurité)
+    if (!filename || !filename.endsWith('.pdf') || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      console.log(`[PDF Route] ❌ Nom de fichier invalide: ${filename}`);
+      return res.status(400).json({ success: false, message: 'Nom de fichier invalide' });
+    }
+    
+    const cacheKey = `${folder}/${filename}`;
+    
+    // Vérifier le cache mémoire
+    if (global.pdfCache && global.pdfCache.has(cacheKey)) {
+      const cached = global.pdfCache.get(cacheKey);
+      // Vérifier que le cache n'est pas trop vieux (1 heure)
+      if (Date.now() - cached.timestamp < 60 * 60 * 1000) {
+        console.log(`[PDF Route] ✅ PDF trouvé dans le cache: ${cacheKey}`);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+        res.setHeader('Content-Length', cached.buffer.length);
+        return res.send(cached.buffer);
+      } else {
+        console.log(`[PDF Route] ⏰ Cache expiré pour: ${cacheKey}`);
+        // Supprimer du cache si trop vieux
+        global.pdfCache.delete(cacheKey);
+      }
+    }
+    
+    // Si pas dans le cache, vérifier si le fichier existe sur disque
+    const publicPath = path.join(__dirname, '..', 'public', folder, filename);
+    console.log(`[PDF Route] 🔍 Vérification fichier sur disque: ${publicPath}`);
+    
+    if (fs.existsSync(publicPath)) {
+      // Vérifier l'âge du fichier (ne pas servir les fichiers de plus de 1 heure)
+      const stats = fs.statSync(publicPath);
+      const fileAge = Date.now() - stats.mtime.getTime();
+      console.log(`[PDF Route] 📅 Âge du fichier: ${Math.round(fileAge / 1000)} secondes`);
+      
+      if (fileAge < 60 * 60 * 1000) {
+        console.log(`[PDF Route] ✅ Envoi du PDF depuis le disque: ${publicPath}`);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+        return res.sendFile(publicPath);
+      } else {
+        console.log(`[PDF Route] ⏰ Fichier trop vieux, suppression: ${publicPath}`);
+        // Supprimer le fichier s'il est trop vieux
+        try {
+          fs.unlinkSync(publicPath);
+          console.log(`🗑️ Fichier PDF supprimé (trop vieux): ${publicPath}`);
+        } catch (unlinkError) {
+          console.error('Erreur suppression fichier PDF:', unlinkError);
+        }
+      }
+    } else {
+      console.log(`[PDF Route] ❌ Fichier non trouvé: ${publicPath}`);
+    }
+    
+    // Si le fichier n'existe pas, retourner 404
+    console.log(`[PDF Route] ❌ PDF introuvable: ${cacheKey}`);
+    return res.status(404).json({ success: false, message: 'PDF introuvable' });
+  } catch (error) {
+    console.error('[PDF Route] ❌ Erreur service PDF :', error);
+    console.error('[PDF Route] ❌ Stack:', error.stack);
+    return res.status(500).json({ success: false, message: 'Erreur service PDF', error: error.message });
+  }
+});
 
-// Middleware pour injecter la connexion appropriée
-router.use(databaseInjector.injectConnection.bind(databaseInjector));
-
-router.post('/generate', async (req, res) => { 
+// Route POST protégée pour générer les PDFs (nécessite authentification)
+router.post('/generate', authenticateToken, databaseInjector.injectConnection.bind(databaseInjector), async (req, res) => { 
   try {
     const { document_id, withStamp, printMode, composeArticle } = req.body;
     const docId = parseInt(document_id, 10);
@@ -52,19 +119,12 @@ router.post('/generate', async (req, res) => {
       });
     }
 
-    // Récupérer les informations de la société (logo, en-tête, pied de page)
-    let documentSociete = null;
-    try {
-      if (req.user && req.user.societe_id) {
-        documentSociete = await documentSocieteService.getDocumentSociete(req.user.societe_id);
-        console.log('📄 Informations de la société récupérées:', documentSociete ? 'Oui' : 'Non');
-      }
-    } catch (societeError) {
-      console.warn('⚠️ Erreur lors de la récupération des informations de la société:', societeError);
-      // Ne pas bloquer la génération du PDF si les infos de la société ne sont pas disponibles
-    }
+    // Récupérer les informations depuis le fichier JSON de configuration
+    const documentSociete = pdfConfigService.getDocumentSociete();
+    console.log('📄 Informations de la société récupérées depuis la configuration:', documentSociete ? 'Oui' : 'Non');
 
-    const pdfPath = await emailService.genererPDF(devisData, { 
+    // Générer le PDF en mémoire (buffer) au lieu de sauvegarder
+    const pdfBuffer = await emailService.genererPDFBuffer(devisData, { 
       withStamp: !!withStamp,
       documentSociete: documentSociete,
       sequelize,
@@ -73,28 +133,81 @@ router.post('/generate', async (req, res) => {
       composeArticle: composeArticle || null
     });
     
-    // Déterminer le dossier selon le type de document
+    // Déterminer le nom du fichier selon le type de document
     const documentType = devisData[0]?.document_kind || (devisData[0] && (devisData[0].etat === 2 || devisData[0].type === 2) ? 'COMMANDE' : 'DEVIS');
     let folderName = 'devis';
+    let documentTitle = 'DEVIS';
     
     switch ((documentType || '').toUpperCase()) {
       case 'COMMANDE':
         folderName = 'commandes';
+        documentTitle = 'COMMANDE';
         break;
       case 'LIVRAISON':
       case 'BON DE LIVRAISON':
         folderName = 'livraisons';
+        documentTitle = 'LIVRAISON';
         break;
       case 'RETOUR CLIENT':
       case 'RETOUR':
         folderName = 'retours';
+        documentTitle = 'RETOUR';
         break;
       default:
         folderName = 'devis';
+        documentTitle = 'DEVIS';
         break;
     }
     
-    const pdfUrl = `http://localhost:3500/${folderName}/${path.basename(pdfPath)}`;
+    // Créer un nom de fichier
+    const numeroDoc = devisData[0]?.numero || documentTitle;
+    const nomClient = (devisData[0]?.client || 'CLIENT').toString().trim().replace(/[^a-zA-Z0-9\s\-_]/g, '').replace(/\s+/g, '_').substring(0, 50);
+    const fileName = `${numeroDoc}_${nomClient}.pdf`;
+    
+    // Utiliser l'URL de la requête pour construire l'URL du PDF
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost';
+    const baseUrl = process.env.BASE_URL || `${protocol}://${host}`;
+    const pdfUrl = `${baseUrl}/api/pdf/${folderName}/${fileName}`;
+
+    // Créer le dossier s'il n'existe pas
+    const publicFolderPath = path.join(__dirname, '..', 'public', folderName);
+    if (!fs.existsSync(publicFolderPath)) {
+      fs.mkdirSync(publicFolderPath, { recursive: true });
+    }
+
+    // Sauvegarder le PDF sur disque
+    const pdfFilePath = path.join(publicFolderPath, fileName);
+    fs.writeFileSync(pdfFilePath, pdfBuffer);
+    console.log(`✅ PDF sauvegardé sur disque : ${pdfFilePath}`);
+
+    // Stocker aussi en cache mémoire pour accès rapide
+    if (!global.pdfCache) {
+      global.pdfCache = new Map();
+    }
+    global.pdfCache.set(`${folderName}/${fileName}`, {
+      buffer: pdfBuffer,
+      timestamp: Date.now()
+    });
+    
+    // Nettoyer le cache mémoire après 1 heure
+    setTimeout(() => {
+      if (global.pdfCache) {
+        global.pdfCache.delete(`${folderName}/${fileName}`);
+      }
+    }, 60 * 60 * 1000);
+
+    // Nettoyer le fichier sur disque après 1 heure
+    setTimeout(() => {
+      try {
+        if (fs.existsSync(pdfFilePath)) {
+          fs.unlinkSync(pdfFilePath);
+          console.log(`🗑️ Fichier PDF supprimé après 1h : ${pdfFilePath}`);
+        }
+      } catch (unlinkError) {
+        console.error('Erreur suppression fichier PDF:', unlinkError);
+      }
+    }, 60 * 60 * 1000);
 
     return res.json({ success: true, pdfUrl });
   } catch (error) {
@@ -104,7 +217,8 @@ router.post('/generate', async (req, res) => {
 });
 
 // Envoi du PDF en pièce jointe via WhatsApp Cloud API (méthode correcte)
-router.post('/send-whatsapp', async (req, res) => {
+// Route POST protégée (nécessite authentification)
+router.post('/send-whatsapp', authenticateToken, databaseInjector.injectConnection.bind(databaseInjector), async (req, res) => {
   try {
     const { document_id, phone, message } = req.body;
 
@@ -130,7 +244,13 @@ router.post('/send-whatsapp', async (req, res) => {
     }
 
     console.log('📄 Génération PDF...');
-    const pdfPath = await emailService.genererPDF(devisData);
+    // Récupérer les informations depuis le fichier JSON de configuration
+    const pdfConfigService = require('../services/pdf-config.service');
+    const documentSociete = pdfConfigService.getDocumentSociete();
+    
+    const pdfPath = await emailService.genererPDF(devisData, {
+      documentSociete: documentSociete
+    });
     const fileName = path.basename(pdfPath);
     
     // Lire le fichier PDF

@@ -430,14 +430,10 @@ class InterventionController {
         console.warn('[printInterventionPDF] No employe_id found in intervention details.');
       }
 
-      let documentSociete = null;
-      try {
-        console.log('[printInterventionPDF] Attempting to fetch document societe details.');
-        documentSociete = await documentSocieteModel.getDocumentSociete();
-        console.log('[printInterventionPDF] Document societe details fetched.');
-      } catch (error) {
-        console.warn('Erreur récupération document société:', error);
-      }
+      // Récupérer les informations depuis le fichier JSON de configuration
+      const pdfConfigService = require('../services/pdf-config.service');
+      const documentSociete = pdfConfigService.getDocumentSociete();
+      console.log('[printInterventionPDF] Document societe details fetched from config.');
 
       console.log(`[printInterventionPDF] Attempting to generate PDF for intervention ID: ${interventionId}, Telegram: ${!!employeTelegramId}`);
       const pdfBuffer = await genererInterventionPDF(interventionId, {
@@ -494,13 +490,9 @@ class InterventionController {
 
       await sequelize.query(insertDetails, { type: sequelize.QueryTypes.INSERT });
 
-      // Récupérer les informations de société pour l'en-tête
-      let documentSociete = null;
-      try {
-        documentSociete = await documentSocieteModel.getDocumentSociete();
-      } catch (error) {
-        console.warn('Erreur récupération document société:', error);
-      }
+      // Récupérer les informations depuis le fichier JSON de configuration
+      const pdfConfigService = require('../services/pdf-config.service');
+      const documentSociete = pdfConfigService.getDocumentSociete();
 
       const { genererInterventionPDF } = require('../services/caisse-pdf.service');
       const pdfPath = await genererInterventionPDF(testInterventionId, { documentSociete });

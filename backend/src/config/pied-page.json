@@ -1,0 +1,32 @@
+{
+  "lines": [
+    {
+      "text": "SARL au capital 200 000.00 DHS - Amal 1 Rue 13 N°54 Sidi Bernoussi 20600 Casablanca - Maroc",
+      "fontSize": 7,
+      "color": "#000000",
+      "font": "Helvetica",
+      "align": "center",
+      "yOffset": 0,
+      "lineSpacing": 10
+    },
+    {
+      "text": "RC : 300511 - Patente : 38001156 - I.F : 1961391 - CNSS : 7883350 - ICE : 000164603000065",
+      "fontSize": 7,
+      "color": "#000000",
+      "font": "Helvetica",
+      "align": "center",
+      "yOffset": 0,
+      "lineSpacing": 10
+    },
+    {
+      "text": "Tél : 05 22 35 89 71 - Fax mobile : 05 22 66 22 62 - Site web : https://www.maties.ma",
+      "fontSize": 7,
+      "color": "#000000",
+      "font": "Helvetica",
+      "align": "center",
+      "yOffset": 0,
+      "lineSpacing": 15
+    }
+  ]
+}
+

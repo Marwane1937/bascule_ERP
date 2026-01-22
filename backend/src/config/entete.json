@@ -1,0 +1,34 @@
+{
+  "lines": [
+    {
+      "text": "Balances et Bascules Pont Bascule Electronique",
+      "fontSize": 12,
+      "color": "#046ba7",
+      "font": "Helvetica-Bold",
+      "align": "left",
+      "yOffset": 0,
+      "lineSpacing": 12
+    },
+    {
+      "text": "Mecanique - Vente et Reparation - Entretien",
+      "fontSize": 10,
+      "color": "#333333",
+      "font": "Helvetica",
+      "align": "left",
+      "yOffset": 0,
+      "lineSpacing": 12
+    },
+    {
+      "text": "Etalonnage Logiciels de Gestion",
+      "fontSize": 10,
+      "color": "#666666",
+      "font": "Helvetica",
+      "align": "left",
+      "yOffset": 0,
+      "lineSpacing": 12
+    }
+  ],
+  "startY": 30,
+  "startX": 160
+}
+

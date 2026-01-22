@@ -1,21 +1,116 @@
 const express = require('express');
-const cors = require('cors'); // ✅ AJOUT
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const app = express();
 const path = require('path');
 
-// ✅ Middleware CORS
-app.use(cors()); // ⚠️ Autorise toutes les origines par défaut
-app.use('/devis', express.static(path.join(__dirname, 'public', 'devis')));
-app.use('/caisses', express.static(path.join(__dirname, 'public', 'caisses')));
-app.use('/commandes', express.static(path.join(__dirname, 'public', 'commandes')));
-app.use('/livraisons', express.static(path.join(__dirname, 'public', 'livraisons')));
-app.use('/factures', express.static(path.join(__dirname, 'public', 'factures')));
-app.use('/factures-fournisseur', express.static(path.join(__dirname, 'public', 'factures-fournisseur')));
-app.use('/retours', express.static(path.join(__dirname, 'public', 'retours')));
-app.use('/avoirs', express.static(path.join(__dirname, 'public', 'avoirs')));
-app.use('/receptions', express.static(path.join(__dirname, 'public', 'receptions')));
-app.use('/interventions', express.static(path.join(__dirname, 'public', 'interventions')));
-app.use('/stock-historique', express.static(path.join(__dirname, 'public', 'stock-historique')));
+// Configuration conditionnelle (production vs développement)
+const isProduction = process.env.NODE_ENV === 'production';
+
+// ✅ Middleware CORS - Configuration conditionnelle
+if (isProduction) {
+  // CORS strict en production
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(origin => origin.trim()).filter(Boolean) || [];
+  
+  app.use(cors({
+    origin: function (origin, callback) {
+      // Autoriser les requêtes sans origine (mobile apps, Postman, etc.)
+      if (!origin) {
+        return callback(null, true);
+      }
+      
+      if (allowedOrigins.length === 0) {
+        // Si aucun domaine configuré, autoriser toutes les origines (temporaire)
+        // ⚠️ À changer dès que vous avez un domaine
+        console.warn('⚠️ [SECURITY] ALLOWED_ORIGINS non configuré, CORS ouvert à toutes les origines');
+        return callback(null, true);
+      }
+      
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.warn(`⚠️ [SECURITY] Origine bloquée: ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  }));
+
+  // Headers de sécurité avec Helmet
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+      },
+    },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true
+    }
+  }));
+
+  // Rate limiting général (production uniquement)
+  const generalLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000, // 1 minute
+    max: 100, // 100 requêtes max par minute
+    message: {
+      success: false,
+      message: 'Trop de requêtes. Réessayez plus tard.'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  // Appliquer le rate limiting général sur toutes les routes API
+  app.use('/api/', generalLimiter);
+
+  // Forcer HTTPS en production (sauf localhost)
+  app.use((req, res, next) => {
+    if (req.header('x-forwarded-proto') !== 'https' && 
+        !req.header('host')?.includes('localhost') &&
+        !req.header('host')?.includes('127.0.0.1')) {
+      return res.redirect(`https://${req.header('host')}${req.url}`);
+    }
+    next();
+  });
+
+  console.log('🔒 [SECURITY] Mode production activé - Sécurité renforcée');
+} else {
+  // CORS permissif en développement
+  app.use(cors());
+  console.log('🔓 [SECURITY] Mode développement - CORS permissif');
+}
+
+// Routes statiques (sécurisées en production)
+const staticOptions = isProduction ? {
+  setHeaders: (res, filePath) => {
+    // Désactiver l'exécution de scripts dans les fichiers statiques
+    const ext = path.extname(filePath).toLowerCase();
+    if (['.js', '.exe', '.sh', '.bat'].includes(ext) && !filePath.includes('node_modules')) {
+      res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Content-Disposition', 'attachment');
+    }
+  }
+} : {};
+
+app.use('/devis', express.static(path.join(__dirname, 'public', 'devis'), staticOptions));
+app.use('/caisses', express.static(path.join(__dirname, 'public', 'caisses'), staticOptions));
+app.use('/commandes', express.static(path.join(__dirname, 'public', 'commandes'), staticOptions));
+app.use('/livraisons', express.static(path.join(__dirname, 'public', 'livraisons'), staticOptions));
+app.use('/factures', express.static(path.join(__dirname, 'public', 'factures'), staticOptions));
+app.use('/factures-fournisseur', express.static(path.join(__dirname, 'public', 'factures-fournisseur'), staticOptions));
+app.use('/retours', express.static(path.join(__dirname, 'public', 'retours'), staticOptions));
+app.use('/avoirs', express.static(path.join(__dirname, 'public', 'avoirs'), staticOptions));
+app.use('/receptions', express.static(path.join(__dirname, 'public', 'receptions'), staticOptions));
+app.use('/interventions', express.static(path.join(__dirname, 'public', 'interventions'), staticOptions));
+app.use('/stock-historique', express.static(path.join(__dirname, 'public', 'stock-historique'), staticOptions));
 
 // Import des routes
 const userRoutes = require('./routes/user.routes');
@@ -119,13 +214,15 @@ app.use('/api/compteurs', authenticateToken, require('./routes/base/compteur.rou
 app.use('/api/listes', authenticateToken, listesRoutes);
 // ✅l'email
 app.use('/api/email', authenticateToken, emailRoutes);
-app.use('/api/pdf', authenticateToken, pdfRoutes);
+// Route PDF : les routes POST sont protégées dans pdf.routes.js, la route GET est publique
+app.use('/api/pdf', pdfRoutes);
 // ✅ PDF spécialisés
 app.use('/api/caisse-pdf', authenticateToken, caissePdfRoutes);
 app.use('/api/facturation-pdf', authenticateToken, facturationPdfRoutes);
 app.use('/api/retour-pdf', authenticateToken, retourPdfRoutes);
 app.use('/commandes', commandePdfPublicRoutes); // Routes publiques pour servir les PDFs
-app.use('/api/commande-pdf', authenticateToken, commandePdfRoutes); // Routes API avec authentification
+// Route commande-pdf : les routes POST sont protégées dans commande-pdf.routes.js, la route GET est publique
+app.use('/api/commande-pdf', commandePdfRoutes);
 app.use('/api/avoir-pdf', authenticateToken, avoirPdfRoutes);
 app.use('/api/facture-fournisseur-pdf', authenticateToken, factureFournisseurPdfRoutes);
 app.use('/api/reception-pdf', authenticateToken, receptionPdfRoutes);
@@ -161,10 +258,18 @@ app.use('/api/existing-auth', existingAuthRoutes);
 // ✅ Middleware de gestion d'erreurs global
 app.use((err, req, res, next) => {
     console.error('❌ [Global Error Handler]:', err);
-    res.status(500).json({
+    
+    // Ne pas exposer les détails d'erreur en production
+    const isProduction = process.env.NODE_ENV === 'production';
+    const statusCode = err.status || err.statusCode || 500;
+    
+    res.status(statusCode).json({
         success: false,
         message: err.message || 'Erreur interne du serveur',
-        error: process.env.NODE_ENV === 'development' ? err : {}
+        // Ne montrer les détails que en développement
+        error: isProduction ? undefined : (err.stack ? err.stack : err),
+        // En production, logger l'erreur complète côté serveur et fournir un ID pour tracking
+        ...(isProduction && { errorId: Date.now() })
     });
 });
 

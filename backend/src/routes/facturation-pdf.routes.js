@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const facturationPdfService = require('../services/facturation-pdf.service');
 const { getFactureReportById, getFactureContratById } = require('../models/ventes/facturation.model');
-const documentSocieteService = require('../services/document_societe.service');
+const pdfConfigService = require('../services/pdf-config.service');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const databaseInjector = require('../middleware/database-injector.middleware');
 const path = require('path');
@@ -39,15 +39,8 @@ router.post('/generate', async (req, res) => {
       });
     }
 
-    // Récupérer les informations du document_societe si disponibles
-    let documentSociete = null;
-    try {
-      // Récupérer la société actuelle (vous devrez peut-être adapter cela selon votre logique)
-      const societeId = req.user?.societe_id || 1; // Par défaut 1, à adapter selon votre logique
-      documentSociete = await documentSocieteService.getDocumentSociete(societeId);
-    } catch (error) {
-      console.warn('Impossible de récupérer documentSociete:', error.message);
-    }
+    // Récupérer les informations depuis le fichier JSON de configuration
+    const documentSociete = pdfConfigService.getDocumentSociete();
 
     const pdfPath = await facturationPdfService.genererPDF(factureData, {
       withStamp: !!withStamp,
@@ -55,7 +48,28 @@ router.post('/generate', async (req, res) => {
       sequelize: req.sequelize
     });
     
-    const pdfUrl = `http://localhost:3500/factures/${path.basename(pdfPath)}`;
+    // Lire le PDF en mémoire et le supprimer immédiatement
+    const pdfBuffer = fs.readFileSync(pdfPath);
+    fs.unlinkSync(pdfPath);
+
+    const fileName = path.basename(pdfPath);
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost';
+    const baseUrl = process.env.BASE_URL || `${protocol}://${host}`;
+    const pdfUrl = `${baseUrl}/api/facturation-pdf/${fileName}`;
+
+    if (!global.pdfCache) {
+      global.pdfCache = new Map();
+    }
+    global.pdfCache.set(`factures/${fileName}`, {
+      buffer: pdfBuffer,
+      timestamp: Date.now()
+    });
+    setTimeout(() => {
+      if (global.pdfCache) {
+        global.pdfCache.delete(`factures/${fileName}`);
+      }
+    }, 5 * 60 * 1000);
 
     return res.json({ success: true, pdfUrl });
   } catch (error) {
@@ -89,14 +103,8 @@ router.post('/generate-contrat', async (req, res) => {
       });
     }
 
-    // Récupérer les informations du document_societe si disponibles
-    let documentSociete = null;
-    try {
-      const societeId = req.user?.societe_id || 1;
-      documentSociete = await documentSocieteService.getDocumentSociete(societeId);
-    } catch (error) {
-      console.warn('Impossible de récupérer documentSociete:', error.message);
-    }
+    // Récupérer les informations depuis le fichier JSON de configuration
+    const documentSociete = pdfConfigService.getDocumentSociete();
 
     const pdfPath = await facturationPdfService.genererPDFContrat(factureData, {
       withStamp: !!withStamp,
@@ -104,7 +112,28 @@ router.post('/generate-contrat', async (req, res) => {
       sequelize: req.sequelize
     });
     
-    const pdfUrl = `http://localhost:3500/factures/${path.basename(pdfPath)}`;
+    // Lire le PDF en mémoire et le supprimer immédiatement
+    const pdfBuffer = fs.readFileSync(pdfPath);
+    fs.unlinkSync(pdfPath);
+
+    const fileName = path.basename(pdfPath);
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost';
+    const baseUrl = process.env.BASE_URL || `${protocol}://${host}`;
+    const pdfUrl = `${baseUrl}/api/facturation-pdf/${fileName}`;
+
+    if (!global.pdfCache) {
+      global.pdfCache = new Map();
+    }
+    global.pdfCache.set(`factures/${fileName}`, {
+      buffer: pdfBuffer,
+      timestamp: Date.now()
+    });
+    setTimeout(() => {
+      if (global.pdfCache) {
+        global.pdfCache.delete(`factures/${fileName}`);
+      }
+    }, 5 * 60 * 1000);
 
     return res.json({ success: true, pdfUrl });
   } catch (error) {

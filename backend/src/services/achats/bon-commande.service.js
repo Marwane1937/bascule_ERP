@@ -82,13 +82,9 @@ const genererPDF = async (id, options = {}) => {
     throw new Error('Bon de commande non trouvé ou sans lignes');
   }
   
-  // Récupérer les infos de la société pour le PDF
-  let documentSociete = null;
-  try {
-    documentSociete = await documentSocieteService.getDocumentSociete(1);
-  } catch (error) {
-    console.warn('Erreur récupération documentSociete:', error);
-  }
+  // Récupérer les informations depuis le fichier JSON de configuration
+  const pdfConfigService = require('../pdf-config.service');
+  const documentSociete = pdfConfigService.getDocumentSociete();
   
   // Générer le PDF
   const pdfPath = await bonCommandePdfService.genererPDF(commandeData, {

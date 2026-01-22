@@ -4,6 +4,7 @@ const commandePdfService = require('../services/commande-pdf.service');
 const { getEmailDataByDocumentId } = require('../models/email.model');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const databaseInjector = require('../middleware/database-injector.middleware');
+const pdfConfigService = require('../services/pdf-config.service');
 const path = require('path');
 const https = require('https');
 const fs = require('fs');
@@ -13,13 +14,85 @@ const fs = require('fs');
  * Ce service est séparé du service de devis pour éviter toute confusion
  */
 
-// Middleware pour injecter la connexion appropriée
-router.use(databaseInjector.injectConnection.bind(databaseInjector));
+// Route GET publique pour servir les PDFs (appelée via window.open() sans headers)
+router.get('/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    console.log(`[CommandePDF Route] 🔍 Requête GET pour: ${filename}`);
+    
+    // Vérifier que le nom de fichier est valide (éviter les attaques path traversal)
+    if (!filename || !filename.endsWith('.pdf') || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      console.log(`[CommandePDF Route] ❌ Nom de fichier invalide: ${filename}`);
+      return res.status(400).json({ success: false, message: 'Nom de fichier invalide' });
+    }
 
-// Créer un router séparé pour les routes publiques (sans authentification)
+    const cacheKey = `commandes/${filename}`;
+    
+    // Vérifier le cache mémoire
+    if (global.pdfCache && global.pdfCache.has(cacheKey)) {
+      const cached = global.pdfCache.get(cacheKey);
+      // Vérifier que le cache n'est pas trop vieux (1 heure)
+      if (Date.now() - cached.timestamp < 60 * 60 * 1000) {
+        console.log(`[CommandePDF Route] ✅ PDF trouvé dans le cache: ${cacheKey}`);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+        res.setHeader('Content-Length', cached.buffer.length);
+        return res.send(cached.buffer);
+      } else {
+        console.log(`[CommandePDF Route] ⏰ Cache expiré pour: ${cacheKey}`);
+        // Supprimer du cache si trop vieux
+        global.pdfCache.delete(cacheKey);
+      }
+    }
+
+    // Si pas dans le cache, vérifier si le fichier existe sur disque
+    const commandeDir = path.join(__dirname, '..', 'public', 'commandes');
+    const pdfPath = path.join(commandeDir, filename);
+    console.log(`[CommandePDF Route] 🔍 Vérification fichier sur disque: ${pdfPath}`);
+    
+    if (fs.existsSync(pdfPath)) {
+      // Vérifier l'âge du fichier (ne pas servir les fichiers de plus de 1 heure)
+      const stats = fs.statSync(pdfPath);
+      const fileAge = Date.now() - stats.mtime.getTime();
+      console.log(`[CommandePDF Route] 📅 Âge du fichier: ${Math.round(fileAge / 1000)} secondes`);
+      
+      if (fileAge < 60 * 60 * 1000) {
+        console.log(`[CommandePDF Route] ✅ Envoi du PDF depuis le disque: ${pdfPath}`);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+        return res.sendFile(pdfPath);
+      } else {
+        console.log(`[CommandePDF Route] ⏰ Fichier trop vieux, suppression: ${pdfPath}`);
+        // Supprimer le fichier s'il est trop vieux
+        try {
+          fs.unlinkSync(pdfPath);
+          console.log(`🗑️ Fichier PDF supprimé (trop vieux): ${pdfPath}`);
+        } catch (unlinkError) {
+          console.error('Erreur suppression fichier PDF:', unlinkError);
+        }
+      }
+    } else {
+      console.log(`[CommandePDF Route] ❌ Fichier non trouvé: ${pdfPath}`);
+    }
+
+    // Si le fichier n'existe pas, retourner 404
+    console.log(`[CommandePDF Route] ❌ PDF introuvable: ${cacheKey}`);
+    return res.status(404).json({ success: false, message: 'PDF introuvable' });
+  } catch (error) {
+    console.error('[CommandePDF Route] ❌ Erreur service PDF :', error);
+    console.error('[CommandePDF Route] ❌ Stack:', error.stack);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur service PDF commande',
+      error: error.message
+    });
+  }
+});
+
+// Créer un router séparé pour les routes publiques (sans authentification) - gardé pour compatibilité
 const publicRouter = express.Router();
 
-// Servir un PDF de commande directement via GET (route publique)
+// Servir un PDF de commande directement via GET (route publique) - route alternative
 publicRouter.get('/:filename', async (req, res) => {
   try {
     const { filename } = req.params;
@@ -55,11 +128,8 @@ publicRouter.get('/:filename', async (req, res) => {
   }
 });
 
-// Toutes les autres routes nécessitent une authentification
-router.use(authenticateToken);
-
-// Générer un PDF de commande
-router.post('/generate', async (req, res) => {
+// Routes POST protégées (nécessitent authentification)
+router.post('/generate', authenticateToken, databaseInjector.injectConnection.bind(databaseInjector), async (req, res) => {
   try {
     const { document_id, withStamp } = req.body;
     const commandeData = await getEmailDataByDocumentId(document_id);
@@ -68,15 +138,71 @@ router.post('/generate', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Commande introuvable' });
     }
 
-    // Récupérer les informations du document_societe si disponibles
-    const documentSociete = req.body.documentSociete || null;
+    // Récupérer les informations depuis le fichier JSON de configuration (pdf-config.json)
+    const documentSociete = pdfConfigService.getDocumentSociete();
+    console.log('[commande-pdf/generate] 📄 Informations de la société récupérées depuis la configuration:', documentSociete ? 'Oui' : 'Non');
 
     const pdfPath = await commandePdfService.genererPDF(commandeData, {
       withStamp: !!withStamp,
       documentSociete: documentSociete
     });
     
-    const pdfUrl = `http://localhost:3500/commandes/${path.basename(pdfPath)}`;
+    // Lire le PDF en mémoire
+    const pdfBuffer = fs.readFileSync(pdfPath);
+    
+    // Créer le dossier s'il n'existe pas
+    const commandeDir = path.join(__dirname, '..', 'public', 'commandes');
+    if (!fs.existsSync(commandeDir)) {
+      fs.mkdirSync(commandeDir, { recursive: true });
+    }
+
+    // Sauvegarder le PDF sur disque (ne pas le supprimer immédiatement)
+    const savedPdfPath = path.join(commandeDir, path.basename(pdfPath));
+    fs.writeFileSync(savedPdfPath, pdfBuffer);
+    console.log(`✅ PDF commande sauvegardé sur disque : ${savedPdfPath}`);
+    
+    // Supprimer le fichier temporaire original s'il est différent
+    if (pdfPath !== savedPdfPath && fs.existsSync(pdfPath)) {
+      try {
+        fs.unlinkSync(pdfPath);
+      } catch (unlinkError) {
+        console.warn('Erreur suppression fichier temporaire:', unlinkError);
+      }
+    }
+
+    const fileName = path.basename(savedPdfPath);
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost';
+    const baseUrl = process.env.BASE_URL || `${protocol}://${host}`;
+    const pdfUrl = `${baseUrl}/api/commande-pdf/${fileName}`;
+
+    // Stocker aussi en cache mémoire pour accès rapide
+    if (!global.pdfCache) {
+      global.pdfCache = new Map();
+    }
+    global.pdfCache.set(`commandes/${fileName}`, {
+      buffer: pdfBuffer,
+      timestamp: Date.now()
+    });
+    
+    // Nettoyer le cache mémoire après 1 heure
+    setTimeout(() => {
+      if (global.pdfCache) {
+        global.pdfCache.delete(`commandes/${fileName}`);
+      }
+    }, 60 * 60 * 1000);
+
+    // Nettoyer le fichier sur disque après 1 heure
+    setTimeout(() => {
+      try {
+        if (fs.existsSync(savedPdfPath)) {
+          fs.unlinkSync(savedPdfPath);
+          console.log(`🗑️ Fichier PDF commande supprimé après 1h : ${savedPdfPath}`);
+        }
+      } catch (unlinkError) {
+        console.error('Erreur suppression fichier PDF:', unlinkError);
+      }
+    }, 60 * 60 * 1000);
 
     return res.json({ success: true, pdfUrl });
   } catch (error) {
@@ -90,8 +216,8 @@ router.post('/generate', async (req, res) => {
 });
 
 
-// Envoi du PDF de commande en pièce jointe via WhatsApp Cloud API
-router.post('/send-whatsapp', async (req, res) => {
+// Envoi du PDF de commande en pièce jointe via WhatsApp Cloud API (route protégée)
+router.post('/send-whatsapp', authenticateToken, databaseInjector.injectConnection.bind(databaseInjector), async (req, res) => {
   try {
     const { document_id, phone, message } = req.body;
 
@@ -118,7 +244,13 @@ router.post('/send-whatsapp', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Commande introuvable' });
     }
 
-    const pdfPath = await commandePdfService.genererPDF(commandeData);
+    // Récupérer les informations depuis le fichier JSON de configuration
+    const pdfConfigService = require('../services/pdf-config.service');
+    const documentSociete = pdfConfigService.getDocumentSociete();
+    
+    const pdfPath = await commandePdfService.genererPDF(commandeData, {
+      documentSociete: documentSociete
+    });
     const fileName = path.basename(pdfPath);
 
     // Lire le fichier PDF

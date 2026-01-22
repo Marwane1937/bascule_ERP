@@ -45,9 +45,37 @@ router.post('/generate', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Le document n\'est pas un retour' });
     }
 
-    const pdfPath = await emailService.genererPDF(retourData, { withStamp: !!withStamp });
+    // Récupérer les informations depuis le fichier JSON de configuration
+    const pdfConfigService = require('../services/pdf-config.service');
+    const documentSociete = pdfConfigService.getDocumentSociete();
+    
+    const pdfPath = await emailService.genererPDF(retourData, { 
+      withStamp: !!withStamp,
+      documentSociete: documentSociete
+    });
 
-    const pdfUrl = `http://localhost:3500/retours/${path.basename(pdfPath)}`;
+    // Lire le PDF en mémoire et le supprimer immédiatement
+    const pdfBuffer = require('fs').readFileSync(pdfPath);
+    require('fs').unlinkSync(pdfPath);
+
+    const fileName = path.basename(pdfPath);
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost';
+    const baseUrl = process.env.BASE_URL || `${protocol}://${host}`;
+    const pdfUrl = `${baseUrl}/api/retour-pdf/${fileName}`;
+
+    if (!global.pdfCache) {
+      global.pdfCache = new Map();
+    }
+    global.pdfCache.set(`retours/${fileName}`, {
+      buffer: pdfBuffer,
+      timestamp: Date.now()
+    });
+    setTimeout(() => {
+      if (global.pdfCache) {
+        global.pdfCache.delete(`retours/${fileName}`);
+      }
+    }, 5 * 60 * 1000);
 
     return res.json({ success: true, pdfUrl });
   } catch (error) {
@@ -95,7 +123,13 @@ router.post('/send-whatsapp', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Retour introuvable' });
     }
 
-    const pdfPath = await emailService.genererPDF(retourData);
+    // Récupérer les informations depuis le fichier JSON de configuration
+    const pdfConfigService = require('../services/pdf-config.service');
+    const documentSociete = pdfConfigService.getDocumentSociete();
+    
+    const pdfPath = await emailService.genererPDF(retourData, {
+      documentSociete: documentSociete
+    });
     const fileName = path.basename(pdfPath);
 
     // Lire le fichier PDF

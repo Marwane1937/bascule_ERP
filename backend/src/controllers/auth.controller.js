@@ -4,24 +4,12 @@ class AuthController {
   // Connexion
   async login(req, res) {
     try {
-      // console.log('========================================');
-      // console.log('[AuthController] 🔐 Requête de connexion reçue');
-      // console.log('[AuthController] Body reçu:', JSON.stringify(req.body, null, 2));
-      // console.log('[AuthController] Headers:', JSON.stringify(req.headers, null, 2));
-
-      // Accepter à la fois "username" et "login" depuis le frontend
-      const { username, login, password, database_name } = req.body;
+     const { username, login, password, database_name } = req.body;
       const userLogin = login || username;
 
-      /*  console.log('[AuthController] Username extrait:', username);
-       console.log('[AuthController] Login extrait:', login);
-       console.log('[AuthController] UserLogin final:', userLogin);
-       console.log('[AuthController] Password présent:', !!password);
-       console.log('[AuthController] Database_name:', database_name);
-       console.log('[AuthController] UserLogin type:', typeof userLogin);
-       console.log('[AuthController] UserLogin vide?', !userLogin || (typeof userLogin === 'string' && userLogin.trim() === ''));
-       console.log('[AuthController] Password vide?', !password || (typeof password === 'string' && password.trim() === ''));
-  */
+      // Log pour déboguer
+      console.log('[AuthController] 🔍 database_name reçu:', database_name);
+   
       if (!userLogin || !password) {
       /*   console.log('[AuthController] ❌ Validation échouée - Username/Login ou password manquant');
         console.log('[AuthController] Username:', username);
@@ -35,7 +23,11 @@ class AuthController {
       }
 
       //console.log('[AuthController] ✅ Validation OK - Appel authService.login...');
-      const result = await authService.login(userLogin, password, database_name);
+      // Ne pas passer database_name si c'est vide, null, ou undefined
+      const databaseNameToUse = database_name && database_name.trim() ? database_name.trim() : null;
+      console.log('[AuthController] 🔍 database_name à utiliser:', databaseNameToUse);
+      
+      const result = await authService.login(userLogin, password, databaseNameToUse);
       // console.log('[AuthController] ✅ Résultat authService:', result ? 'Succès' : 'Échec');
       /*  console.log('[AuthController] 📋 Structure résultat:', JSON.stringify({
          hasUser: !!result.user,

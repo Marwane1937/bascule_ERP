@@ -547,16 +547,9 @@ const exportStockHistoriquePDF = async (req, res) => {
     const sequelize = req.sequelize || require('../config/database').getConnection();
     const { article_nom, dateFrom, dateTo, status } = req.query;
 
-    // Récupérer documentSociete si disponible
-    let documentSociete = null;
-    if (req.user && req.user.societe_id) {
-      try {
-        const documentSocieteService = require('../services/document-societe.service');
-        documentSociete = await documentSocieteService.getDocumentSociete(req.user.societe_id);
-      } catch (error) {
-        console.error('[exportStockHistoriquePDF] Erreur récupération document société (non bloquant):', error.message);
-      }
-    }
+    // Récupérer les informations depuis le fichier JSON de configuration
+    const pdfConfigService = require('../services/pdf-config.service');
+    const documentSociete = pdfConfigService.getDocumentSociete();
 
     // Construction de la requête WHERE (sans pagination pour le PDF)
     let whereConditions = [];
@@ -624,8 +617,30 @@ const exportStockHistoriquePDF = async (req, res) => {
 
     // Retourner l'URL du PDF
     const path = require('path');
+    const fs = require('fs');
+    
+    // Lire le PDF en mémoire et le supprimer immédiatement
+    const pdfBuffer = fs.readFileSync(pdfPath);
+    fs.unlinkSync(pdfPath);
+
     const fileName = path.basename(pdfPath);
-    const pdfUrl = `http://localhost:3500/stock-historique/${fileName}`;
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost';
+    const baseUrl = process.env.BASE_URL || `${protocol}://${host}`;
+    const pdfUrl = `${baseUrl}/api/stock/historique/${fileName}`;
+
+    if (!global.pdfCache) {
+      global.pdfCache = new Map();
+    }
+    global.pdfCache.set(`stock-historique/${fileName}`, {
+      buffer: pdfBuffer,
+      timestamp: Date.now()
+    });
+    setTimeout(() => {
+      if (global.pdfCache) {
+        global.pdfCache.delete(`stock-historique/${fileName}`);
+      }
+    }, 5 * 60 * 1000);
 
     res.json({
       success: true,

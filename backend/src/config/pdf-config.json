@@ -1,0 +1,17 @@
+{
+  "logo": {
+    "path": "src/public/maties.png",
+    "width": 150,
+    "height": null,
+    "description": "Chemin vers le logo de l'entreprise. width: largeur en points (défaut: 100), height: hauteur en points (optionnel, null = proportionnel)"
+  },
+  "entete": {
+    "path": "",
+    "description": "Chemin vers le fichier JSON contenant l'en-tête avec formatage (fontSize, color, font, align, etc.)"
+  },
+  "pied_page": {
+    "path": "src/config/pied-page.json",
+    "description": "Chemin vers le fichier JSON contenant le pied de page avec formatage (fontSize, color, font, align, etc.)"
+  }
+}
+

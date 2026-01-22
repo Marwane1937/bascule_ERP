@@ -1,6 +1,7 @@
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
+const { renderFormattedText } = require('./pdf-format-helper');
 
 /**
  * Service dédié à la génération de PDF pour les AVOIRS
@@ -221,36 +222,43 @@ class AvoirPdfService {
 
                 doc.pipe(writeStream);
 
+                // Récupérer la taille du logo depuis la configuration
+                const logoSize = options.documentSociete?.logoSize || { width: 100, height: null };
+                const imageOptions = { width: logoSize.width };
+                if (logoSize.height) {
+                    imageOptions.height = logoSize.height;
+                }
+                
                 // Logo
                 if (options.documentSociete && options.documentSociete.logo) {
                     try {
                         const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-                        doc.image(logoBuffer, 50, 20, { width: 100 });
+                        doc.image(logoBuffer, 50, 20, imageOptions);
                     } catch (error) {
                         const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-                        if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
+                        if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
                     }
                 } else {
                     const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-                    if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
+                    if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
                 }
 
                 // Header
                 if (options.documentSociete && options.documentSociete.entete) {
-                    const enteteText = htmlToPlainText(options.documentSociete.entete);
-                    const enteteLines = enteteText.split('\n');
-                    let yPos = 30;
-                    enteteLines.forEach(line => {
-                        if (line.trim()) {
-                            doc.fontSize(10).font('Helvetica-Bold').text(line.trim(), 160, yPos);
-                            yPos += 12;
-                        }
-                    });
-                } else {
-                    doc.fontSize(11).fillColor('#046ba7').font('Helvetica-Bold').text('Balances et Bascules Pont Bascule Electronique', 160, 30);
-                    doc.font('Helvetica').fontSize(10)
-                        .text('Mecanique - Vente et Reparation - Entretien', 160, 45)
-                        .text('Etalonnage Logiciels de Gestion', 160, 58);
+                    const entete = options.documentSociete.entete;
+                    // Vérifier si c'est un objet JSON ou du texte brut
+                    if (typeof entete === 'object' || (typeof entete === 'string' && entete.trim())) {
+                        renderFormattedText(doc, entete, {
+                            startX: 160,
+                            startY: 20,
+                            defaultFontSize: 10,
+                            defaultColor: '#046ba7',
+                            defaultFont: 'Helvetica-Bold',
+                            defaultAlign: 'left',
+                            defaultLineSpacing: 12,
+                            width: 435
+                        });
+                    }
                 }
 
                 doc.rect(40, 100, 520, 1).fill('#000');
@@ -484,13 +492,21 @@ class AvoirPdfService {
                 const footerHeight = 32;
                 const footerY = pageHeight - 40 - footerHeight;
                 doc.rect(0, footerY, 595, footerHeight).fill(footerBgColor);
-                doc.font('Helvetica').fontSize(7).fillColor('#000');
                 if (options.documentSociete && options.documentSociete.pied_page) {
-                    doc.text(htmlToPlainText(options.documentSociete.pied_page), 50, footerY + 2, { width: 495, align: 'center' });
-                } else {
-                    doc.text('SARL au capital 500 000.00 DHS - allée des orangers Derb Najat Rue 4 N°67 RDC Ain Sebaa Casablanca', 50, footerY + 2, { width: 495, align: 'center' });
-                    doc.text('Tel : 0522672135 - Fax 0522672143 - RC120431TP37951465 IF : 1680027 Email : info@lesbasculesmondial.com', 50, footerY + 12, { width: 495, align: 'center' });
-                    doc.text('RIB 007 780 000368400000157019 - CNSS : 6463814 ICE : 000079494000078', 50, footerY + 22, { width: 495, align: 'center' });
+                    const piedPage = options.documentSociete.pied_page;
+                    // Vérifier si c'est un objet JSON ou du texte brut
+                    if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
+                        renderFormattedText(doc, piedPage, {
+                            startX: 50,
+                            startY: footerY + 2,
+                            defaultFontSize: 7,
+                            defaultColor: '#000000',
+                            defaultFont: 'Helvetica',
+                            defaultAlign: 'center',
+                            defaultLineSpacing: 10,
+                            width: 495
+                        });
+                    }
                 }
 
                 doc.end();

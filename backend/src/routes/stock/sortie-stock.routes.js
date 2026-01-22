@@ -81,7 +81,30 @@ router.post('/sortie-stock/generate-pdf', async (req, res) => {
     });
 
     const path = require('path');
-    const pdfUrl = `http://localhost:3500/sorties-stock/${path.basename(pdfPath)}`;
+    const fs = require('fs');
+    
+    // Lire le PDF en mémoire et le supprimer immédiatement
+    const pdfBuffer = fs.readFileSync(pdfPath);
+    fs.unlinkSync(pdfPath);
+
+    const fileName = path.basename(pdfPath);
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost';
+    const baseUrl = process.env.BASE_URL || `${protocol}://${host}`;
+    const pdfUrl = `${baseUrl}/api/stock/sortie-stock/${fileName}`;
+
+    if (!global.pdfCache) {
+      global.pdfCache = new Map();
+    }
+    global.pdfCache.set(`sorties-stock/${fileName}`, {
+      buffer: pdfBuffer,
+      timestamp: Date.now()
+    });
+    setTimeout(() => {
+      if (global.pdfCache) {
+        global.pdfCache.delete(`sorties-stock/${fileName}`);
+      }
+    }, 5 * 60 * 1000);
 
     return res.json({ success: true, pdfUrl });
   } catch (error) {

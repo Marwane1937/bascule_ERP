@@ -1,6 +1,8 @@
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
+const { renderFormattedText } = require('./pdf-format-helper');
+const pdfConfigService = require('./pdf-config.service');
 
 /**
  * Service dédié à la génération de PDF pour les BONS DE COMMANDE
@@ -148,45 +150,62 @@ class CommandePdfService {
         doc.pipe(writeStream);
 
         // === ENTÊTE ENTREPRISE ===
-        // Utiliser le logo personnalisé si disponible, sinon le logo par défaut (comme le devis)
+        // Récupérer la taille du logo depuis la configuration
+        const logoSize = options.documentSociete?.logoSize || { width: 100, height: null };
+        const imageOptions = { width: logoSize.width };
+        if (logoSize.height) {
+          imageOptions.height = logoSize.height;
+        }
+        
+        // Utiliser le logo personnalisé si disponible, sinon le logo par défaut
+        let logoDrawn = false;
         if (options.documentSociete && options.documentSociete.logo) {
           try {
             const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-            doc.image(logoBuffer, 50, 20, { width: 100 });
+            doc.image(logoBuffer, 50, 20, imageOptions);
+            logoDrawn = true;
           } catch (error) {
-            console.warn('Erreur affichage logo personnalisé, utilisation du logo par défaut:', error);
-            const logoPath = path.join(__dirname, '..', 'public', 'Cactus.png');
-            if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
+            console.warn('[commande-pdf] Erreur affichage logo base64, tentative avec chemin:', error.message);
           }
-        } else {
-          const logoPath = path.join(__dirname, '..', 'public', 'Cactus.png');
-          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
+        }
+        
+        // Si le logo n'a pas pu être chargé depuis base64, essayer depuis le chemin de configuration
+        if (!logoDrawn) {
+          try {
+            const logoPath = pdfConfigService.getLogoPath();
+            if (logoPath && fs.existsSync(logoPath)) {
+              doc.image(logoPath, 50, 20, imageOptions);
+              logoDrawn = true;
+            }
+          } catch (error) {
+            console.warn('[commande-pdf] Erreur chargement logo depuis chemin:', error.message);
+          }
+        }
+        
+        // Fallback : logo par défaut
+        if (!logoDrawn) {
+          const defaultLogoPath = path.join(__dirname, '..', 'public', 'Cactus.png');
+          if (fs.existsSync(defaultLogoPath)) {
+            doc.image(defaultLogoPath, 50, 20, imageOptions);
+          }
         }
 
-        // Utiliser l'en-tête personnalisé si disponible (comme le devis)
+        // Utiliser l'en-tête personnalisé si disponible - à côté du logo
         if (options.documentSociete && options.documentSociete.entete) {
-          // Parser l'en-tête HTML et l'afficher
-          const htmlToPlainText = (html) => {
-            if (!html) return '';
-            return html.replace(/<[^>]*>/g, '').replace(/[ \t]+/g, ' ').trim();
-          };
-          const enteteText = htmlToPlainText(options.documentSociete.entete);
-          const enteteLines = enteteText.split('\n');
-          let yPos = 30;
-          enteteLines.forEach(line => {
-            if (line.trim()) {
-              doc.fontSize(10).font('Helvetica-Bold').text(line.trim(), 160, yPos);
-              yPos += 12;
-            }
-          });
-        } else {
-          // En-tête par défaut à droite du logo (ajusté pour logo de 100px)
-          doc.fontSize(11).fillColor('#bccbaa').font('Helvetica-Bold').text('Cactus Informatique', 160, 30);
-          doc.font('Helvetica').fontSize(10).fillColor('#000')
-            .text('LOTISSEMENT HLIWA RUE 8 N°69', 160, 45)
-            .text('AIN SEBAA 20250 CASABLANCA', 160, 58)
-            .text('TEL : 05 22 34 35 45', 160, 71)
-            .text('FAX : 05 22 67 38 09', 160, 84);
+          const entete = options.documentSociete.entete;
+          // Vérifier si c'est un objet JSON ou du texte brut
+          if (typeof entete === 'object' || (typeof entete === 'string' && entete.trim())) {
+            renderFormattedText(doc, entete, {
+              startX: 160,
+              startY: 20,
+              defaultFontSize: 10,
+              defaultColor: '#046ba7',
+              defaultFont: 'Helvetica-Bold',
+              defaultAlign: 'left',
+              defaultLineSpacing: 12,
+              width: 435
+            });
+          }
         }
 
         // Ligne de séparation horizontale
@@ -482,56 +501,39 @@ class CommandePdfService {
           doc.rect(0, newFooterY, 595, footerHeight).fill(footerBgColor);
 
           if (options.documentSociete && options.documentSociete.pied_page) {
-            const piedPageText = htmlToPlainText(options.documentSociete.pied_page);
-            // Diviser le texte en lignes si nécessaire
-            const lines = piedPageText.split('\n').filter(l => l.trim());
-            if (lines.length > 0) {
-              doc.font('Helvetica').fontSize(7).fillColor('#000');
-              lines.forEach((line, index) => {
-                doc.text(line.trim(), 50, newFooterY + 5 + (index * footerLineSpacing), { width: 495, align: 'center' });
+            const piedPage = options.documentSociete.pied_page;
+            // Vérifier si c'est un objet JSON ou du texte brut
+            if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
+              renderFormattedText(doc, piedPage, {
+                startX: 50,
+                startY: newFooterY + 5,
+                defaultFontSize: 7,
+                defaultColor: '#000000',
+                defaultFont: 'Helvetica',
+                defaultAlign: 'center',
+                defaultLineSpacing: footerLineSpacing,
+                width: 495
               });
-            } else {
-              doc.font('Helvetica').fontSize(7).fillColor('#000');
-              doc.text(piedPageText, 50, newFooterY + 4, { width: 495, align: 'center' });
             }
-          } else {
-            // Pied de page par défaut avec toutes les informations (3 lignes)
-            doc.font('Helvetica').fontSize(7).fillColor('#000');
-
-            // Ligne 1 : SARL au capital
-            doc.text(
-              'SARL au capital 500 000.00 DHS - allée des orangers Derb Najat Rue 4 N°67 RDC Ain Sebaa Casablanca',
-              50, newFooterY + 5, { width: 495, align: 'center' }
-            );
-
-            // Ligne 2 : Téléphone, Fax, RC, IF, Email (avec espacement)
-            doc.text(
-              'Tel : 0522672135 - Fax 0522672143 - RC120431TP37951465 IF : 1680027 Email : info@lesbasculesmondial.com',
-              50, newFooterY + 5 + footerLineSpacing, { width: 495, align: 'center' }
-            );
-
-            // Ligne 3 : RIB, CNSS, ICE (avec espacement)
-            doc.text(
-              'RIB 007 780 000368400000157019 - CNSS : 6463814 ICE : 000079494000078',
-              50, newFooterY + 5 + (footerLineSpacing * 2), { width: 495, align: 'center' }
-            );
           }
         } else {
           // Rectangle de fond pour le pied de page
           doc.rect(0, footerY, 595, footerHeight).fill(footerBgColor);
 
           if (options.documentSociete && options.documentSociete.pied_page) {
-            const piedPageText = htmlToPlainText(options.documentSociete.pied_page);
-            // Diviser le texte en lignes si nécessaire
-            const lines = piedPageText.split('\n').filter(l => l.trim());
-            if (lines.length > 0) {
-              doc.font('Helvetica').fontSize(7).fillColor('#000');
-              lines.forEach((line, index) => {
-                doc.text(line.trim(), 50, footerStartY + (index * footerLineSpacing), { width: 495, align: 'center' });
+            const piedPage = options.documentSociete.pied_page;
+            // Vérifier si c'est un objet JSON ou du texte brut
+            if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
+              renderFormattedText(doc, piedPage, {
+                startX: 50,
+                startY: footerStartY,
+                defaultFontSize: 7,
+                defaultColor: '#000000',
+                defaultFont: 'Helvetica',
+                defaultAlign: 'center',
+                defaultLineSpacing: footerLineSpacing,
+                width: 495
               });
-            } else {
-              doc.font('Helvetica').fontSize(7).fillColor('#000');
-              doc.text(piedPageText, 50, footerStartY, { width: 495, align: 'center' });
             }
           } else {
             // Pied de page par défaut avec toutes les informations (3 lignes)

@@ -1,6 +1,7 @@
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
+const { renderFormattedText } = require('../pdf-format-helper');
 
 /**
  * Service dédié à la génération de PDF pour les BONS DE COMMANDE ACHAT
@@ -215,40 +216,43 @@ class BonCommandeAchatPdfService {
         doc.pipe(writeStream);
 
         // === ENTÊTE ENTREPRISE ===
+        // Récupérer la taille du logo depuis la configuration
+        const logoSize = options.documentSociete?.logoSize || { width: 100, height: null };
+        const imageOptions = { width: logoSize.width };
+        if (logoSize.height) {
+          imageOptions.height = logoSize.height;
+        }
+        
         if (options.documentSociete && options.documentSociete.logo) {
           try {
             const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-            doc.image(logoBuffer, 50, 20, { width: 100 });
+            doc.image(logoBuffer, 50, 20, imageOptions);
           } catch (error) {
             console.warn('Erreur affichage logo personnalisé, utilisation du logo par défaut:', error);
             const logoPath = path.join(__dirname, '..', '..', 'public', 'logo-bascule.jpg');
-            if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
+            if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
           }
         } else {
           const logoPath = path.join(__dirname, '..', '..', 'public', 'logo-bascule.jpg');
-          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
+          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
         }
 
-        // Utiliser l'en-tête personnalisé si disponible
+        // Utiliser l'en-tête personnalisé si disponible - à côté du logo
         if (options.documentSociete && options.documentSociete.entete) {
-          const htmlToPlainText = (html) => {
-            if (!html) return '';
-            return html.replace(/<[^>]*>/g, '').replace(/[ \t]+/g, ' ').trim();
-          };
-          const enteteText = htmlToPlainText(options.documentSociete.entete);
-          const enteteLines = enteteText.split('\n');
-          let yPos = 30;
-          enteteLines.forEach(line => {
-            if (line.trim()) {
-              doc.fontSize(10).font('Helvetica-Bold').text(line.trim(), 160, yPos);
-              yPos += 12;
-            }
-          });
-        } else {
-          doc.fontSize(11).fillColor('#046ba7').font('Helvetica-Bold').text('Balances et Bascules Pont Bascule Electronique', 160, 30);
-          doc.font('Helvetica').fontSize(10)
-            .text('Mecanique - Vente et Reparation - Entretien', 160, 45)
-            .text('Etalonnage Logiciels de Gestion', 160, 58);
+          const entete = options.documentSociete.entete;
+          // Vérifier si c'est un objet JSON ou du texte brut
+          if (typeof entete === 'object' || (typeof entete === 'string' && entete.trim())) {
+            renderFormattedText(doc, entete, {
+              startX: 160,
+              startY: 20,
+              defaultFontSize: 10,
+              defaultColor: '#046ba7',
+              defaultFont: 'Helvetica-Bold',
+              defaultAlign: 'left',
+              defaultLineSpacing: 12,
+              width: 435
+            });
+          }
         }
 
         // Ligne de séparation horizontale
@@ -504,37 +508,39 @@ class BonCommandeAchatPdfService {
           doc.rect(0, newFooterY, 595, footerHeight).fill(footerBgColor);
 
           if (options.documentSociete && options.documentSociete.pied_page) {
-            const piedPageText = htmlToPlainText(options.documentSociete.pied_page);
-            const lines = piedPageText.split('\n').filter(l => l.trim());
-            if (lines.length > 0) {
-              doc.font('Helvetica').fontSize(7).fillColor('#000');
-              lines.forEach((line, index) => {
-                doc.text(line.trim(), 50, newFooterY + 5 + (index * footerLineSpacing), { width: 495, align: 'center' });
+            const piedPage = options.documentSociete.pied_page;
+            // Vérifier si c'est un objet JSON ou du texte brut
+            if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
+              renderFormattedText(doc, piedPage, {
+                startX: 50,
+                startY: newFooterY + 5,
+                defaultFontSize: 7,
+                defaultColor: '#000000',
+                defaultFont: 'Helvetica',
+                defaultAlign: 'center',
+                defaultLineSpacing: footerLineSpacing,
+                width: 495
               });
-            } else {
-              doc.font('Helvetica').fontSize(7).fillColor('#000');
-              doc.text(piedPageText, 50, newFooterY + 4, { width: 495, align: 'center' });
             }
-          } else {
-            this.renderDefaultFooter(doc, newFooterY + 5, footerLineSpacing);
           }
         } else {
           doc.rect(0, footerY, 595, footerHeight).fill(footerBgColor);
 
           if (options.documentSociete && options.documentSociete.pied_page) {
-            const piedPageText = htmlToPlainText(options.documentSociete.pied_page);
-            const lines = piedPageText.split('\n').filter(l => l.trim());
-            if (lines.length > 0) {
-              doc.font('Helvetica').fontSize(7).fillColor('#000');
-              lines.forEach((line, index) => {
-                doc.text(line.trim(), 50, footerStartY + (index * footerLineSpacing), { width: 495, align: 'center' });
+            const piedPage = options.documentSociete.pied_page;
+            // Vérifier si c'est un objet JSON ou du texte brut
+            if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
+              renderFormattedText(doc, piedPage, {
+                startX: 50,
+                startY: footerStartY,
+                defaultFontSize: 7,
+                defaultColor: '#000000',
+                defaultFont: 'Helvetica',
+                defaultAlign: 'center',
+                defaultLineSpacing: footerLineSpacing,
+                width: 495
               });
-            } else {
-              doc.font('Helvetica').fontSize(7).fillColor('#000');
-              doc.text(piedPageText, 50, footerStartY, { width: 495, align: 'center' });
             }
-          } else {
-            this.renderDefaultFooter(doc, footerStartY, footerLineSpacing);
           }
         }
 

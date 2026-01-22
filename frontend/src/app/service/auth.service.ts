@@ -108,9 +108,10 @@ export class AuthService {
 
   // Connexion
   login(login: string, password: string, societeId?: number, databaseName?: string): Observable<LoginResponse> {
-    // Récupérer le nom de la base de données depuis localStorage si disponible
-    const savedDatabaseName = localStorage.getItem('currentDatabaseName');
-    const databaseNameToUse = databaseName || savedDatabaseName;
+    // Ne pas utiliser automatiquement currentDatabaseName au login
+    // L'utilisateur doit explicitement choisir une base différente via databaseName
+    // Au login, on utilise la base par défaut du .env
+    const databaseNameToUse = databaseName; // Seulement si explicitement fourni
     
     // Récupérer la société sélectionnée si disponible
     const currentSociete = this.currentSocieteSubject.value;
@@ -127,6 +128,8 @@ export class AuthService {
     if (societeIdToUse) {
       body.societe_id = societeIdToUse;
     }
+    // Ne pas envoyer database_name au login par défaut
+    // Il sera utilisé seulement si explicitement fourni (après sélection d'une base différente)
     if (databaseNameToUse) {
       body.database_name = databaseNameToUse;
     }
@@ -139,9 +142,13 @@ export class AuthService {
             localStorage.setItem('token', response.data.token);
             localStorage.setItem('user', JSON.stringify(response.data.user));
             
-            // Stocker le nom de la base de données si fourni
+            // Stocker le nom de la base de données seulement si fourni explicitement
             if (databaseNameToUse) {
               localStorage.setItem('currentDatabaseName', databaseNameToUse);
+            } else {
+              // Au login, utiliser la base par défaut du .env
+              // Ne pas stocker de database_name si aucune base spécifique n'a été choisie
+              localStorage.removeItem('currentDatabaseName');
             }
 
             // Stocker les permissions si disponibles
@@ -185,6 +192,10 @@ export class AuthService {
     // IMPORTANT: éviter que currentSociete (souvent base mère) écrase currentDatabaseName dans l'interceptor
     localStorage.removeItem('currentSociete');
     localStorage.removeItem('currentSocieteId');
+    // Nettoyer aussi les informations de base de données
+    localStorage.removeItem('currentDatabaseName');
+    localStorage.removeItem('currentDatabaseId');
+    localStorage.removeItem('currentDatabaseLabel');
     this.currentUserSubject.next(null);
     this.documentSocieteSubject.next(null);
     this.currentSocieteSubject.next(null);

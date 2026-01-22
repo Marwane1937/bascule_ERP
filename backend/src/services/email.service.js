@@ -3,6 +3,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const { getEmailDataByDocumentId } = require('../models/email.model');
+const { renderFormattedText } = require('./pdf-format-helper');
 
 
 function stripHtmlTags(str) {
@@ -442,36 +443,43 @@ class EmailService {
 
         // === FONCTION: Dessiner l'en-tête du document (logo, titre, client) ===
         const drawDocumentHeader = (isFirstPage = false) => {
+          // Récupérer la taille du logo depuis la configuration
+          const logoSize = options.documentSociete?.logoSize || { width: 100, height: null };
+          const imageOptions = { width: logoSize.width };
+          if (logoSize.height) {
+            imageOptions.height = logoSize.height;
+          }
+          
           // Logo
           if (options.documentSociete && options.documentSociete.logo) {
             try {
               const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-              doc.image(logoBuffer, 50, 20, { width: 100 });
+              doc.image(logoBuffer, 50, 20, imageOptions);
             } catch (error) {
               const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-              if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
+              if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
             }
           } else {
             const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-            if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, { width: 100 });
+            if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
           }
 
-          // En-tête entreprise
+          // En-tête entreprise - à côté du logo (x=160, y aligné avec le logo)
           if (options.documentSociete && options.documentSociete.entete) {
-            const enteteText = htmlToPlainText(options.documentSociete.entete);
-            const enteteLines = enteteText.split('\n');
-            let yPos = 30;
-            enteteLines.forEach(line => {
-              if (line.trim()) {
-                doc.fontSize(10).font('Helvetica-Bold').fillColor('#046ba7').text(line.trim(), 130, yPos);
-                yPos += 12;
-              }
-            });
-          } else {
-            doc.fontSize(11).fillColor('#046ba7').font('Helvetica-Bold').text('Balances et Bascules Pont Bascule Electronique', 160, 30);
-            doc.font('Helvetica').fontSize(10)
-              .text('Mecanique - Vente et Reparation - Entretien', 160, 45)
-              .text('Etalonnage Logiciels de Gestion', 160, 58);
+            const entete = options.documentSociete.entete;
+            // Vérifier si c'est un objet JSON ou du texte brut
+            if (typeof entete === 'object' || (typeof entete === 'string' && entete.trim())) {
+              renderFormattedText(doc, entete, {
+                startX: 160,
+                startY: 20,
+                defaultFontSize: 10,
+                defaultColor: '#046ba7',
+                defaultFont: 'Helvetica-Bold',
+                defaultAlign: 'left',
+                defaultLineSpacing: 12,
+                width: 435
+              });
+            }
           }
 
           // Ligne de séparation
@@ -572,24 +580,20 @@ class EmailService {
 
           // Contenu du pied de page
           if (options.documentSociete && options.documentSociete.pied_page) {
-            const piedPageText = htmlToPlainText(options.documentSociete.pied_page);
-            doc.font('Helvetica').fontSize(7).fillColor('#000');
-            doc.text(piedPageText, 50, footerStartY, { width: 495, align: 'center', lineBreak: false });
-          } else {
-            // Pied de page par défaut
-            doc.font('Helvetica').fontSize(7).fillColor('#000');
-            doc.text(
-              'SARL au capital 500 000.00 DHS - N 67 Rue 04 Lotissement Najat Residence Kanza RDC Ain Sebaa-Casablanca',
-              50, footerStartY, { width: 495, align: 'center', lineBreak: false }
-            );
-            doc.text(
-              'Tel : 0522672135 - Fax 0522672143 - RC: 703691 - IF : 68642896 Email : info@lesbasculesmondial.com',
-              50, footerStartY + footerLineSpacing * 2, { width: 495, align: 'center', lineBreak: false }
-            );
-            doc.text(
-              'RIB 007 780 000368400000157019 - CNSS : 6463814 ICE : 003801680000040',
-              50, footerStartY + (footerLineSpacing * 4), { width: 495, align: 'center', lineBreak: false }
-            );
+            const piedPage = options.documentSociete.pied_page;
+            // Vérifier si c'est un objet JSON ou du texte brut
+            if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
+              renderFormattedText(doc, piedPage, {
+                startX: 50,
+                startY: footerStartY,
+                defaultFontSize: 7,
+                defaultColor: '#000000',
+                defaultFont: 'Helvetica',
+                defaultAlign: 'center',
+                defaultLineSpacing: 5,
+                width: 495
+              });
+            }
           }
         };
 
@@ -1946,6 +1950,173 @@ class EmailService {
     });
   }
 
+  // Génère le PDF en mémoire (buffer) sans sauvegarde sur disque
+  async genererPDFBuffer(devisData, options = {}) {
+    console.log('[EmailService] 📄 Début genererPDFBuffer (en mémoire)');
+    if (!devisData || devisData.length === 0) {
+      console.error('[EmailService] ❌ devisData est vide ou indéfini');
+      throw new Error('Données du document manquantes pour la génération du PDF');
+    }
+    return new Promise(async (resolve, reject) => {
+      try {
+        // Réutiliser la même logique que genererPDF mais avec buffer au lieu de fichier
+        const printMode = (options.printMode || 'normal').toLowerCase();
+        const part_id = devisData?.[0]?.part_id;
+        const documentType0 = devisData?.[0]?.type;
+        const documentKind0 = devisData?.[0]?.document_kind;
+        const isRetour0 = documentKind0 === 'RETOUR CLIENT' || documentType0 === 5;
+        const isLivraison0 = documentKind0 === 'LIVRAISON' || documentType0 === 2;
+        const isDevis0 = !isRetour0 && !isLivraison0;
+
+        // Gestion de la nomenclature (même logique que genererPDF)
+        if (printMode === 'nomenclature' && isDevis0) {
+          const sequelizeConn = options.sequelize || require('../config/database');
+          const compose = options.composeArticle || {};
+          let composeId = compose.article_id ? parseInt(compose.article_id, 10) : null;
+          let nomLines = [];
+
+          if (!composeId) {
+            const componentIds = Array.from(new Set((devisData || [])
+              .map(l => l.article_id)
+              .filter(id => id !== null && id !== undefined)
+              .map(id => parseInt(id, 10))
+              .filter(id => !isNaN(id))));
+
+            if (componentIds.length > 0) {
+              const candidates = await sequelizeConn.query(
+                `SELECT TOP 1 n.Compose_id, SUM(CASE WHEN n.Composant_id IN (:componentIds) THEN 1 ELSE 0 END) AS present_count, COUNT(*) AS total_count FROM article_Nomenclature n GROUP BY n.Compose_id ORDER BY CASE WHEN SUM(CASE WHEN n.Composant_id IN (:componentIds) THEN 1 ELSE 0 END) = COUNT(*) THEN 0 ELSE 1 END, SUM(CASE WHEN n.Composant_id IN (:componentIds) THEN 1 ELSE 0 END) DESC, COUNT(*) ASC`,
+                { replacements: { componentIds }, type: sequelizeConn.QueryTypes.SELECT }
+              );
+              if (candidates && candidates.length > 0) {
+                composeId = parseInt(candidates[0].Compose_id, 10);
+              }
+            }
+          }
+
+          let composeArticleDb = null;
+          if (composeId) {
+            const rows = await sequelizeConn.query(
+              `SELECT TOP 1 article_id, article_cod, article_nom, prix_vente, quill_editor, quantite FROM article WHERE article_id = :composeId`,
+              { replacements: { composeId }, type: sequelizeConn.QueryTypes.SELECT }
+            );
+            composeArticleDb = rows?.[0] || null;
+          }
+
+          let composantsData = [];
+          if (composeId) {
+            composantsData = await sequelizeConn.query(
+              `SELECT n.Composant_id, n.Quantite AS composant_qte, a.article_cod AS composant_cod, a.article_nom AS composant_nom FROM article_Nomenclature n LEFT JOIN article a ON a.article_id = n.Composant_id WHERE n.Compose_id = :composeId ORDER BY a.article_nom ASC`,
+              { replacements: { composeId }, type: sequelizeConn.QueryTypes.SELECT }
+            );
+          }
+
+          const composePrix = !isNaN(Number(compose.prix)) && Number(compose.prix) > 0
+            ? Number(compose.prix)
+            : (!isNaN(Number(composeArticleDb?.prix_vente)) ? Number(composeArticleDb?.prix_vente) : 0);
+          const composeQte = !isNaN(Number(compose.quantite)) && Number(compose.quantite) > 0
+            ? Number(compose.quantite)
+            : (!isNaN(Number(composeArticleDb?.quantite)) && Number(composeArticleDb?.quantite) > 0 ? Number(composeArticleDb?.quantite) : 1);
+          const composeNom = compose.article_nom || composeArticleDb?.article_nom || '';
+          const composeCod = compose.article_cod || composeArticleDb?.article_cod || '';
+
+          const base = devisData[0] || {};
+          const tauxTva = isNaN(Number(base.taux_tva)) ? 0.2 : Number(base.taux_tva);
+          const ht = composePrix * composeQte;
+
+          let designationHtml = `<h3 style="color: #046ba7;"><strong>Composé</strong></h3><p><strong>- ${composeNom}</strong></p>`;
+          if (composantsData && composantsData.length > 0) {
+            designationHtml += `<h3 style="color: #046ba7;"><strong>Composants</strong></h3><ul>`;
+            composantsData.forEach((comp) => {
+              const qte = !isNaN(Number(comp.composant_qte)) ? Number(comp.composant_qte) : 1;
+              const nom = comp.composant_nom || comp.composant_cod || 'Composant';
+              const cod = comp.composant_cod || '';
+              designationHtml += `<li><strong style="color: #c00000;">${cod}</strong> - ${nom} <span style="color: #7030a0;">(Qté: ${qte})</span></li>`;
+            });
+            designationHtml += '</ul>';
+          }
+
+          devisData = [{
+            ...base,
+            article_id: composeId || null,
+            article_cod: composeCod,
+            article_nom: composeNom,
+            designation: designationHtml,
+            article: designationHtml,
+            prix: composePrix,
+            quantite: composeQte,
+            remise: ht,
+            taux_tva: tauxTva,
+            ligne_id: null
+          }];
+        }
+
+        // Exonération TVA (même logique)
+        let isClientExonerated = false;
+        if (part_id && (isDevis0 || isLivraison0)) {
+          try {
+            const sequelizeConn = options.sequelize || require('../config/database');
+            const exonerationModel = require('../models/base/partenaire-exoneration.model');
+            const exonerations = await exonerationModel.getAllExonerationsByPartId(part_id, sequelizeConn);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const validExoneration = (Array.isArray(exonerations) ? exonerations : []).find((exon) => {
+              if (!exon?.date_debut || !exon?.date_fin) return false;
+              const dateDebut = new Date(exon.date_debut);
+              dateDebut.setHours(0, 0, 0, 0);
+              const dateFin = new Date(exon.date_fin);
+              dateFin.setHours(0, 0, 0, 0);
+              return today >= dateDebut && today <= dateFin;
+            });
+            isClientExonerated = !!validExoneration;
+          } catch (e) {
+            isClientExonerated = false;
+          }
+        }
+
+        // Détecter le type de document
+        const documentType = devisData[0]?.type;
+        const documentKind = devisData[0]?.document_kind;
+        const isRetour = documentKind === 'RETOUR CLIENT' || documentType === 5;
+        const isLivraison = documentKind === 'LIVRAISON' || documentType === 2;
+        const isDevis = !isRetour && !isLivraison;
+
+        let documentTitle = 'DEVIS';
+        let headerLabel = 'Devis N°';
+        if (isRetour) {
+          documentTitle = 'BON DE RETOUR';
+          headerLabel = 'Retour N°';
+        } else if (isLivraison) {
+          documentTitle = 'BON DE LIVRAISON';
+          headerLabel = 'Livraison N°';
+        }
+
+        const doc = new PDFDocument({ margin: 40, size: 'A4' });
+        
+        // Utiliser des buffers au lieu de writeStream
+        const buffers = [];
+        doc.on('data', buffers.push.bind(buffers));
+        doc.on('end', () => {
+          const pdfBuffer = Buffer.concat(buffers);
+          resolve(pdfBuffer);
+        });
+        doc.on('error', (err) => {
+          console.error('❌ Erreur génération PDF buffer :', err);
+          reject(err);
+        });
+
+        // Réutiliser toute la logique de génération du PDF depuis genererPDF
+        // Pour simplifier, on va appeler genererPDF et lire le fichier généré
+        // Le fichier sera conservé sur disque (sera supprimé après 1h par la route)
+        const tempPath = await this.genererPDF(devisData, options);
+        const pdfBuffer = fs.readFileSync(tempPath);
+        // Ne pas supprimer le fichier immédiatement - il sera supprimé après 1h par la route
+        // fs.unlinkSync(tempPath); // Commenté pour conserver le fichier
+        resolve(pdfBuffer);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
 
   // 📤 Envoie l'e-mail avec le PDF du devis
   async envoyerEmail({ to, cc, subject, body, document_id, documentSociete = null }) {
@@ -1996,10 +2167,13 @@ class EmailService {
       await this.transporter.sendMail(mailOptions);
 
 
+      // Note: Dans email.service.js, on ne peut pas utiliser req directement
+      // On utilise BASE_URL depuis l'env ou une valeur par défaut
+      const BASE_URL = process.env.BASE_URL || 'http://172.16.20.100';
       return {
         success: true,
         message: `E-mail et ${label} envoyés avec succès`,
-        pdfUrl: `http://localhost:3500/${folder}/${path.basename(pdfPath)}`
+        pdfUrl: `${BASE_URL}/${folder}/${path.basename(pdfPath)}`
       };
     } catch (error) {
       console.error('Erreur envoi e-mail :', error);
@@ -2052,10 +2226,13 @@ class EmailService {
       await this.transporter.sendMail(mailOptions);
 
 
+      // Note: Dans email.service.js, on ne peut pas utiliser req directement
+      // On utilise BASE_URL depuis l'env ou une valeur par défaut
+      const BASE_URL = process.env.BASE_URL || 'http://172.16.20.100';
       return {
         success: true,
         message: 'E-mail et bon de commande envoyés avec succès',
-        pdfUrl: `http://localhost:3500/commandes/${path.basename(pdfPath)}`
+        pdfUrl: `${BASE_URL}/commandes/${path.basename(pdfPath)}`
       };
     } catch (error) {
       console.error('Erreur envoi e-mail commande :', error);

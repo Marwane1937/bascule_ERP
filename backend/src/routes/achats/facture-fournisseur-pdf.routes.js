@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const factureFournisseurPdfService = require('../../services/achats/facture-fournisseur-pdf.service');
 const { getFactureFournisseurReportById } = require('../../models/achats/facture-fournisseur.model');
-const documentSocieteService = require('../../services/document_societe.service');
+const pdfConfigService = require('../../services/pdf-config.service');
 const { authenticateToken } = require('../../middleware/auth.middleware');
 const databaseInjector = require('../../middleware/database-injector.middleware');
 const path = require('path');
@@ -38,14 +38,8 @@ router.get('/:facture_id', async (req, res) => {
       });
     }
 
-    // Récupérer les informations du document_societe si disponibles
-    let documentSociete = null;
-    try {
-      const societeId = req.user?.societe_id || 1;
-      documentSociete = await documentSocieteService.getDocumentSociete(societeId);
-    } catch (error) {
-      console.warn('Impossible de récupérer documentSociete:', error.message);
-    }
+    // Récupérer les informations depuis le fichier JSON de configuration
+    const documentSociete = pdfConfigService.getDocumentSociete();
 
     const pdfPath = await factureFournisseurPdfService.genererPDF(factureData, {
       withStamp: false,

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const caissePdfService = require('../services/caisse-pdf.service');
 const caisseService = require('../services/finance/caisse.service');
-const documentSocieteService = require('../services/document_societe.service');
+const pdfConfigService = require('../services/pdf-config.service');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const databaseInjector = require('../middleware/database-injector.middleware');
 const databaseSwitchService = require('../services/database-switch.service');
@@ -26,6 +26,44 @@ router.get('/test', (req, res) => {
   res.json({ success: true, message: 'Route caisse-pdf fonctionne correctement' });
 });
 
+// Route GET pour servir les PDFs depuis le cache mémoire
+router.get('/:filename', authenticateToken, async (req, res) => {
+  try {
+    const { filename } = req.params;
+    
+    if (!filename || !filename.endsWith('.pdf') || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({ success: false, message: 'Nom de fichier invalide' });
+    }
+    
+    const cacheKey = `caisses/${filename}`;
+    
+    if (global.pdfCache && global.pdfCache.has(cacheKey)) {
+      const cached = global.pdfCache.get(cacheKey);
+      if (Date.now() - cached.timestamp < 5 * 60 * 1000) {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+        res.setHeader('Content-Length', cached.buffer.length);
+        return res.send(cached.buffer);
+      } else {
+        global.pdfCache.delete(cacheKey);
+      }
+    }
+    
+    // Si pas dans le cache, vérifier sur disque (pour compatibilité)
+    const publicPath = path.join(__dirname, '..', 'public', 'caisses', filename);
+    if (fs.existsSync(publicPath)) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+      return res.sendFile(publicPath);
+    }
+    
+    return res.status(404).json({ success: false, message: 'PDF introuvable' });
+  } catch (error) {
+    console.error('Erreur service PDF caisse :', error);
+    return res.status(500).json({ success: false, message: 'Erreur service PDF', error: error.message });
+  }
+});
+
 router.post('/generate', authenticateToken, async (req, res) => {
   try {
     const { caisse_id } = req.body;
@@ -46,23 +84,37 @@ router.post('/generate', authenticateToken, async (req, res) => {
     }
 
 
-    // Récupérer les documents de la société si disponible
-    let documentSociete = null;
-    if (req.user && req.user.societe_id) {
-      try {
-        documentSociete = await documentSocieteService.getDocumentSociete(req.user.societe_id);
-      } catch (error) {
-        console.error('[caisse-pdf] Erreur récupération document société:', error);
-      }
-    } else {
-    }
+    // Récupérer les informations depuis le fichier JSON de configuration
+    const documentSociete = pdfConfigService.getDocumentSociete();
 
-    // Générer le PDF
+    // Générer le PDF (sera supprimé immédiatement après lecture)
     const pdfPath = await caissePdfService.genererCaissePDF(caisseData, {
       documentSociete: documentSociete
     });
 
-    const pdfUrl = `http://localhost:3500/caisses/${path.basename(pdfPath)}`;
+    // Lire le PDF en mémoire et le supprimer immédiatement
+    const pdfBuffer = fs.readFileSync(pdfPath);
+    fs.unlinkSync(pdfPath); // Supprimer le fichier immédiatement
+
+    const fileName = path.basename(pdfPath);
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost';
+    const baseUrl = process.env.BASE_URL || `${protocol}://${host}`;
+    const pdfUrl = `${baseUrl}/api/caisse-pdf/${fileName}`;
+
+    // Stocker en cache mémoire
+    if (!global.pdfCache) {
+      global.pdfCache = new Map();
+    }
+    global.pdfCache.set(`caisses/${fileName}`, {
+      buffer: pdfBuffer,
+      timestamp: Date.now()
+    });
+    setTimeout(() => {
+      if (global.pdfCache) {
+        global.pdfCache.delete(`caisses/${fileName}`);
+      }
+    }, 5 * 60 * 1000);
 
     return res.json({ success: true, pdfUrl, filePath: pdfPath });
   } catch (error) {
@@ -108,16 +160,8 @@ router.post('/rapport', authenticateToken, async (req, res) => {
       totalSorties: donnees?.totaux?.total_sorties || 0
     });
 
-    // Récupérer les documents de la société si disponible
-    let documentSociete = null;
-    if (req.user && req.user.societe_id) {
-      try {
-        documentSociete = await documentSocieteService.getDocumentSociete(req.user.societe_id);
-      } catch (error) {
-        console.error('[caisse-pdf-rapport] ⚠️ Erreur récupération document société (non bloquant):', error.message);
-      }
-    } else {
-    }
+    // Récupérer les informations depuis le fichier JSON de configuration
+    const documentSociete = pdfConfigService.getDocumentSociete();
 
     // Générer le PDF
     const pdfPath = await caissePdfService.genererRapportCaissePDF(donnees, {
@@ -126,7 +170,28 @@ router.post('/rapport', authenticateToken, async (req, res) => {
     });
 
 
-    const pdfUrl = `http://localhost:3500/caisses/${path.basename(pdfPath)}`;
+    // Lire le PDF en mémoire et le supprimer immédiatement
+    const pdfBuffer = fs.readFileSync(pdfPath);
+    fs.unlinkSync(pdfPath);
+
+    const fileName = path.basename(pdfPath);
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost';
+    const baseUrl = process.env.BASE_URL || `${protocol}://${host}`;
+    const pdfUrl = `${baseUrl}/api/caisse-pdf/${fileName}`;
+
+    if (!global.pdfCache) {
+      global.pdfCache = new Map();
+    }
+    global.pdfCache.set(`caisses/${fileName}`, {
+      buffer: pdfBuffer,
+      timestamp: Date.now()
+    });
+    setTimeout(() => {
+      if (global.pdfCache) {
+        global.pdfCache.delete(`caisses/${fileName}`);
+      }
+    }, 5 * 60 * 1000);
 
     return res.json({ success: true, pdfUrl, filePath: pdfPath });
   } catch (error) {
@@ -188,13 +253,8 @@ router.post('/rapport-by-employe', authenticateToken, async (req, res) => {
 
     // Récupérer les documents de la société si disponible
     let documentSociete = null;
-    if (req.user && req.user.societe_id) {
-      try {
-        documentSociete = await documentSocieteService.getDocumentSociete(req.user.societe_id);
-      } catch (error) {
-        console.error('[caisse-pdf-rapport-by-employe] ⚠️ Erreur récupération document société (non bloquant):', error.message);
-      }
-    }
+    // Récupérer les informations depuis le fichier JSON de configuration
+    documentSociete = pdfConfigService.getDocumentSociete();
 
     // Récupérer le nom de l'employé pour l'inclure dans le titre du PDF
     let employeNom = 'Employé ' + employeId;
@@ -223,7 +283,28 @@ router.post('/rapport-by-employe', authenticateToken, async (req, res) => {
     });
 
 
-    const pdfUrl = `http://localhost:3500/caisses/${path.basename(pdfPath)}`;
+    // Lire le PDF en mémoire et le supprimer immédiatement
+    const pdfBuffer = fs.readFileSync(pdfPath);
+    fs.unlinkSync(pdfPath);
+
+    const fileName = path.basename(pdfPath);
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost';
+    const baseUrl = process.env.BASE_URL || `${protocol}://${host}`;
+    const pdfUrl = `${baseUrl}/api/caisse-pdf/${fileName}`;
+
+    if (!global.pdfCache) {
+      global.pdfCache = new Map();
+    }
+    global.pdfCache.set(`caisses/${fileName}`, {
+      buffer: pdfBuffer,
+      timestamp: Date.now()
+    });
+    setTimeout(() => {
+      if (global.pdfCache) {
+        global.pdfCache.delete(`caisses/${fileName}`);
+      }
+    }, 5 * 60 * 1000);
 
     return res.json({ success: true, pdfUrl, filePath: pdfPath });
   } catch (error) {
@@ -259,23 +340,38 @@ router.post('/rapport-group-2000-3000', authenticateToken, async (req, res) => {
     const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
     const donnees = await caisseService.getCaisseDataForReportGroup2000_3000(dateFrom, dateTo, sequelize, caisseType, rubriqueIds);
 
-    let documentSociete = null;
-    if (req.user && req.user.societe_id) {
-      try {
-        documentSociete = await documentSocieteService.getDocumentSociete(req.user.societe_id);
-      } catch (error) {
-        console.error('Erreur doc societe:', error);
-      }
-    }
+    // Récupérer les informations depuis le fichier JSON de configuration
+    const documentSociete = pdfConfigService.getDocumentSociete();
 
     const pdfPath = await caissePdfService.genererRapportCaisseGroup2000_3000PDF(donnees, {
       documentSociete,
       caisseType
     });
 
-    const pdfUrl = `http://localhost:3500/caisses/${path.basename(pdfPath)}`;
-    return res.json({ success: true, pdfUrl, filePath: pdfPath });
+    // Lire le PDF en mémoire et le supprimer immédiatement
+    const pdfBuffer = fs.readFileSync(pdfPath);
+    fs.unlinkSync(pdfPath);
 
+    const fileName = path.basename(pdfPath);
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost';
+    const baseUrl = process.env.BASE_URL || `${protocol}://${host}`;
+    const pdfUrl = `${baseUrl}/api/caisse-pdf/${fileName}`;
+
+    if (!global.pdfCache) {
+      global.pdfCache = new Map();
+    }
+    global.pdfCache.set(`caisses/${fileName}`, {
+      buffer: pdfBuffer,
+      timestamp: Date.now()
+    });
+    setTimeout(() => {
+      if (global.pdfCache) {
+        global.pdfCache.delete(`caisses/${fileName}`);
+      }
+    }, 5 * 60 * 1000);
+
+    return res.json({ success: true, pdfUrl, filePath: pdfPath });
   } catch (error) {
     console.error('[caisse-pdf-rapport-group-2000-3000] ❌ Erreur:', error);
     return res.status(500).json({ success: false, message: 'Erreur génération PDF', error: error.message });
@@ -309,22 +405,36 @@ router.post('/generate-by-employe', authenticateToken, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Données de bon de caisse introuvables' });
     }
 
-    // Récupérer les documents de la société si disponible
-    let documentSociete = null;
-    if (req.user && req.user.societe_id) {
-      try {
-        documentSociete = await documentSocieteService.getDocumentSociete(req.user.societe_id);
-      } catch (error) {
-        console.error('[caisse-pdf-by-employe] Erreur récupération document société:', error);
-      }
-    }
+    // Récupérer les informations depuis le fichier JSON de configuration
+    const documentSociete = pdfConfigService.getDocumentSociete();
 
     // Générer le PDF du bon de caisse
     const pdfPath = await caissePdfService.genererBonDeCaissePDF(bonDeCaisseData, {
       documentSociete: documentSociete
     });
 
-    const pdfUrl = `http://localhost:3500/caisses/${path.basename(pdfPath)}`;
+    // Lire le PDF en mémoire et le supprimer immédiatement
+    const pdfBuffer = fs.readFileSync(pdfPath);
+    fs.unlinkSync(pdfPath);
+
+    const fileName = path.basename(pdfPath);
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost';
+    const baseUrl = process.env.BASE_URL || `${protocol}://${host}`;
+    const pdfUrl = `${baseUrl}/api/caisse-pdf/${fileName}`;
+
+    if (!global.pdfCache) {
+      global.pdfCache = new Map();
+    }
+    global.pdfCache.set(`caisses/${fileName}`, {
+      buffer: pdfBuffer,
+      timestamp: Date.now()
+    });
+    setTimeout(() => {
+      if (global.pdfCache) {
+        global.pdfCache.delete(`caisses/${fileName}`);
+      }
+    }, 5 * 60 * 1000);
 
     return res.json({ success: true, pdfUrl, filePath: pdfPath });
   } catch (error) {
@@ -403,13 +513,8 @@ router.post('/send-telegram-by-employe', authenticateToken, async (req, res) => 
 
     // Document société
     let documentSociete = null;
-    if (req.user?.societe_id) {
-      try {
-        documentSociete = await documentSocieteService.getDocumentSociete(req.user.societe_id);
-      } catch (error) {
-        console.error('[caisse-pdf-telegram-by-employe] Erreur récupération document société:', error);
-      }
-    }
+    // Récupérer les informations depuis le fichier JSON de configuration
+    documentSociete = pdfConfigService.getDocumentSociete();
 
     // Générer le PDF
     const pdfPath = await caissePdfService.genererBonDeCaissePDF(bonDeCaisseData, { documentSociete });
@@ -543,14 +648,8 @@ router.post('/send-whatsapp-by-employe', authenticateToken, async (req, res) => 
     if (!phone) return res.status(400).json({ success: false, message: 'Aucun numéro de téléphone trouvé pour cet employé' });
 
     // Document société
-    let documentSociete = null;
-    if (req.user?.societe_id) {
-      try {
-        documentSociete = await documentSocieteService.getDocumentSociete(req.user.societe_id);
-      } catch (error) {
-        console.error('[caisse-pdf-whatsapp-by-employe] Erreur récupération document société:', error);
-      }
-    }
+    // Récupérer les informations depuis le fichier JSON de configuration
+    const documentSociete = pdfConfigService.getDocumentSociete();
 
     // Générer le PDF
     const pdfPath = await caissePdfService.genererBonDeCaissePDF(bonDeCaisseData, { documentSociete });
