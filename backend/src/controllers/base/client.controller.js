@@ -2,6 +2,7 @@ const clientService = require('../../services/base/client.service');
 const listesService = require('../../services/listes.service');
 const databaseSwitchService = require('../../services/database-switch.service');
 const exonerationService = require('../../services/base/partenaire-exoneration.service');
+const conditionService = require('../../services/base/partenaire-condition.service');
 
 const getClients = async (req, res) => {
   try {
@@ -457,6 +458,123 @@ const deleteExoneration = async (req, res) => {
   }
 };
 
+const getPartenaireConditions = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const part_id = parseInt(req.params.id);
+    const conditions = await conditionService.getPartenaireConditions(part_id, sequelize);
+    res.json({
+      success: true,
+      data: conditions || []
+    });
+  } catch (err) {
+    console.error('❌ [ClientController] Erreur récupération conditions partenaire:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la récupération des conditions de paiement'
+    });
+  }
+};
+
+const getConditionsPaiement = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const conditions = await conditionService.getConditionsPaiement(sequelize);
+    res.json({
+      success: true,
+      data: conditions || []
+    });
+  } catch (err) {
+    console.error('❌ [ClientController] Erreur récupération conditions paiement:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la récupération des conditions de paiement'
+    });
+  }
+};
+
+const createPartenaireCondition = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const part_id = parseInt(req.params.id);
+    const { condition_id } = req.body;
+    
+    if (!condition_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'condition_id est requis'
+      });
+    }
+    
+    const result = await conditionService.createPartenaireCondition(part_id, condition_id, sequelize);
+    res.status(201).json({
+      success: true,
+      message: 'Condition de paiement ajoutée avec succès',
+      data: result
+    });
+  } catch (err) {
+    console.error('❌ [ClientController] Erreur ajout condition partenaire:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de l\'ajout de la condition de paiement'
+    });
+  }
+};
+
+const updatePartenaireCondition = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const { condition_id } = req.body;
+    const id = parseInt(req.params.condition_id);
+    
+    if (!condition_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'condition_id est requis'
+      });
+    }
+    
+    const result = await conditionService.updatePartenaireCondition(id, condition_id, sequelize);
+    res.json({
+      success: true,
+      message: 'Condition de paiement mise à jour avec succès',
+      data: result
+    });
+  } catch (err) {
+    console.error('❌ [ClientController] Erreur modification condition partenaire:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la modification de la condition de paiement'
+    });
+  }
+};
+
+const deletePartenaireConditions = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const { ids } = req.body;
+    
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Aucun ID fourni pour la suppression'
+      });
+    }
+    
+    const result = await conditionService.deletePartenaireConditions(ids, sequelize);
+    res.json({
+      success: true,
+      message: result.message
+    });
+  } catch (err) {
+    console.error('❌ [ClientController] Erreur suppression conditions partenaire:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la suppression des conditions de paiement'
+    });
+  }
+};
+
 module.exports = {
   getClients,
   getClientsPaged,
@@ -484,5 +602,10 @@ module.exports = {
   getExoneration,
   getAllExonerations,
   saveOrUpdateExoneration,
-  deleteExoneration
+  deleteExoneration,
+  getPartenaireConditions,
+  getConditionsPaiement,
+  createPartenaireCondition,
+  updatePartenaireCondition,
+  deletePartenaireConditions
 };

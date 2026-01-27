@@ -85,13 +85,11 @@ export class FactureFournisseurComponent implements OnInit {
         this.totalRecords = pagination.total || 0;
         this.totalPages = pagination.totalPages || 1;
         
-        console.log(`[FactureFournisseurComponent] Page ${page}/${this.totalPages}, ${this.factures.length} factures chargées`);
         
         this.loading = false;
         this.cdr.detectChanges();
       },
       error: (err) => {
-        console.error('[FactureFournisseurComponent] ❌ Erreur:', err);
         this.showError("❌ Erreur lors du chargement des factures fournisseur.");
         this.loading = false;
         this.factures = [];
@@ -249,7 +247,6 @@ export class FactureFournisseurComponent implements OnInit {
       },
       error: (err) => {
         Swal.close();
-        console.error('Erreur génération PDF facture fournisseur :', err);
         Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors de la génération du PDF." });
       }
     });
@@ -274,7 +271,6 @@ export class FactureFournisseurComponent implements OnInit {
             this.loadFactures(this.currentPage, this.searchTerm);
           },
           error: (err) => {
-            console.error('Erreur suppression:', err);
             Swal.fire('Erreur', 'Impossible de supprimer la facture.', 'error');
           }
         });
@@ -298,7 +294,6 @@ export class FactureFournisseurComponent implements OnInit {
         this.cdr.detectChanges();
       },
       error: (err) => {
-        console.error('Erreur chargement commandes:', err);
         this.commandesNonFacturees = [];
         this.commandesNonFactureesFiltered = [];
         this.loadingCommandes = false;
@@ -435,7 +430,6 @@ export class FactureFournisseurComponent implements OnInit {
             this.loadFactures(1, '');
           },
           error: (err) => {
-            console.error('Erreur création facture:', err);
             Swal.fire('Erreur', err.error?.message || 'Impossible de créer la facture.', 'error');
           }
         });

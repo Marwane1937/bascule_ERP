@@ -1,415 +1,149 @@
-.btn-gradient {
-  background: linear-gradient(135deg, #00b4db, #0083b0);
-  color: white;
-  border: none;
-  border-radius: 25px;
-  font-weight: 500;
-  transition: 0.3s ease;
-}
-.btn-gradient:hover {
-  background: linear-gradient(135deg, #0090c4, #006a8e);
-}
-
-.btn1-gradient {
-  background: linear-gradient(135deg, #00db72, #0083b0);
-  color: white;
-  border: none;
-  border-radius: 25px;
-  font-weight: 500;
-  transition: 0.3s ease;
-}
-.btn1-gradient:hover {
-  background: linear-gradient(135deg, #00db72, #006a8e);
+/* Copier exactement les mêmes styles que devis.component.css */
+/* Filtres style Excel */
+.filter-row input[type="text"],
+.filter-row input[type="date"],
+.filter-row select {
+  font-size: 0.85rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  padding: 4px 24px 4px 8px;
 }
 
-
-.modal-elegant {
-  border-radius: 15px;
-  overflow: hidden;
-}
-
-.modal-header-custom {
-  background: linear-gradient(135deg, #00b4db, #0083b0);
-  color: white;
-  border-bottom: none;
-}
-
-.card {
-  border-radius: 12px;
-}
-
-.table-hover tbody tr:hover {
-  background-color: #f6f8fc;
-}
-
-.btn-sm {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.875rem;
-  border-radius: 8px;
-}
-.spinner-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 60vh;
-  background: linear-gradient(to right, #161b2c, #2e2c3a);
-  border-radius: 10px;
-  color: #fff;
-}
-
-.custom-spinner {
-  width: 50px;
-  height: 50px;
-  border: 6px solid rgba(255, 255, 255, 0.1);
-  border-top: 6px solid #00bcd4;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-.loading-text {
-  margin-top: 12px;
-  font-size: 16px;
-  letter-spacing: 1px;
-  color: #cccccc;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-.modal-body {
-  padding-bottom: 120px; /* selon la hauteur de ton dropdown max */
-}
-.btn-outline-purple {
-  color: purple;
-  border-color: purple;
-}
-.modern-toast {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  display: flex;
-  align-items: center;
-  padding: 14px 20px;
-  border-radius: 8px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
-  color: white;
-  font-size: 15px;
-  z-index: 9999;
-  animation: fadein 0.4s ease-out, fadeout 0.4s ease-in 4.6s;
-  min-width: 250px;
-}
-
-.toast-success {
-  background-color: #198754; /* vert Bootstrap */
-}
-
-.toast-error {
-  background-color: #dc3545; /* rouge Bootstrap */
-}
-
-.toast-icon {
-  margin-right: 10px;
-  font-size: 18px;
-}
-
-@keyframes fadein {
-  from {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes fadeout {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-}
-
-/* ============================================
-   STYLES VISUELS POUR LA MODAL DE TRANSFERT
-   (DataTables conservé - seulement styles CSS)
-   ============================================ */
-
-/* Modal avec style moderne - Version compacte */
-#modalDevisCommandeXL .modal-dialog {
-  margin: 1rem auto;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-}
-
-#modalDevisCommandeXL .modal-content {
-  border: none;
-  border-radius: 15px;
-  overflow: hidden;
-  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.25);
-  background: #ffffff;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Header avec gradient moderne - Version compacte */
-#modalDevisCommandeXL .modal-header-custom {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 15px 20px;
-  border-bottom: none;
-  position: relative;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-#modalDevisCommandeXL .modal-header-custom::before {
-  content: '';
+.filter-row .fa-filter {
   position: absolute;
+  right: 8px;
+  font-size: 0.75rem;
+  pointer-events: none;
+  color: #6c757d;
+}
+
+.filter-input:focus {
+  border-color: #80bdff;
+  box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+}
+
+/* En-têtes de colonnes */
+.column-header {
+  position: relative;
+}
+
+.column-header:hover .column-menu-btn {
+  opacity: 1 !important;
+}
+
+.column-menu-btn {
+  padding: 2px 4px !important;
+  transition: opacity 0.2s;
+}
+
+.pinned-column {
+  background-color: #e7f3ff !important;
+  font-weight: 600;
+}
+
+/* Menu contextuel des colonnes */
+.column-context-menu {
+  position: fixed;
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 9999;
+  min-width: 220px;
+  padding: 8px 0;
+}
+
+.menu-overlay {
+  position: fixed;
   top: 0;
-  left: -100%;
+  left: 0;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-  animation: shimmer 3s infinite;
+  z-index: 9998;
 }
 
-@keyframes shimmer {
-  0% { left: -100%; }
-  100% { left: 100%; }
-}
-
-#modalDevisCommandeXL .modal-header-custom .modal-title {
-  font-weight: 700;
-  font-size: 1.2rem;
-  letter-spacing: 0.5px;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  position: relative;
-  z-index: 1;
-}
-
-#modalDevisCommandeXL .modal-header-custom .btn-close {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  opacity: 0.9;
-  transition: all 0.3s ease;
-  position: relative;
-  z-index: 1;
+.menu-header {
+  padding: 8px 16px;
+  font-weight: 600;
+  color: #495057;
   font-size: 0.9rem;
+  border-bottom: 1px solid #e9ecef;
+  margin-bottom: 4px;
 }
 
-#modalDevisCommandeXL .modal-header-custom .btn-close:hover {
-  background: rgba(255, 255, 255, 0.3);
-  opacity: 1;
-  transform: rotate(90deg);
-}
-
-/* Body avec fond élégant - Version compacte */
-#modalDevisCommandeXL .modal-body {
-  padding: 15px 20px;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  overflow-y: auto;
-  flex: 1 1 auto;
-  max-height: calc(90vh - 70px);
-}
-
-/* Zone de contrôle avec style moderne - Version compacte */
-#modalDevisCommandeXL .modal-body > .row:first-child {
-  background: white;
-  padding: 12px 15px;
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  margin-bottom: 15px;
-  border: 1px solid rgba(102, 126, 234, 0.1);
-}
-
-/* Bouton de transfert avec style moderne - Version compacte */
-#modalDevisCommandeXL .btn-success {
-  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-  color: white;
-  border: none;
-  border-radius: 10px;
-  padding: 8px 20px;
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: 0.3px;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(17, 153, 142, 0.4);
-}
-
-#modalDevisCommandeXL .btn-success:hover:not(:disabled) {
-  background: linear-gradient(135deg, #0d7a71 0%, #2dd36a 100%);
-  transform: translateY(-3px);
-  box-shadow: 0 12px 35px rgba(17, 153, 142, 0.5);
-  color: white;
-}
-
-#modalDevisCommandeXL .btn-success:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Badge avec style moderne - Version compacte */
-#modalDevisCommandeXL .badge {
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-weight: 700;
-  font-size: 12px;
-  box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
-}
-
-/* Styles pour le tableau dans le modal - Version compacte */
-#modalDevisCommandeXL .dataTables_wrapper {
-  background: white;
-  border-radius: 12px;
-  padding: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(102, 126, 234, 0.1);
-}
-
-#modalDevisCommandeXL #devisTable-devis {
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-#modalDevisCommandeXL #devisTable-devis thead {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
-
-#modalDevisCommandeXL #devisTable-devis thead th {
-  border: none;
-  padding: 10px 8px;
-  font-weight: 700;
-  text-transform: uppercase;
-  font-size: 11px;
-  letter-spacing: 0.3px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-#modalDevisCommandeXL #devisTable-devis tbody tr {
-  transition: all 0.2s ease;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-#modalDevisCommandeXL #devisTable-devis tbody tr:hover {
-  background: linear-gradient(90deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%) !important;
-  transform: translateX(3px);
-}
-
-#modalDevisCommandeXL #devisTable-devis tbody tr td {
-  padding: 10px 8px;
-  vertical-align: middle;
-  font-size: 13px;
-}
-
-#modalDevisCommandeXL #devisTable-devis tbody tr td strong,
-#modalDevisCommandeXL #devisTable-devis tbody tr td .text-primary {
-  color: #667eea;
-  font-weight: 700;
-}
-
-/* Checkbox avec style moderne */
-#modalDevisCommandeXL #devisTable-devis tbody tr td input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
+.menu-item {
+  padding: 8px 16px;
   cursor: pointer;
-  border: 2px solid #667eea;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  color: #495057;
+  transition: background-color 0.2s;
+}
+
+.menu-item:hover {
+  background-color: #f8f9fa;
+}
+
+.menu-item i {
+  width: 20px;
+  margin-right: 8px;
+  text-align: center;
+}
+
+.menu-divider {
+  height: 1px;
+  background-color: #e9ecef;
+  margin: 4px 0;
+}
+
+/* Badges de statut */
+.badge-success {
+  background-color: #28a745;
+  color: white;
+  padding: 4px 8px;
   border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-#modalDevisCommandeXL #devisTable-devis tbody tr td input[type="checkbox"]:checked {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-color: #667eea;
-}
-
-#modalDevisCommandeXL #devisTable-devis tbody tr td input[type="checkbox"]:hover {
-  border-color: #764ba2;
-  transform: scale(1.1);
-}
-
-/* Boutons d'action avec style moderne */
-#modalDevisCommandeXL #devisTable-devis tbody tr td .btn-outline-info {
-  background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 6px rgba(23, 162, 184, 0.2);
-}
-
-#modalDevisCommandeXL #devisTable-devis tbody tr td .btn-outline-info:hover {
-  background: linear-gradient(135deg, #138496 0%, #117a8b 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(23, 162, 184, 0.3);
-  color: white;
-}
-
-#modalDevisCommandeXL #devisTable-devis tbody tr td .btn-outline-secondary {
-  background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 6px rgba(108, 117, 125, 0.2);
-}
-
-#modalDevisCommandeXL #devisTable-devis tbody tr td .btn-outline-secondary:hover {
-  background: linear-gradient(135deg, #5a6268 0%, #495057 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(108, 117, 125, 0.3);
-  color: white;
-}
-
-/* Styles pour les contrôles de recherche et pagination - Version compacte */
-#modalDevisCommandeXL .dataTables_filter input,
-#modalDevisCommandeXL .dataTables_length select {
-  border-radius: 6px;
-  border: 1.5px solid #e0e0e0;
-  padding: 5px 10px;
   font-size: 0.85rem;
-  transition: all 0.3s ease;
 }
 
-#modalDevisCommandeXL .dataTables_filter input:focus {
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-  outline: none;
+.badge-warning {
+  background-color: #ffc107;
+  color: #212529;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
 }
 
-
-#modalDevisCommandeXL .dataTables_length select:focus {
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-  outline: none;
+.badge-danger {
+  background-color: #dc3545;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
 }
 
-#modalDevisCommandeXL .dataTables_paginate .paginate_button {
-  border-radius: 8px;
-  margin: 0 2px;
-  transition: all 0.2s ease;
+.sortable {
+  user-select: none;
+  transition: background-color 0.2s;
 }
 
-#modalDevisCommandeXL .dataTables_paginate .paginate_button:hover {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white !important;
-  border-color: transparent;
-  transform: translateY(-2px);
+.sortable:hover {
+  background-color: #f8f9fa !important;
 }
 
-#modalDevisCommandeXL .dataTables_paginate .paginate_button.current {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white !important;
-  border-color: transparent;
+.sortable i {
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.sortable:hover i {
+  opacity: 1;
+}
+
+.table thead th.sortable {
+  position: relative;
+}
+
+.table thead th.sortable i {
+  font-size: 0.85em;
 }

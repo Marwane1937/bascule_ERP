@@ -263,16 +263,78 @@ const getBonCommandeById = async (id) => {
 
 const formatToSqlDateTime = (value) => {
   if (!value) return null;
-  return value.replace('T', ' ') + ':00';
+  
+  let dateStr;
+  
+  // Si c'est un objet Date, le convertir en ISO string
+  if (value instanceof Date) {
+    dateStr = value.toISOString();
+  } else if (typeof value !== 'string') {
+    dateStr = String(value);
+  } else {
+    dateStr = value;
+  }
+  
+  // Si la valeur contient 'T' (format ISO), la convertir
+  if (dateStr.includes('T')) {
+    // Enlever le 'Z' à la fin si présent (UTC)
+    dateStr = dateStr.replace('Z', '');
+    // Remplacer 'T' par un espace
+    dateStr = dateStr.replace('T', ' ');
+    // Si la date se termine par des millisecondes (.xxx), les garder
+    // Sinon, ajouter ':00' pour les secondes
+    if (!dateStr.match(/:\d{2}(\.\d+)?$/)) {
+      dateStr += ':00';
+    }
+    return dateStr;
+  }
+  
+  // Si la valeur est déjà au format SQL (YYYY-MM-DD HH:mm:ss), la retourner telle quelle
+  // Vérifier si c'est un format de date valide
+  if (dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+    return dateStr;
+  }
+  
+  // Sinon, essayer de parser et reformater
+  try {
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      const seconds = String(date.getSeconds()).padStart(2, '0');
+      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    }
+  } catch (e) {
+    // Ignorer l'erreur
+  }
+  
+  return dateStr;
 };
 
 
 // Ajouter un bon de commande (type = 2)
-const addBonCommande = async ({ numero, date, description, part_id, contact_id, etat, type, parent }) => {
+const addBonCommande = async ({ numero, date, description, part_id, contact_id, etat, type, parent }, sequelizeConnection = null) => {
+  // Toujours obtenir l'instance Sequelize pour QueryTypes, même si une transaction est passée
   const sequelize = getConnection();
   const { getCompteurCurrent } = require('../../services/compteur.service');
   
-  return await sequelize.transaction(async (t) => {
+  // Si une transaction est fournie, l'utiliser, sinon en créer une nouvelle
+  const executeInTransaction = async (callback) => {
+    if (sequelizeConnection) {
+      // Si une connexion/transaction est fournie, l'utiliser directement
+      return await callback(sequelizeConnection);
+    } else {
+      // Sinon, créer une nouvelle transaction
+      return await sequelize.transaction(async (t) => {
+        return await callback(t);
+      });
+    }
+  };
+  
+  return await executeInTransaction(async (t) => {
     try {
       let numeroFinal = numero;
       let compteurCode = null;
@@ -373,7 +435,8 @@ const addBonCommande = async ({ numero, date, description, part_id, contact_id, 
 };
 
 // Sauvegarder un détail de bon de commande (Insert ou Update)
-const saveDetail = async (detailData) => {
+const saveDetail = async (detailData, sequelizeConnection = null) => {
+  // Toujours obtenir l'instance Sequelize pour QueryTypes, même si une transaction est passée
   const sequelize = getConnection();
   const { 
     id, 
@@ -382,11 +445,15 @@ const saveDetail = async (detailData) => {
     designation,
     qte, 
     pu, 
+    prix,
     taxe, 
     remise, 
     remise_montant,
     update_mode 
   } = detailData;
+  
+  // Accepter soit 'pu' soit 'prix' pour le prix unitaire
+  const prixUnitaire = pu !== undefined && pu !== null ? Number(pu) : (prix !== undefined && prix !== null ? Number(prix) : 0);
   
   // Mode Update
   if (update_mode === 'U' && id) {
@@ -406,12 +473,13 @@ const saveDetail = async (detailData) => {
         id,
         article_id: article_id || null,
         quantite: qte || 0,
-        prix: pu || 0,
+        prix: prixUnitaire,
         taux_tva: taxe || 0.2,
         remise: remise || null,
         remise_montant: remise_montant || null
       },
-      type: sequelize.QueryTypes.UPDATE
+      type: sequelize.QueryTypes.UPDATE,
+      transaction: sequelizeConnection || undefined
     });
     
     return { id, status: 'updated' };
@@ -429,12 +497,13 @@ const saveDetail = async (detailData) => {
       document_id,
       article_id: article_id || null,
       quantite: qte || 0,
-      prix: pu || 0,
+      prix: prixUnitaire,
       taux_tva: taxe || 0.2,
       remise: remise || null,
       remise_montant: remise_montant || null
     },
-    type: sequelize.QueryTypes.INSERT
+    type: sequelize.QueryTypes.INSERT,
+    transaction: sequelizeConnection || undefined
   });
   
   let newId = null;
@@ -448,7 +517,8 @@ const saveDetail = async (detailData) => {
 };
 
 // Sauvegarder les infos de bon de commande
-const saveInfo = async (infoData) => {
+const saveInfo = async (infoData, sequelizeConnection = null) => {
+  // Toujours obtenir l'instance Sequelize pour QueryTypes, même si une transaction est passée
   const sequelize = getConnection();
   const { document_id, date, condition, expedition, transporteur, type, etat } = infoData;
   
@@ -472,7 +542,8 @@ const saveInfo = async (infoData) => {
       type: type || null,
       etat: etat || 1
     },
-    type: sequelize.QueryTypes.UPDATE
+    type: sequelize.QueryTypes.UPDATE,
+    transaction: sequelizeConnection || undefined
   });
   
   return { success: true };

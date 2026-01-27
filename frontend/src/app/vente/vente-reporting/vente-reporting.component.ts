@@ -92,7 +92,6 @@ export class VenteReportingComponent implements OnInit {
         this.grandLivreLoading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement grand livre:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement du grand livre', 'error');
         this.grandLivreLoading = false;
       }
@@ -151,7 +150,6 @@ export class VenteReportingComponent implements OnInit {
         this.facturesClientLoading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement factures par client:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement des factures par client', 'error');
         this.facturesClientLoading = false;
       }
@@ -210,7 +208,6 @@ export class VenteReportingComponent implements OnInit {
         this.caArticlesLoading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement CA articles:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement du chiffre d\'affaires par article', 'error');
         this.caArticlesLoading = false;
       }
@@ -269,7 +266,6 @@ export class VenteReportingComponent implements OnInit {
         this.caClientsLoading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement CA clients:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement du chiffre d\'affaires par client', 'error');
         this.caClientsLoading = false;
       }
@@ -714,6 +710,7 @@ export class VenteReportingComponent implements OnInit {
     document.body.removeChild(link);
   }
 }
+
 
 
 

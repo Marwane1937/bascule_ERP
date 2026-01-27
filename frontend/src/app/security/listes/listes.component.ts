@@ -100,7 +100,6 @@ export class ListesComponent implements OnInit, AfterViewInit {
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur lors du chargement des group IDs:', error);
         this.loading = false;
         Swal.fire({
           title: 'Erreur',
@@ -164,7 +163,6 @@ export class ListesComponent implements OnInit, AfterViewInit {
           this.listes = [];
         }
 
-
         // Ouvrir le modal après le chargement des données
         setTimeout(() => {
           const modalElement = document.getElementById('editListesModal');
@@ -177,8 +175,6 @@ export class ListesComponent implements OnInit, AfterViewInit {
         }, 100);
       },
       error: (error) => {
-        console.error('[ListesComponent] Erreur lors du chargement des listes:', error);
-        console.error('[ListesComponent] Détails de l\'erreur:', error.error);
         this.listes = []; // S'assurer que listes est un tableau même en cas d'erreur
         Swal.fire({
           title: 'Erreur',
@@ -215,7 +211,6 @@ export class ListesComponent implements OnInit, AfterViewInit {
           });
         },
         error: (error) => {
-          console.error('Erreur lors de l\'ajout:', error);
           const errorMessage = error.error?.message || error.message || 'Erreur lors de l\'ajout de la liste';
           Swal.fire('Erreur', errorMessage, 'error');
         }
@@ -227,7 +222,6 @@ export class ListesComponent implements OnInit, AfterViewInit {
       Swal.fire('Erreur de validation', 'Veuillez remplir tous les champs requis', 'error');
     }
   }
-
 
   updateListe(): void {
     if (this.editListeForm.valid && this.selectedListe) {
@@ -253,7 +247,6 @@ export class ListesComponent implements OnInit, AfterViewInit {
           });
         },
         error: (error) => {
-          console.error('Erreur lors de la modification:', error);
           const errorMessage = error.error?.message || error.message || 'Erreur lors de la modification de la liste';
           Swal.fire('Erreur', errorMessage, 'error');
         }
@@ -293,7 +286,6 @@ export class ListesComponent implements OnInit, AfterViewInit {
             });
           },
           error: (error) => {
-            console.error('Erreur lors de la suppression:', error);
             const errorMessage = error.error?.message || error.message || 'Erreur lors de la suppression de la liste';
             Swal.fire('Erreur', errorMessage, 'error');
           }

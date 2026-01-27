@@ -123,6 +123,19 @@ const genererPDF = async (req, res) => {
   }
 };
 
+const transformerDemandeAchatEnBonCommande = async (req, res) => {
+  try {
+    const { demandeAchatId, lignesAvecPrix } = req.body;
+    if (!demandeAchatId || !lignesAvecPrix || !Array.isArray(lignesAvecPrix)) {
+      return res.status(400).json({ message: 'Données invalides' });
+    }
+    const result = await bonCommandeService.transformerDemandeAchatEnBonCommande(demandeAchatId, lignesAvecPrix);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 module.exports = {
   getBonCommande,
   getBonCommandeById,
@@ -133,6 +146,7 @@ module.exports = {
   updateBonCommande,
   deleteBonCommande,
   deleteLignesParIds,
-  genererPDF
+  genererPDF,
+  transformerDemandeAchatEnBonCommande
 };
 

@@ -40,6 +40,37 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
   // Liste des clients pour le filtre
   clientsList: string[] = [];
 
+  // Affichage de la ligne de filtres
+  showFilterRow: boolean = false;
+
+  // Filtres par colonne (style Excel) pour les règlements
+  columnFilters: any = {
+    numero: '',
+    date: '',
+    client: '',
+    mode: '',
+    montant: '',
+    solde: ''
+  };
+
+  allReglements: any[] = []; // Stocker tous les règlements pour le filtrage
+
+  // Gestion des colonnes (affichage/masquage, épinglage, etc.)
+  columnVisibility: any = {
+    numero: true,
+    date: true,
+    client: true,
+    mode: true,
+    montant: true,
+    solde: true
+  };
+
+  pinnedColumns: string[] = [];
+  columnWidths: any = {};
+  showColumnMenu: boolean = false;
+  activeColumnMenu: string = '';
+  menuPosition: any = { x: 0, y: 0 };
+
   // Formulaire modal
   ReglementForm!: FormGroup;
   clients: any[] = [];
@@ -75,7 +106,6 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
         this.loadNextReglementNumero();
         // Recharger les clients si la liste est vide
         if (!this.clients || this.clients.length === 0) {
-          console.log('[ReglementComponent] Rechargement des clients à l\'ouverture du modal...');
           this.AllClients();
         }
       });
@@ -99,10 +129,28 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
       clientSearch: ['', Validators.required],
       mode: [null, Validators.required],
       reference: [''],
-      montant: [0, [Validators.required, Validators.min(0.01)]]
+      montant: [0, [Validators.required, Validators.min(0.01)]],
+      echeance: ['']
     });
 
     this.setupFormListeners();
+    
+    // Écouter les changements du mode pour afficher/masquer l'échéance
+    this.ReglementForm.get('mode')?.valueChanges.subscribe(modeId => {
+      const echeanceControl = this.ReglementForm.get('echeance');
+      if (this.needsEcheance(modeId)) {
+        echeanceControl?.setValidators([Validators.required]);
+      } else {
+        echeanceControl?.clearValidators();
+        echeanceControl?.setValue('');
+      }
+      echeanceControl?.updateValueAndValidity();
+      // Forcer la détection des changements pour afficher/masquer le champ
+      this.cdr.markForCheck();
+      setTimeout(() => {
+        this.cdr.detectChanges();
+      }, 0);
+    });
   }
 
   private setupFormListeners(): void {
@@ -131,7 +179,8 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
       clientSearch: '',
       mode: null,
       reference: '',
-      montant: 0
+      montant: 0,
+      echeance: ''
     }, { emitEvent: false });
 
     this.filteredClients = [];
@@ -164,7 +213,6 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   AllClients(): void {
-    console.log('[ReglementComponent] Chargement des clients...');
     this.baseService.getClient().subscribe({
       next: (response: any) => {
         // Gérer différents formats de réponse
@@ -181,14 +229,11 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
         
         this.clients = clientsData || [];
         this.filteredClients = [];
-        console.log(`[ReglementComponent] ✅ ${this.clients.length} clients chargés`);
         
         if (this.clients.length === 0) {
-          console.warn('[ReglementComponent] ⚠️ Aucun client chargé - vérifier l\'API');
         }
       },
       error: (err: any) => {
-        console.error('[ReglementComponent] ❌ Erreur lors du chargement des clients:', err);
         this.clients = [];
         this.filteredClients = [];
         // Optionnel: afficher une notification à l'utilisateur
@@ -203,9 +248,58 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
         this.modesReglement = response?.data || [];
       },
       error: (err: any) => {
-        console.error('Erreur lors du chargement des modes de règlement:', err);
       }
     });
+  }
+  
+  onModeChange(modeId: number | null): void {
+    if (!modeId) {
+      this.ReglementForm.get('echeance')?.setValue('');
+      return;
+    }
+    
+    // Trouver le mode pour vérifier son nom
+    const mode = this.modesReglement.find(m => m.id === modeId);
+    if (mode) {
+      const modeName = (mode.nom || '').toLowerCase();
+      // Si le mode est "cheque" ou "effet", rendre l'échéance obligatoire
+      if (modeName.includes('cheque') || modeName.includes('chèque') || modeName.includes('effet')) {
+        this.ReglementForm.get('echeance')?.setValidators([Validators.required]);
+      } else {
+        this.ReglementForm.get('echeance')?.clearValidators();
+        this.ReglementForm.get('echeance')?.setValue('');
+      }
+      this.ReglementForm.get('echeance')?.updateValueAndValidity();
+    }
+  }
+  
+  shouldShowEcheance(): boolean {
+    const modeId = this.ReglementForm.get('mode')?.value;
+    if (!modeId) {
+      return false;
+    }
+    
+    // Si modesReglement n'est pas encore chargé, retourner false
+    if (!this.modesReglement || this.modesReglement.length === 0) {
+      return false;
+    }
+    
+    const mode = this.modesReglement.find(m => m.id === modeId);
+    if (!mode || !mode.nom) {
+      return false;
+    }
+    
+    const modeName = (mode.nom || '').toLowerCase();
+    const shouldShow = modeName.includes('cheque') || modeName.includes('chèque') || modeName.includes('effet');
+    
+    // Forcer la détection de changement si nécessaire
+    if (shouldShow) {
+      setTimeout(() => {
+        this.cdr.detectChanges();
+      }, 0);
+    }
+    
+    return shouldShow;
   }
 
   loadNextReglementNumero(): void {
@@ -217,7 +311,6 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       },
       error: (err: any) => {
-        console.error('Erreur lors du chargement du numéro de règlement:', err);
       }
     });
   }
@@ -231,7 +324,6 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!Array.isArray(this.clients) || this.clients.length === 0) {
       // Si les clients ne sont pas encore chargés, essayer de les recharger
       if (this.clients.length === 0) {
-        console.warn('[ReglementComponent] ⚠️ Liste des clients vide - tentative de rechargement...');
         this.AllClients();
       }
       this.filteredClients = [];
@@ -258,7 +350,6 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
       return searchSources.some(source => source && this.matchTerm(source, normalizedTerm));
     }).slice(0, 10); // Limiter à 10 résultats pour l'autocomplétion
     
-    console.log(`[ReglementComponent] 🔍 Recherche "${term}": ${this.filteredClients.length} clients trouvés sur ${this.clients.length}`);
   }
 
   selectClient(client: any): void {
@@ -281,7 +372,7 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.ReglementForm.valid) {
       const formValue = this.ReglementForm.value;
       // Le numéro sera généré automatiquement côté serveur si vide
-      const reglementData = {
+      const reglementData: any = {
         numero: '', // Laisser vide pour génération automatique
         date: formValue.date,
         part_id: formValue.part_id,
@@ -289,6 +380,11 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
         reference: formValue.reference || '',
         montant: formValue.montant
       };
+      
+      // Ajouter l'échéance si elle est remplie
+      if (formValue.echeance) {
+        reglementData.echeance = formValue.echeance;
+      }
       
       this.ventesService.addReglement(reglementData).subscribe({
         next: (response: any) => {
@@ -307,7 +403,6 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
           }, 300);
         },
         error: (err: any) => {
-          console.error('Erreur création règlement:', err);
           this.showError(`❌ Une erreur s'est produite lors de la création du règlement: ${err.error?.message || err.message || 'Erreur inconnue'}`);
         }
       });
@@ -376,10 +471,16 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
       search: search
     }).subscribe({
       next: (response: any) => {
+        console.log('[loadReglements] Réponse reçue:', response);
         const result = response.data || [];
         const pagination = response.pagination || {};
         
         const allReglements = Array.isArray(result) ? result : [];
+        console.log('[loadReglements] Règlements récupérés:', allReglements.length, allReglements);
+        
+        // Stocker toutes les données pour le filtrage par colonne
+        this.allReglements = allReglements;
+        
         this.totalRecords = pagination.total || 0;
         this.totalPages = pagination.totalPages || 1;
         
@@ -388,19 +489,37 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
         
         // Appliquer les filtres avancés côté client
         this.reglements = this.applyAdvancedFilters(allReglements);
-        
+        console.log('[loadReglements] Règlements après filtres:', this.reglements.length);
         
         this.loading = false;
         this.cdr.detectChanges();
       },
       error: (err: any) => {
-        console.error('[ReglementComponent] ❌ Erreur lors du chargement des règlements:', err);
         this.showError("❌ Une erreur s'est produite lors du chargement des règlements.");
         this.loading = false;
         this.reglements = [];
         this.cdr.detectChanges();
       }
     });
+  }
+  
+  // Méthode pour obtenir la classe CSS du solde
+  getSoldeClass(solde: number): string {
+    const soldeValue = Number(solde) || 0;
+    return soldeValue === 0 ? 'text-success fw-bold' : 'text-danger fw-bold';
+  }
+  
+  // Vérifier si le mode nécessite une échéance
+  needsEcheance(modeId: number | null): boolean {
+    if (!modeId || !this.modesReglement || this.modesReglement.length === 0) {
+      return false;
+    }
+    const selectedMode = this.modesReglement.find(m => m.id === modeId);
+    if (!selectedMode || !selectedMode.nom) {
+      return false;
+    }
+    const modeNom = selectedMode.nom.toLowerCase();
+    return modeNom.includes('chèque') || modeNom.includes('cheque') || modeNom.includes('effet');
   }
 
   onPageChange(page: number): void {
@@ -590,6 +709,44 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
     this.router.navigate(['/Edit-Reglement', regle_id]);
   }
 
+  // Télécharger le PDF d'un règlement
+  telechargerPDF(regle_id: number): void {
+    if (!regle_id) {
+      this.showError('ID du règlement invalide');
+      return;
+    }
+    
+    Swal.fire({
+      title: 'Génération du PDF...',
+      html: '<div class="loading-spinner"></div><p>Veuillez patienter</p>',
+      showConfirmButton: false,
+      allowOutsideClick: false
+    });
+
+    this.ventesService.telechargerPDF(regle_id).subscribe({
+      next: (blob: Blob) => {
+        Swal.close();
+        
+        // Créer un URL pour le blob et l'ouvrir dans un nouvel onglet
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        
+        // Libérer l'URL après un délai
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+        }, 10000);
+      },
+      error: (err) => {
+        Swal.close();
+        Swal.fire({
+          icon: 'error',
+          title: 'Erreur',
+          text: 'Impossible de générer le PDF. Vérifiez votre connexion et réessayez.'
+        });
+      }
+    });
+  }
+  
   // Supprimer un règlement
   onDeleteReglement(reglement: any, index: number): void {
     Swal.fire({
@@ -603,17 +760,161 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
       cancelButtonText: 'Annuler'
     }).then((result) => {
       if (result.isConfirmed) {
-        this.ventesService.deleteReglement(reglement.id).subscribe({
+        this.ventesService.deleteReglement(reglement.regle_id || reglement.id).subscribe({
           next: () => {
             Swal.fire('Supprimé !', 'Le règlement a été supprimé avec succès.', 'success');
             this.loadReglements(this.currentPage || 1, this.searchTerm || '');
           },
           error: (err: any) => {
-            console.error('Erreur lors de la suppression:', err);
             Swal.fire('Erreur !', 'Une erreur est survenue lors de la suppression.', 'error');
           }
         });
       }
     });
+  }
+
+  // ===== FILTRES PAR COLONNE (STYLE EXCEL) =====
+  onColumnFilterChange(column: string, value: string): void {
+    this.columnFilters[column] = value;
+    this.applyColumnFilters();
+  }
+
+  applyColumnFilters(): void {
+    this.reglements = this.allReglements.filter(item => {
+      return Object.keys(this.columnFilters).every(key => {
+        const filterValue = this.columnFilters[key];
+        if (!filterValue) return true;
+        
+        let itemValue = item[key];
+        if (itemValue === null || itemValue === undefined) return false;
+        
+        // Gestion spéciale pour les dates
+        if (key === 'date' && filterValue) {
+          const filterDate = new Date(filterValue).toISOString().split('T')[0];
+          const itemDate = itemValue ? new Date(itemValue).toISOString().split('T')[0] : '';
+          return itemDate === filterDate;
+        }
+        
+        // Gestion spéciale pour les montants numériques
+        if ((key === 'montant' || key === 'solde') && filterValue) {
+          const filterNum = parseFloat(filterValue);
+          const itemNum = parseFloat(itemValue) || 0;
+          return !isNaN(filterNum) && itemNum >= filterNum;
+        }
+        
+        return itemValue.toString().toLowerCase().includes(filterValue.toLowerCase());
+      });
+    });
+    
+    this.totalRecords = this.reglements.length;
+    this.totalPages = Math.ceil(this.totalRecords / this.pageSize);
+    this.currentPage = 1;
+    this.cdr.detectChanges();
+  }
+
+  clearColumnFilters(): void {
+    this.columnFilters = {
+      numero: '',
+      date: '',
+      client: '',
+      mode: '',
+      montant: '',
+      solde: ''
+    };
+    this.applyColumnFilters();
+  }
+
+  // ===== GESTION DU MENU CONTEXTUEL DES COLONNES =====
+  showColumnContextMenu(event: MouseEvent, column: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.activeColumnMenu = column;
+    this.menuPosition = {
+      x: event.clientX,
+      y: event.clientY
+    };
+    this.showColumnMenu = true;
+    this.cdr.detectChanges();
+  }
+
+  hideColumnContextMenu(): void {
+    this.showColumnMenu = false;
+    this.activeColumnMenu = '';
+    this.cdr.detectChanges();
+  }
+
+  toggleColumnVisibility(column: string): void {
+    this.columnVisibility[column] = !this.columnVisibility[column];
+    this.hideColumnContextMenu();
+  }
+
+  togglePinColumn(column: string): void {
+    const index = this.pinnedColumns.indexOf(column);
+    if (index > -1) {
+      this.pinnedColumns.splice(index, 1);
+    } else {
+      this.pinnedColumns.push(column);
+    }
+    this.hideColumnContextMenu();
+  }
+
+  isColumnPinned(column: string): boolean {
+    return this.pinnedColumns.includes(column);
+  }
+
+  autoSizeColumn(column: string): void {
+    this.columnWidths[column] = 'auto';
+    this.hideColumnContextMenu();
+  }
+
+  autoSizeAllColumns(): void {
+    Object.keys(this.columnVisibility).forEach(column => {
+      this.columnWidths[column] = 'auto';
+    });
+    this.hideColumnContextMenu();
+  }
+
+  resetColumns(): void {
+    this.columnVisibility = {
+      numero: true,
+      date: true,
+      client: true,
+      mode: true,
+      montant: true,
+      solde: true
+    };
+    this.pinnedColumns = [];
+    this.columnWidths = {};
+    this.hideColumnContextMenu();
+  }
+
+  getColumnDisplayName(column: string): string {
+    const names: any = {
+      numero: 'Numéro',
+      date: 'Date',
+      client: 'Client',
+      mode: 'Mode',
+      montant: 'Montant',
+      solde: 'Solde'
+    };
+    return names[column] || column;
+  }
+
+  showAllColumns(): void {
+    Object.keys(this.columnVisibility).forEach(key => {
+      this.columnVisibility[key] = true;
+    });
+    this.hideColumnContextMenu();
+  }
+
+  // Helper pour compter les colonnes visibles
+  getVisibleColumnsCount(): number {
+    return Object.keys(this.columnVisibility).filter(key => this.columnVisibility[key]).length;
+  }
+
+  // Helper pour afficher le menu contextuel avec stopPropagation
+  openColumnMenu(event: MouseEvent, column: string): void {
+    event.stopPropagation();
+    this.showColumnContextMenu(event, column);
   }
 }

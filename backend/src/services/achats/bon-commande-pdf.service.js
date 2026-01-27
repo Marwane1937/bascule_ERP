@@ -298,12 +298,32 @@ class BonCommandeAchatPdfService {
         doc.text(`${commandeData[0]?.description || ''}`, 415, infoTableY + infoTableHeaderHeight + 6, { width: 145, align: 'center' });
 
         // === TABLEAU DES ARTICLES ===
-        let y = infoTableY + infoTableTotalHeight + 10;
+        const tableStartY = infoTableY + infoTableTotalHeight + 10;
+        let y = tableStartY;
         const articlesTableHeaderHeight = 20;
         const lightGrayColor = '#E0E0E0';
+        const tableX = 50;
+        const tableWidth = 510;
+        const tableRightX = tableX + tableWidth;
 
-        doc.roundedRect(50, y, 510, articlesTableHeaderHeight, tableBorderRadius).fill(lightGrayColor).stroke('#000');
-        doc.lineWidth(1).roundedRect(50, y, 510, articlesTableHeaderHeight, tableBorderRadius).stroke('#000');
+        // Calculer l'espace disponible jusqu'aux signatures
+        // Les totaux prennent environ 3 lignes de 20px + 5px = 65px
+        // Le montant en lettres prend environ 20px
+        // Les signatures commencent après avec un espace de 10px
+        const totalsBoxHeight = 65; // 3 lignes de 20px + 5px
+        const montantEnLettresHeight = 20;
+        const signatureBoxHeight = 60;
+        const signatureBoxGap = 10;
+        const pageHeight = 842;
+        const bottomMargin = 40;
+        const footerHeight = 55;
+        const footerY = pageHeight - bottomMargin - footerHeight;
+        const signatureBoxY = footerY - signatureBoxHeight - signatureBoxGap - montantEnLettresHeight - totalsBoxHeight - 10;
+        const maxYBeforeSignatures = signatureBoxY - 10;
+        const availableHeight = maxYBeforeSignatures - (tableStartY + articlesTableHeaderHeight);
+
+        doc.roundedRect(tableX, y, tableWidth, articlesTableHeaderHeight, tableBorderRadius).fill(lightGrayColor).stroke('#000');
+        doc.lineWidth(1).roundedRect(tableX, y, tableWidth, articlesTableHeaderHeight, tableBorderRadius).stroke('#000');
         doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
 
         const colRefX = 50;
@@ -336,7 +356,95 @@ class BonCommandeAchatPdfService {
         let totalTVA = 0;
 
         if (commandeData && commandeData.length > 0) {
-          commandeData.forEach(line => {
+          // Calculer d'abord toutes les hauteurs nécessaires
+          const baseRowHeight = 20;
+          const maxRowHeight = 500;
+          const rowHeights = [];
+          let totalNeededHeight = 0;
+
+          commandeData.forEach((line) => {
+            const designationHtml = line.article || line.designation || '';
+            // La largeur effective pour le calcul de hauteur doit tenir compte du padding interne de renderInlineHtml (16px)
+            const effectiveDesignationWidth = Math.max(0, colDesignationWidth - 16);
+
+            const designationPlain = (designationHtml || '')
+              .replace(/<h[1-6][^>]*>/gi, '\n').replace(/<\/h[1-6]>/gi, '\n')
+              .replace(/<ul[^>]*>/gi, '\n').replace(/<\/ul>/gi, '\n')
+              .replace(/<li[^>]*>/gi, '\n• ').replace(/<\/li>/gi, '')
+              .replace(/<br\s*\/?>/gi, '\n')
+              .replace(/<p[^>]*>/gi, '\n').replace(/<\/p>/gi, '\n')
+              .replace(/<[^>]*>/g, '')
+              .replace(/[ \t]+/g, ' ')
+              .trim();
+
+            let textHeight = baseRowHeight;
+            if (effectiveDesignationWidth > 0 && designationPlain.length > 0) {
+              try {
+                const safeWidth = Math.max(1, Math.min(Math.floor(effectiveDesignationWidth), 10000));
+                doc.fontSize(9).font('Helvetica');
+                const calculatedHeight = doc.heightOfString(designationPlain, { width: safeWidth, align: 'left' });
+                if (typeof calculatedHeight === 'number' && !isNaN(calculatedHeight) && calculatedHeight > 0) {
+                  textHeight = calculatedHeight;
+                }
+              } catch (error) {
+                textHeight = baseRowHeight;
+              }
+            }
+
+            const validTextHeight = isNaN(textHeight) || textHeight <= 0 ? baseRowHeight : textHeight;
+            // Espacement vertical minimal - seulement ce qui est nécessaire pour le texte
+            const naturalHeight = Math.max(baseRowHeight, Math.ceil(validTextHeight) + 4);
+            const rowHeight = Math.min(maxRowHeight, naturalHeight);
+            const validRowHeight = isNaN(rowHeight) || rowHeight <= 0 ? baseRowHeight : rowHeight;
+            
+            rowHeights.push(validRowHeight);
+            totalNeededHeight += validRowHeight;
+          });
+
+          // Ajuster les hauteurs pour remplir l'espace disponible jusqu'aux signatures
+          // mais avec un espacement minimal entre les lignes
+          let adjustedRowHeights = [...rowHeights];
+          
+          if (totalNeededHeight < availableHeight) {
+            // Si on a moins de contenu que d'espace disponible, répartir l'espace supplémentaire
+            // mais de manière minimale pour éviter les grands espaces
+            const extraSpace = availableHeight - totalNeededHeight;
+            // Répartir l'espace supplémentaire de manière minimale (maximum 3px par ligne)
+            const maxExtraPerRow = 3;
+            const extraPerRow = Math.min(maxExtraPerRow, Math.floor(extraSpace / rowHeights.length));
+            adjustedRowHeights = rowHeights.map(h => h + extraPerRow);
+            // Ajuster pour que la somme soit exactement égale à availableHeight
+            const currentTotal = adjustedRowHeights.reduce((sum, h) => sum + h, 0);
+            const diff = availableHeight - currentTotal;
+            if (diff !== 0 && adjustedRowHeights.length > 0) {
+              adjustedRowHeights[adjustedRowHeights.length - 1] += diff;
+            }
+            totalNeededHeight = availableHeight;
+          } else if (totalNeededHeight > availableHeight) {
+            // Si on a plus de contenu, ajuster proportionnellement pour remplir exactement l'espace
+            const scaleFactor = availableHeight / totalNeededHeight;
+            adjustedRowHeights = rowHeights.map(h => Math.max(baseRowHeight, Math.floor(h * scaleFactor)));
+            // Ajuster pour que la somme soit exactement égale à availableHeight
+            const currentTotal = adjustedRowHeights.reduce((sum, h) => sum + h, 0);
+            const diff = availableHeight - currentTotal;
+            if (diff !== 0 && adjustedRowHeights.length > 0) {
+              adjustedRowHeights[adjustedRowHeights.length - 1] += diff;
+            }
+            totalNeededHeight = availableHeight;
+          } else {
+            // Exactement la bonne taille
+            totalNeededHeight = availableHeight;
+          }
+
+          // Positions des lignes verticales de séparation
+          const xPositions = [colDesignationX, colQteX, colPUX, colRX, colHTX, tableRightX];
+
+          // Dessiner chaque ligne
+          let currentY = tableStartY + articlesTableHeaderHeight;
+          let currentPageTableStartY = currentY;
+          let currentMaxYBeforeSignatures = maxYBeforeSignatures;
+          
+          commandeData.forEach((line, index) => {
             const ref = line.article_cod || '';
             const designationHtml = line.article || line.designation || '';
             const pu = isNaN(Number(line.prix)) ? 0 : Number(line.prix);
@@ -358,78 +466,127 @@ class BonCommandeAchatPdfService {
             totalHT += ht;
             totalTVA += tva;
 
-            const effectiveDesignationWidth = Math.max(0, colDesignationWidth - (colDesignationPadding * 2));
+            let rowHeight = adjustedRowHeights[index] || baseRowHeight;
 
-            const designationPlain = (designationHtml || '')
-              .replace(/<h[1-6][^>]*>/gi, '\n').replace(/<\/h[1-6]>/gi, '\n')
-              .replace(/<ul[^>]*>/gi, '\n').replace(/<\/ul>/gi, '\n')
-              .replace(/<li[^>]*>/gi, '\n• ').replace(/<\/li>/gi, '')
-              .replace(/<br\s*\/?>/gi, '\n')
-              .replace(/<p[^>]*>/gi, '\n').replace(/<\/p>/gi, '\n')
-              .replace(/<[^>]*>/g, '')
-              .replace(/[ \t]+/g, ' ')
-              .trim();
-
-            const baseRowHeight = 20;
-            const maxRowHeight = 500;
-
-            let textHeight = baseRowHeight;
-            if (effectiveDesignationWidth > 0 && designationPlain.length > 0) {
-              try {
-                const safeWidth = Math.max(1, Math.min(Math.floor(effectiveDesignationWidth), 10000));
-                doc.fontSize(9).font('Helvetica');
-                const calculatedHeight = doc.heightOfString(designationPlain, { width: safeWidth, align: 'left' });
-                if (typeof calculatedHeight === 'number' && !isNaN(calculatedHeight) && calculatedHeight > 0) {
-                  textHeight = calculatedHeight;
-                }
-              } catch (error) {
-                textHeight = baseRowHeight;
+            // Vérifier si on dépasse la page - créer une nouvelle page seulement s'il reste des lignes
+            if (currentY + rowHeight > currentMaxYBeforeSignatures && index < commandeData.length - 1) {
+              // Fermer le tableau sur la page actuelle
+              const pageTableHeight = currentY - currentPageTableStartY;
+              if (pageTableHeight > 0) {
+                doc.roundedRect(tableX, currentPageTableStartY, tableWidth, pageTableHeight, tableBorderRadius).stroke('#000');
+                xPositions.forEach(x => doc.moveTo(x, currentPageTableStartY).lineTo(x, currentY).stroke('#000'));
               }
-            }
 
-            const validTextHeight = isNaN(textHeight) || textHeight <= 0 ? baseRowHeight : textHeight;
-            const naturalHeight = Math.max(baseRowHeight, Math.ceil(validTextHeight) + (colDesignationPadding * 2) + 10);
-            const rowHeight = Math.min(maxRowHeight, naturalHeight);
-            const validRowHeight = isNaN(rowHeight) || rowHeight <= 0 ? baseRowHeight : rowHeight;
+              // Dessiner le pied de page avant d'ajouter une nouvelle page
+              doc.rect(0, footerY, 595, footerHeight).fill('#E8F4F8');
+              if (options.documentSociete && options.documentSociete.pied_page) {
+                const piedPage = options.documentSociete.pied_page;
+                if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
+                  renderFormattedText(doc, piedPage, {
+                    startX: 50,
+                    startY: footerY + 5,
+                    defaultFontSize: 7,
+                    defaultColor: '#000000',
+                    defaultFont: 'Helvetica',
+                    defaultAlign: 'center',
+                    defaultLineSpacing: 8,
+                    width: 495
+                  });
+                }
+              }
 
-            const currentY = isNaN(y) || y < 0 ? 0 : y;
-            const estimatedNextY = currentY + validRowHeight;
-            const maxYBeforeNewPage = 700;
-
-            if (estimatedNextY > maxYBeforeNewPage && !isNaN(estimatedNextY)) {
+              // Nouvelle page
               doc.addPage();
-              y = 50;
+              currentY = 50;
+              currentPageTableStartY = 50;
+              
+              // Recalculer l'espace disponible sur la nouvelle page
+              currentMaxYBeforeSignatures = signatureBoxY - 10;
+              const newTableStartY = currentY + articlesTableHeaderHeight;
+              const newAvailableHeight = currentMaxYBeforeSignatures - newTableStartY;
+              
+              // Redessiner l'en-tête
+              doc.roundedRect(tableX, currentY, tableWidth, articlesTableHeaderHeight, tableBorderRadius).fill(lightGrayColor).stroke('#000');
+              doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
+              doc.text('Réf', colRefX, currentY + 6, { width: colRefWidth, align: 'center' });
+              doc.text('Désignation', colDesignationX, currentY + 6, { width: colDesignationWidth, align: 'center' });
+              doc.text('Qté', colQteX, currentY + 6, { width: colQteWidth, align: 'center' });
+              doc.text('P.U.', colPUX, currentY + 6, { width: colPUWidth, align: 'center' });
+              doc.text('R.', colRX, currentY + 6, { width: colRWidth, align: 'center' });
+              doc.text('H.T.', colHTX, currentY + 6, { width: colHTWidth, align: 'center' });
+              currentY += articlesTableHeaderHeight;
+              currentPageTableStartY = currentY;
+              doc.font('Helvetica').fillColor('#000000').stroke('#000');
+
+              // Ajuster les hauteurs pour remplir l'espace disponible avec un espacement minimal
+              const remainingHeights = rowHeights.slice(index);
+              const remainingTotal = remainingHeights.reduce((sum, h) => sum + h, 0);
+              
+              if (remainingTotal < newAvailableHeight) {
+                // Répartir l'espace supplémentaire de manière minimale (maximum 3px par ligne)
+                const extraSpace = newAvailableHeight - remainingTotal;
+                const maxExtraPerRow = 3;
+                const extraPerRow = Math.min(maxExtraPerRow, Math.floor(extraSpace / remainingHeights.length));
+                const adjustedRemaining = remainingHeights.map(h => h + extraPerRow);
+                const currentTotal = adjustedRemaining.reduce((sum, h) => sum + h, 0);
+                const diff = newAvailableHeight - currentTotal;
+                if (diff !== 0 && adjustedRemaining.length > 0) {
+                  adjustedRemaining[adjustedRemaining.length - 1] += diff;
+                }
+                adjustedRowHeights = rowHeights.slice(0, index).concat(adjustedRemaining);
+              } else if (remainingTotal > newAvailableHeight) {
+                const scaleFactor = newAvailableHeight / remainingTotal;
+                const adjustedRemaining = remainingHeights.map(h => Math.max(baseRowHeight, Math.floor(h * scaleFactor)));
+                const currentTotal = adjustedRemaining.reduce((sum, h) => sum + h, 0);
+                const diff = newAvailableHeight - currentTotal;
+                if (diff !== 0 && adjustedRemaining.length > 0) {
+                  adjustedRemaining[adjustedRemaining.length - 1] += diff;
+                }
+                adjustedRowHeights = rowHeights.slice(0, index).concat(adjustedRemaining);
+              } else {
+                adjustedRowHeights = rowHeights.slice(0, index).concat(remainingHeights);
+              }
+              
+              // Mettre à jour rowHeight pour cette ligne avec la nouvelle valeur
+              rowHeight = adjustedRowHeights[index] || baseRowHeight;
             }
 
-            const validY = isNaN(y) || y < 0 ? 0 : y;
-            const centerY = validY + (validRowHeight / 2) - 3;
-
-            doc.roundedRect(50, validY, 510, validRowHeight, tableBorderRadius).stroke('#000');
+            // Tous les éléments sur la même ligne horizontale
+            // Espacement vertical minimal pour un rendu compact
+            const textY = currentY + 3;
 
             doc.font('Helvetica').fontSize(9).fillColor('#000000');
-            doc.text(ref || '', colRefX, validY + 6, { width: colRefWidth, align: 'left' });
+            // Réf aligné à gauche
+            doc.text(ref || '', colRefX + 8, textY, { width: colRefWidth - 16, align: 'left' });
 
+            // Désignation (avec HTML support) - même ligne
+            // La fonction renderInlineHtml ajoute un padding de 8px de chaque côté (total 16px)
+            renderInlineHtml(doc, designationHtml, colDesignationX, textY - 8, colDesignationWidth, rowHeight - 6);
+
+            // Quantité, P.U., Remise, H.T. alignés à droite - même ligne
             const qteText = qte.toFixed(2).replace('.', ',');
-            doc.text(qteText, colQteX, centerY, { width: colQteWidth, align: 'right' });
+            doc.text(qteText, colQteX, textY, { width: colQteWidth, align: 'right' });
 
             const puText = pu.toFixed(2).replace('.', ',');
-            doc.text(puText, colPUX, centerY, { width: colPUWidth, align: 'right' });
+            doc.text(puText, colPUX, textY, { width: colPUWidth, align: 'right' });
 
             const remiseValue = montantRemise.toFixed(2).replace('.', ',');
-            doc.text(remiseValue, colRX, centerY, { width: colRWidth, align: 'right' });
+            doc.text(remiseValue, colRX, textY, { width: colRWidth, align: 'right' });
 
             const htValue = ht.toFixed(2).replace('.', ',');
-            doc.text(htValue, colHTX, centerY, { width: colHTWidth, align: 'right' });
+            doc.text(htValue, colHTX, textY, { width: colHTWidth, align: 'right' });
 
-            renderInlineHtml(doc, designationHtml, colDesignationX, validY + 6, effectiveDesignationWidth, validRowHeight - 8);
-
-            doc.font('Helvetica').fontSize(9).fillColor('#000000');
-
-            const xPositions = [100, colQteX, colPUX, colRX, colHTX, 560];
-            xPositions.forEach(x => doc.moveTo(x, validY).lineTo(x, validY + validRowHeight).stroke('#000'));
-
-            y = validY + validRowHeight;
+            currentY += rowHeight;
           });
+
+          // Fermer le tableau sur la dernière page avec la hauteur exacte jusqu'aux signatures
+          const targetHeight = currentMaxYBeforeSignatures - currentPageTableStartY;
+          if (targetHeight > 0) {
+            doc.roundedRect(tableX, currentPageTableStartY, tableWidth, targetHeight, tableBorderRadius).stroke('#000');
+            xPositions.forEach(x => doc.moveTo(x, currentPageTableStartY).lineTo(x, currentPageTableStartY + targetHeight).stroke('#000'));
+          }
+
+          y = currentPageTableStartY + targetHeight;
         } else {
           doc.text('Aucune ligne disponible.', 60, y + 10);
           y += 30;
@@ -471,76 +628,44 @@ class BonCommandeAchatPdfService {
 
         // === SIGNATURES ===
         y += 10;
-        const signatureBoxHeight = 60;
+        // signatureBoxHeight, signatureBoxGap et signatureBoxY sont déjà déclarés plus haut
         const signatureBoxWidth = 250;
-        const signatureBoxY = y;
-        const signatureBoxGap = 10;
+        const currentSignatureBoxY = y; // Position actuelle pour les signatures
         const signatureBox1X = 50;
         const signatureBox2X = signatureBox1X + signatureBoxWidth + signatureBoxGap;
 
-        doc.roundedRect(signatureBox1X, signatureBoxY, signatureBoxWidth, signatureBoxHeight, tableBorderRadius).stroke('#000');
-        doc.roundedRect(signatureBox2X, signatureBoxY, signatureBoxWidth, signatureBoxHeight, tableBorderRadius).stroke('#000');
+        doc.roundedRect(signatureBox1X, currentSignatureBoxY, signatureBoxWidth, signatureBoxHeight, tableBorderRadius).stroke('#000');
+        doc.roundedRect(signatureBox2X, currentSignatureBoxY, signatureBoxWidth, signatureBoxHeight, tableBorderRadius).stroke('#000');
 
         doc.font('Helvetica-Bold').fontSize(10).fillColor('#000');
-        doc.text('Direction', signatureBox1X, signatureBoxY + 10, { width: signatureBoxWidth, align: 'center' });
-        doc.text('Bon Pour Accord', signatureBox2X, signatureBoxY + 10, { width: signatureBoxWidth, align: 'center' });
+        doc.text('Direction', signatureBox1X, currentSignatureBoxY + 10, { width: signatureBoxWidth, align: 'center' });
+        doc.text('Bon Pour Accord', signatureBox2X, currentSignatureBoxY + 10, { width: signatureBoxWidth, align: 'center' });
 
-        y = signatureBoxY + signatureBoxHeight + 20;
+        y = currentSignatureBoxY + signatureBoxHeight + 20;
 
         // === PIED DE PAGE ===
         const footerBgColor = '#E8F4F8'; // Bleu ciel comme le logo
-        const pageHeight = 842;
-        const bottomMargin = 40;
-        const footerHeight = 55;
-        const footerY = pageHeight - bottomMargin - footerHeight;
+        // pageHeight, bottomMargin, footerHeight et footerY sont déjà déclarés plus haut
         const footerLineSpacing = 8;
         const footerStartY = footerY + 5;
 
-        const htmlToPlainText = (html) => {
-          if (!html) return '';
-          return html.replace(/<[^>]*>/g, '').replace(/[ \t]+/g, ' ').trim();
-        };
+        // Toujours dessiner le footer sur la page actuelle, ne jamais créer de page vide
+        doc.rect(0, footerY, 595, footerHeight).fill(footerBgColor);
 
-        if (y > footerY - 20) {
-          doc.addPage();
-          y = 50;
-          const newFooterY = pageHeight - bottomMargin - footerHeight;
-          doc.rect(0, newFooterY, 595, footerHeight).fill(footerBgColor);
-
-          if (options.documentSociete && options.documentSociete.pied_page) {
-            const piedPage = options.documentSociete.pied_page;
-            // Vérifier si c'est un objet JSON ou du texte brut
-            if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
-              renderFormattedText(doc, piedPage, {
-                startX: 50,
-                startY: newFooterY + 5,
-                defaultFontSize: 7,
-                defaultColor: '#000000',
-                defaultFont: 'Helvetica',
-                defaultAlign: 'center',
-                defaultLineSpacing: footerLineSpacing,
-                width: 495
-              });
-            }
-          }
-        } else {
-          doc.rect(0, footerY, 595, footerHeight).fill(footerBgColor);
-
-          if (options.documentSociete && options.documentSociete.pied_page) {
-            const piedPage = options.documentSociete.pied_page;
-            // Vérifier si c'est un objet JSON ou du texte brut
-            if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
-              renderFormattedText(doc, piedPage, {
-                startX: 50,
-                startY: footerStartY,
-                defaultFontSize: 7,
-                defaultColor: '#000000',
-                defaultFont: 'Helvetica',
-                defaultAlign: 'center',
-                defaultLineSpacing: footerLineSpacing,
-                width: 495
-              });
-            }
+        if (options.documentSociete && options.documentSociete.pied_page) {
+          const piedPage = options.documentSociete.pied_page;
+          // Vérifier si c'est un objet JSON ou du texte brut
+          if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
+            renderFormattedText(doc, piedPage, {
+              startX: 50,
+              startY: footerStartY,
+              defaultFontSize: 7,
+              defaultColor: '#000000',
+              defaultFont: 'Helvetica',
+              defaultAlign: 'center',
+              defaultLineSpacing: footerLineSpacing,
+              width: 495
+            });
           }
         }
 

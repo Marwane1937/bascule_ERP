@@ -28,7 +28,6 @@ export class SocieteSelectorComponent implements OnInit {
         this.isLoading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement sociétés:', error);
         this.isLoading = false;
       }
     });
@@ -133,7 +132,6 @@ export class SocieteSelectorComponent implements OnInit {
         });
       },
       error: (error) => {
-        console.error('❌ Erreur lors du changement de base de données:', error);
         this.isLoading = false;
         
         // Fermer le message de chargement
@@ -154,5 +152,4 @@ export class SocieteSelectorComponent implements OnInit {
     this.showDropdown = false;
   }
 }
-
 

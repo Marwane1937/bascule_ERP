@@ -66,7 +66,6 @@ export class ChequePreviewComponent implements OnInit {
         this.refreshTemplatesAndData();
       },
       error: (err) => {
-        console.error(err);
         this.loading = false;
         alert("Erreur chargement banques.");
       }
@@ -107,7 +106,6 @@ export class ChequePreviewComponent implements OnInit {
         this.loadData();
       },
       error: (err) => {
-        console.error(err);
         this.loading = false;
         alert("Erreur chargement modèles.");
       }
@@ -136,7 +134,6 @@ export class ChequePreviewComponent implements OnInit {
         this.loading = false;
       },
       error: (err) => {
-        console.error(err);
         this.loading = false;
         alert("Erreur chargement aperçu.");
       }
@@ -264,7 +261,6 @@ export class ChequePreviewComponent implements OnInit {
         document.body.appendChild(iframe);
       },
       error: (err) => {
-        console.error(err);
         alert("Erreur impression.");
       }
     });

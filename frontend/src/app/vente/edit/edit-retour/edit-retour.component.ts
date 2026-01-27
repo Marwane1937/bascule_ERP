@@ -65,7 +65,6 @@ export class EditRetourComponent implements OnInit {
 
   filteredArticles: { [key: number]: any[] } = {};
 
-
   fraisPort = 0;
   sousTotal = 0;
   taxeTotal = 0;
@@ -170,7 +169,6 @@ export class EditRetourComponent implements OnInit {
           const dataPartId = data?.part_id != null ? Number(data.part_id) : null;
           const dataContactId = data?.contact_id != null ? Number(data.contact_id) : null;
 
-
           const clientTrouve = this.clients.find((c: any) => {
             if (!c) return false;
             const clientPartId = c.part_id != null ? Number(c.part_id) : null;
@@ -183,7 +181,6 @@ export class EditRetourComponent implements OnInit {
             return commercialId !== null && dataContactId !== null && commercialId === dataContactId;
           });
 
-
           const clientNom = clientTrouve?.nom || data.client || data.client_nom || data.clientInfo?.nom || '';
           const commercialNom = commercialTrouve?.nom || data.commercial || data.commercial_nom || '';
 
@@ -194,7 +191,6 @@ export class EditRetourComponent implements OnInit {
             date: data.date,
             description: data.description || ''
           };
-
 
           this.RetourForm.patchValue({
             clientSearch: clientNom,
@@ -260,13 +256,10 @@ export class EditRetourComponent implements OnInit {
           ice: clientInfoData.ice || ''
         };
 
-
-
         this.produitsOriginal = JSON.parse(JSON.stringify(this.produits));
         this.produits.forEach((_, i) => this.recalculateTotal(i));
       },
       error: (err) => {
-        console.error('❌ Erreur lors du chargement du retour', err);
       }
     });
   }
@@ -286,7 +279,6 @@ export class EditRetourComponent implements OnInit {
           };
         },
         error: (err) => {
-          console.error('❌ Erreur lors de la mise à jour', err);
         }
       });
     }
@@ -301,7 +293,6 @@ export class EditRetourComponent implements OnInit {
           resolve();
         },
         error: error => {
-          console.error('❌ Erreur lors du chargement des produits:', error);
           reject(error);
         }
       });
@@ -437,7 +428,6 @@ export class EditRetourComponent implements OnInit {
         },
         error: (err: any) => {
           this.showNotification(err.message, true);
-          console.error('Erreur de suppression :', err);
         }
       });
     }
@@ -476,7 +466,6 @@ export class EditRetourComponent implements OnInit {
     }
 
     if (!Array.isArray(this.produits1) || this.produits1.length === 0) {
-      console.warn('⚠️ produits1 est vide ou non défini');
       this.filteredArticles[index] = [];
       return;
     }
@@ -492,10 +481,8 @@ export class EditRetourComponent implements OnInit {
 
   selectArticle(index: number, article: any) {
     if (!article) {
-      console.warn('⚠️ Article sélectionné est null ou undefined');
       return;
     }
-
 
     this.produits[index].article_id = article.article_id;
     this.produits[index].articleSearch = article.article_nom || '';
@@ -748,7 +735,6 @@ export class EditRetourComponent implements OnInit {
         this.produitsOriginal = JSON.parse(JSON.stringify(this.produits));
       },
       error: (err) => {
-        console.error("Erreur d'enregistrement :", err);
         Swal.fire({
           icon: 'error',
           title: 'Erreur',
@@ -757,7 +743,6 @@ export class EditRetourComponent implements OnInit {
       }
     });
   }
-
 
   showNotification(message: string, isError: boolean = false) {
     this.successMessage = message;
@@ -803,7 +788,6 @@ export class EditRetourComponent implements OnInit {
         bootstrap.Modal.getInstance(document.getElementById('emailModal')).hide();
       },
       error: err => {
-        console.error(err);
         Swal.fire({
           icon: 'error',
           title: 'Erreur',
@@ -854,7 +838,6 @@ export class EditRetourComponent implements OnInit {
         if (document.body.contains(loadingElement)) {
           document.body.removeChild(loadingElement);
         }
-        console.error('Erreur WhatsApp PDF :', err);
         alert('❌ Erreur: ' + (err.error?.message || err.message));
       }
     });
@@ -877,7 +860,6 @@ export class EditRetourComponent implements OnInit {
         }
       },
       error: (err) => {
-        console.error('Erreur génération PDF :', err);
         Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors de la génération du PDF." });
       }
     });

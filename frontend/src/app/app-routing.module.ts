@@ -39,6 +39,8 @@ import { CaisseRecettesComponent } from './vente/caisse/caisse-recettes.componen
 import { CaisseDepensesComponent } from './vente/caisse/caisse-depenses.component';
 import { BonCommandeComponent } from './achat/bon-commande/bon-commande.component';
 import { EditBonCommandeComponent } from './achat/edit/edit-bon-commande/edit-bon-commande.component';
+import { DemandeAchatComponent } from './achat/demande-achat/demande-achat.component';
+import { EditDemandeAchatComponent } from './achat/edit/edit-demande-achat/edit-demande-achat.component';
 import { NotificationComponent } from './notification/notification.component';
 import { FactureFournisseurComponent } from './achat/facture-fournisseur/facture-fournisseur.component';
 import { ReceptionComponent } from './achat/reception/reception.component';
@@ -147,6 +149,10 @@ const routes: Routes = [
     component: BonCommandeComponent,
   },
   {
+    path: 'Demande-Achat',
+    component: DemandeAchatComponent,
+  },
+  {
     path: 'Facture-Fournisseur',
     component: FactureFournisseurComponent,
   },
@@ -227,6 +233,10 @@ const routes: Routes = [
     component: EditBonCommandeComponent,
   },
   {
+    path: 'Edit-Demande-Achat/:document_id',
+    component: EditDemandeAchatComponent,
+  },
+  {
     path: 'Edit-Reception/:document_id',
     component: EditReceptionComponent,
   },
@@ -269,6 +279,11 @@ const routes: Routes = [
   {
     path: 'Interventions/Nouvelle',
     component: InterventionFormComponent
+  },
+  {
+    path: 'Interventions/Rapports',
+    redirectTo: '/Interventions',
+    pathMatch: 'full'
   },
   {
     path: 'Ville',

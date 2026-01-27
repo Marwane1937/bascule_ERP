@@ -77,7 +77,6 @@ export class CalibrationComponent implements OnInit {
                 this.loading = false;
             },
             error: (err) => {
-                console.error(err);
                 this.loading = false;
                 alert("Erreur chargement calibration.");
             }
@@ -100,7 +99,6 @@ export class CalibrationComponent implements OnInit {
                 alert('Calibration enregistrée.');
             },
             error: (err) => {
-                console.error(err);
                 this.loading = false;
                 alert("Erreur enregistrement calibration.");
             }

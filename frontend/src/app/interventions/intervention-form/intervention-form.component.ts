@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { trigger, state, style, transition, animate } from '@angular/animations';
 import { InterventionService, Client, Employe, Rubrique } from '../../service/intervention.service';
+import { forkJoin } from 'rxjs';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -62,23 +63,66 @@ export class InterventionFormComponent implements OnInit {
 
   loadData(): void {
     this.loading = true;
-    Promise.all([
-      this.interventionService.getClients().toPromise(),
-      this.interventionService.getEmployes().toPromise(),
-      this.interventionService.getRubriques().toPromise()
-    ]).then(([clients, employes, rubriques]) => {
-      this.clients = clients || [];
-      this.employes = employes || [];
-      this.rubriques = rubriques || [];
-      this.filteredClients = [...this.clients];
-      this.filteredEmployes = [...this.employes];
+    
+    forkJoin({
+      clients: this.interventionService.getClients(),
+      employes: this.interventionService.getEmployes(),
+      rubriques: this.interventionService.getRubriques()
+    }).subscribe({
+      next: (data) => {
+        this.clients = Array.isArray(data.clients) ? data.clients : [];
+        this.employes = Array.isArray(data.employes) ? data.employes : [];
+        this.rubriques = Array.isArray(data.rubriques) ? data.rubriques : [];
+        this.filteredClients = [...this.clients];
+        this.filteredEmployes = [...this.employes];
 
+        // Vérifier si les clients sont bien chargés
+        if (this.clients.length === 0) {
+          console.warn('[InterventionForm] Aucun client chargé');
+        } else {
+          console.log(`[InterventionForm] ${this.clients.length} clients chargés`);
+        }
 
-      this.loading = false;
-    }).catch(error => {
-      console.error('Erreur chargement données:', error);
-      Swal.fire('Erreur', 'Erreur lors du chargement des données', 'error');
-      this.loading = false;
+        this.loading = false;
+      },
+      error: (error) => {
+        console.error('[InterventionForm] Erreur lors du chargement des données:', error);
+        console.error('[InterventionForm] Détails de l\'erreur:', {
+          status: error.status,
+          statusText: error.statusText,
+          message: error.message,
+          error: error.error
+        });
+        
+        // Afficher un message d'erreur plus détaillé selon le type d'erreur
+        let errorMessage = 'Erreur inconnue lors du chargement des données';
+        if (error.status === 401) {
+          errorMessage = 'Erreur d\'authentification. Veuillez vous reconnecter.';
+        } else if (error.status === 403) {
+          errorMessage = 'Accès interdit. Vous n\'avez pas les permissions nécessaires.';
+        } else if (error.status === 500) {
+          errorMessage = error.error?.message || 'Erreur serveur. Veuillez contacter l\'administrateur.';
+        } else if (error.error?.message) {
+          errorMessage = error.error.message;
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+        
+        Swal.fire({
+          title: 'Erreur',
+          text: errorMessage,
+          icon: 'error',
+          confirmButtonText: 'OK'
+        });
+        
+        this.loading = false;
+        // Initialiser avec des tableaux vides pour éviter les erreurs
+        this.clients = [];
+        this.employes = [];
+        this.rubriques = [];
+        this.filteredClients = [];
+        this.filteredEmployes = [];
+      }
     });
   }
 
@@ -89,17 +133,61 @@ export class InterventionFormComponent implements OnInit {
 
   // Gestion des autocompletes
   onClientSearch(event: any): void {
-    const searchTerm = event.target.value.toLowerCase();
-    this.filteredClients = this.clients.filter(client =>
-      client.nom.toLowerCase().includes(searchTerm)
-    );
+    const searchTerm = (event.target.value || '').toLowerCase().trim();
+    
+    // Vérifier si les clients sont chargés
+    if (this.clients.length === 0) {
+      console.warn('[InterventionForm] Tentative de recherche alors qu\'aucun client n\'est chargé');
+      this.filteredClients = [];
+      return;
+    }
+    
+    if (searchTerm === '') {
+      // Si le champ est vide, afficher tous les clients
+      this.filteredClients = [...this.clients];
+    } else {
+      // Filtrer les clients selon le terme de recherche
+      this.filteredClients = this.clients.filter(client =>
+        client.nom.toLowerCase().includes(searchTerm)
+      );
+    }
+  }
+
+  onClientFocus(): void {
+    // Quand le champ reçoit le focus, afficher tous les clients si le champ est vide
+    const currentValue = this.interventionForm.get('clientSearch')?.value || '';
+    
+    // Vérifier si les clients sont chargés
+    if (this.clients.length === 0) {
+      console.warn('[InterventionForm] Focus sur le champ client alors qu\'aucun client n\'est chargé');
+      this.filteredClients = [];
+      return;
+    }
+    
+    if (!currentValue || currentValue.trim() === '') {
+      this.filteredClients = [...this.clients];
+    }
   }
 
   onEmployeSearch(event: any): void {
-    const searchTerm = event.target.value.toLowerCase();
-    this.filteredEmployes = this.employes.filter(employe =>
-      employe.nom.toLowerCase().includes(searchTerm)
-    );
+    const searchTerm = (event.target.value || '').toLowerCase().trim();
+    if (searchTerm === '') {
+      // Si le champ est vide, afficher tous les employés
+      this.filteredEmployes = [...this.employes];
+    } else {
+      // Filtrer les employés selon le terme de recherche
+      this.filteredEmployes = this.employes.filter(employe =>
+        employe.nom.toLowerCase().includes(searchTerm)
+      );
+    }
+  }
+
+  onEmployeFocus(): void {
+    // Quand le champ reçoit le focus, afficher tous les employés si le champ est vide
+    const currentValue = this.interventionForm.get('technicienSearch')?.value || '';
+    if (!currentValue || currentValue.trim() === '') {
+      this.filteredEmployes = [...this.employes];
+    }
   }
 
   selectClient(client: Client): void {
@@ -107,7 +195,7 @@ export class InterventionFormComponent implements OnInit {
       clientSearch: client.nom,
       clientId: client.part_id
     });
-    this.filteredClients = []; // Fermer la liste
+    this.filteredClients = []; // Fermer la liste après sélection
   }
 
   selectEmploye(employe: Employe): void {
@@ -115,7 +203,7 @@ export class InterventionFormComponent implements OnInit {
       technicienSearch: employe.nom,
       technicienId: employe.id
     });
-    this.filteredEmployes = []; // Fermer la liste
+    this.filteredEmployes = []; // Fermer la liste après sélection
   }
 
   // Gestion des rubriques
@@ -208,7 +296,6 @@ export class InterventionFormComponent implements OnInit {
         },
         error: (error) => {
           this.submitting = false;
-          console.error('Erreur création intervention:', error);
           Swal.fire('Erreur', 'Erreur lors de la création de l\'intervention', 'error');
         }
       });
@@ -307,7 +394,6 @@ export class InterventionFormComponent implements OnInit {
         });
       }
     } else {
-      console.warn('Aucun ID d\'intervention créé pour imprimer le PDF');
     }
   }
 
@@ -336,7 +422,6 @@ export class InterventionFormComponent implements OnInit {
         Swal.fire('Téléchargement réussi', 'Le PDF a été téléchargé.', 'success');
       },
       error: (error) => {
-        console.error('Erreur lors du téléchargement du PDF:', error);
         Swal.fire('Erreur', 'Impossible de télécharger le PDF.', 'error');
       }
     });
@@ -344,7 +429,6 @@ export class InterventionFormComponent implements OnInit {
 
   // Test de génération PDF (pour debug)
   testPDF(): void {
-    console.log('Test de génération PDF');
 
     const backendUrl = 'http://localhost:3500';
     const testUrl = `${backendUrl}/api/interventions/test/pdf`;
@@ -356,7 +440,6 @@ export class InterventionFormComponent implements OnInit {
       }
     }).subscribe({
       next: (blob: Blob) => {
-        console.log('Test PDF réussi, taille:', blob.size, 'bytes');
 
         if (blob.size === 0) {
           Swal.fire('Erreur', 'PDF de test vide', 'error');
@@ -379,7 +462,6 @@ export class InterventionFormComponent implements OnInit {
         Swal.fire('Test réussi', 'PDF de test téléchargé', 'success');
       },
       error: (error) => {
-        console.error('Erreur test PDF:', error);
         Swal.fire('Erreur test', 'Impossible de générer le PDF de test', 'error');
       }
     });

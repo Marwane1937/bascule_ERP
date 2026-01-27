@@ -79,7 +79,7 @@ const getReglementById = async (req, res) => {
 const addReglement = async (req, res) => {
   try {
     console.log('[addReglement Controller] 📥 Requête reçue:', req.body);
-    const { numero, date, part_id, mode, reference, montant } = req.body;
+    const { numero, date, part_id, mode, reference, montant, echeance } = req.body;
     
     // Validation (numero peut être vide, il sera généré automatiquement avec le compteur REG)
     if (!date || !part_id || !mode || !montant) {
@@ -87,7 +87,11 @@ const addReglement = async (req, res) => {
     }
 
     const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
-    const result = await reglementService.addReglement({ numero, date, part_id, mode, reference, montant }, sequelize);
+    const reglementData = { numero, date, part_id, mode, reference, montant };
+    if (echeance) {
+      reglementData.echeance = echeance;
+    }
+    const result = await reglementService.addReglement(reglementData, sequelize);
     console.log('[addReglement Controller] ✅ Règlement créé:', result);
     res.status(201).json({ success: true, data: result, message: 'Règlement créé avec succès', numero: result.numero });
   } catch (err) {
@@ -104,14 +108,18 @@ const updateReglement = async (req, res) => {
       return res.status(400).json({ success: false, message: 'ID invalide' });
     }
 
-    const { numero, date, part_id, mode, reference, montant } = req.body;
+    const { numero, date, part_id, mode, reference, montant, echeance } = req.body;
     
     // Validation
     if (!numero || !date || !part_id || !mode || !montant) {
       return res.status(400).json({ success: false, message: 'Champs obligatoires manquants' });
     }
 
-    const result = await reglementService.updateReglement(id, { numero, date, part_id, mode, reference, montant });
+    const reglementData = { numero, date, part_id, mode, reference, montant };
+    if (echeance !== undefined) {
+      reglementData.echeance = echeance;
+    }
+    const result = await reglementService.updateReglement(id, reglementData);
     res.json({ success: true, data: result, message: 'Règlement modifié avec succès' });
   } catch (err) {
     console.error('[updateReglement] Erreur:', err);
@@ -197,6 +205,32 @@ const saveLettrageFactures = async (req, res) => {
   }
 };
 
+const genererPDF = async (req, res) => {
+  try {
+    const regle_id = parseInt(req.params.id);
+    if (!regle_id) {
+      return res.status(400).json({ success: false, message: 'ID invalide' });
+    }
+    
+    const pdfPath = await reglementService.genererPDF(regle_id);
+    const path = require('path');
+    const fileName = `reglement-${regle_id}.pdf`;
+    
+    // Envoyer le fichier PDF
+    res.download(pdfPath, fileName, (err) => {
+      if (err) {
+        console.error('[genererPDF] Erreur envoi fichier:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ success: false, message: 'Erreur lors de l\'envoi du PDF' });
+        }
+      }
+    });
+  } catch (err) {
+    console.error('[genererPDF] Erreur:', err);
+    res.status(500).json({ success: false, message: err.message || 'Erreur lors de la génération du PDF' });
+  }
+};
+
 module.exports = {
   getReglements,
   getReglementById,
@@ -206,6 +240,7 @@ module.exports = {
   deleteReglement,
   getModeReglements,
   getFacturesForLettrage,
-  saveLettrageFactures
+  saveLettrageFactures,
+  genererPDF
 };
 

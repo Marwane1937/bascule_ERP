@@ -57,7 +57,6 @@ export class StockInventaireComponent implements OnInit {
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement inventaires:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement des inventaires', 'error');
         this.loading = false;
       }

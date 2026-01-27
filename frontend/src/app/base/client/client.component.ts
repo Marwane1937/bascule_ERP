@@ -69,7 +69,6 @@ export class ClientComponent implements OnInit {
         this.loading = false;
       },
       error: (err) => {
-        console.error('[ClientComponent] ❌ Erreur chargement clients:', err);
         this.clients = [];
         this.totalRecords = 0;
         this.totalPages = 1;
@@ -99,7 +98,6 @@ OnEdit(part_id : any){
         this.loadClients(1);
       },
       error: (err) => {
-        console.error('[ClientComponent] ❌ Erreur ajout client:', err);
         this.showError(`❌ Erreur lors de l'ajout du client: ${err.error?.message || err.message || 'Erreur inconnue'}`);
       }
     });
@@ -135,7 +133,6 @@ OnEdit(part_id : any){
           this.loadClients(this.currentPage);
         },
         error: (err) => {
-          console.error('[ClientComponent] ❌ Erreur suppression client:', err);
           this.showError(`❌ Erreur lors de la suppression: ${err.error?.message || err.message || 'Erreur inconnue'}`);
         }
       });

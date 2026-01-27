@@ -451,6 +451,30 @@ class NotificationController {
       });
     }
   }
+
+  /**
+   * Récupérer les notifications calculées (contrats expirants, etc.)
+   */
+  async getCalculatedNotifications(req, res) {
+    try {
+      const userId = req.user.id;
+      const sequelize = req.sequelize || null;
+      
+      // Récupérer les notifications de contrats expirants
+      const contractNotifications = await notificationService.getExpiringContractsNotifications(sequelize);
+      
+      res.json({
+        success: true,
+        data: contractNotifications
+      });
+    } catch (error) {
+      console.error('[NotificationController] Erreur récupération notifications calculées:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Erreur lors de la récupération des notifications calculées'
+      });
+    }
+  }
 }
 
 module.exports = new NotificationController();

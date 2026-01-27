@@ -106,7 +106,28 @@ export class EditReglementComponent implements OnInit {
       clientSearch: ['', Validators.required],
       mode: [null, Validators.required],
       reference: [''],
-      montant: [0, [Validators.required, Validators.min(0.01)]]
+      montant: [0, [Validators.required, Validators.min(0.01)]],
+      echeance: ['']
+    });
+    
+    // Écouter les changements du mode pour afficher/masquer l'échéance
+    this.reglementForm.get('mode')?.valueChanges.subscribe(modeId => {
+      const selectedMode = this.modesReglement.find(m => m.id === modeId);
+      const echeanceControl = this.reglementForm.get('echeance');
+      const modeName = selectedMode?.nom?.toLowerCase() || '';
+      if (selectedMode && (modeName.includes('chèque') || modeName.includes('cheque') || modeName.includes('effet'))) {
+        echeanceControl?.setValidators([Validators.required]);
+      } else {
+        echeanceControl?.clearValidators();
+        if (!this.isEditMode) {
+          echeanceControl?.setValue('');
+        }
+      }
+      echeanceControl?.updateValueAndValidity();
+      // Forcer la détection des changements pour afficher/masquer le champ
+      setTimeout(() => {
+        // La détection de changement sera déclenchée automatiquement par Angular
+      }, 0);
     });
   }
 
@@ -116,7 +137,6 @@ export class EditReglementComponent implements OnInit {
         this.clients = data || [];
       },
       error: (err: any) => {
-        console.error('Erreur lors du chargement des clients:', err);
       }
     });
   }
@@ -127,9 +147,46 @@ export class EditReglementComponent implements OnInit {
         this.modesReglement = response?.data || [];
       },
       error: (err: any) => {
-        console.error('Erreur lors du chargement des modes de règlement:', err);
       }
     });
+  }
+  
+  onModeChange(modeId: number | null): void {
+    if (!modeId) {
+      this.reglementForm.get('echeance')?.setValue('');
+      this.reglementForm.get('echeance')?.clearValidators();
+      this.reglementForm.get('echeance')?.updateValueAndValidity();
+      return;
+    }
+    
+    // Trouver le mode pour vérifier son nom
+    const mode = this.modesReglement.find(m => m.id === modeId);
+    if (mode) {
+      const modeName = (mode.nom || '').toLowerCase();
+      // Si le mode est "cheque" ou "effet", rendre l'échéance obligatoire
+      if (modeName.includes('cheque') || modeName.includes('chèque') || modeName.includes('effet')) {
+        this.reglementForm.get('echeance')?.setValidators([Validators.required]);
+      } else {
+        this.reglementForm.get('echeance')?.clearValidators();
+        this.reglementForm.get('echeance')?.setValue('');
+      }
+      this.reglementForm.get('echeance')?.updateValueAndValidity();
+      // Forcer la détection des changements pour afficher/masquer le champ
+      setTimeout(() => {
+        // La détection de changement sera déclenchée automatiquement par Angular
+      }, 0);
+    }
+  }
+  
+  shouldShowEcheance(): boolean {
+    const modeId = this.reglementForm.get('mode')?.value;
+    if (!modeId) return false;
+    
+    const mode = this.modesReglement.find(m => m.id === modeId);
+    if (!mode) return false;
+    
+    const modeName = (mode.nom || '').toLowerCase();
+    return modeName.includes('cheque') || modeName.includes('chèque') || modeName.includes('effet');
   }
 
   loadReglementById(id: number): void {
@@ -145,7 +202,8 @@ export class EditReglementComponent implements OnInit {
             clientSearch: reglement.client || '',
             mode: reglement.mode_id || null,
             reference: reglement.reference || '',
-            montant: reglement.montant || 0
+            montant: reglement.montant || 0,
+            echeance: reglement.echeance ? new Date(reglement.echeance).toISOString().substring(0, 10) : ''
           });
           
           // Charger les factures si un client est sélectionné
@@ -156,7 +214,6 @@ export class EditReglementComponent implements OnInit {
         this.loading = false;
       },
       error: (err: any) => {
-        console.error('Erreur lors du chargement du règlement:', err);
         this.showError('Erreur lors du chargement du règlement');
         this.loading = false;
       }
@@ -189,7 +246,6 @@ export class EditReglementComponent implements OnInit {
   }
   
   loadFacturesForLettrage(part_id: number): void {
-    console.log('[EditReglementComponent] 📥 Chargement factures pour part_id:', part_id);
     this.loadingFactures = true;
     this.factures = [];
     this.filteredFactures = [];
@@ -205,14 +261,12 @@ export class EditReglementComponent implements OnInit {
     this.montantUtilise = 0;
     
     if (!part_id || part_id === 0) {
-      console.warn('[EditReglementComponent] ⚠️ part_id invalide:', part_id);
       this.loadingFactures = false;
       return;
     }
     
     this.ventesService.getFacturesForLettrage(part_id).subscribe({
       next: (response: any) => {
-        console.log('[EditReglementComponent] 📥 Réponse API factures:', response);
         
         // Gérer différents formats de réponse
         let facturesData: any[] = [];
@@ -228,7 +282,6 @@ export class EditReglementComponent implements OnInit {
           facturesData = Array.from(response);
         }
         
-        console.log(`[EditReglementComponent] 📋 ${facturesData.length} factures reçues`);
         
         this.factures = facturesData.map((facture: any) => {
           const factureMontant = Math.abs(facture.facture || 0);
@@ -247,9 +300,7 @@ export class EditReglementComponent implements OnInit {
           };
         });
         
-        console.log(`[EditReglementComponent] ✅ ${this.factures.length} factures traitées`);
         if (this.factures.length > 0) {
-          console.log('[EditReglementComponent] Exemple facture:', this.factures[0]);
         }
         
         this.applyFilter();
@@ -257,8 +308,6 @@ export class EditReglementComponent implements OnInit {
         this.updateFactureStatus();
       },
       error: (err: any) => {
-        console.error('[EditReglementComponent] ❌ Erreur lors du chargement des factures:', err);
-        console.error('[EditReglementComponent] ❌ Détails:', err.error || err.message);
         this.factures = [];
         this.filteredFactures = [];
         this.loadingFactures = false;
@@ -484,6 +533,30 @@ export class EditReglementComponent implements OnInit {
     }
   }
   
+  goToPreviousPage(): void {
+    if (this.currentPage > 1) {
+      this.goToPage(this.currentPage - 1);
+    }
+  }
+  
+  goToNextPage(): void {
+    if (this.currentPage < this.totalPages) {
+      this.goToPage(this.currentPage + 1);
+    }
+  }
+  
+  goToLastPage(): void {
+    this.goToPage(this.totalPages);
+  }
+  
+  get isFirstPage(): boolean {
+    return this.currentPage === 1;
+  }
+  
+  get isLastPage(): boolean {
+    return this.currentPage === this.totalPages;
+  }
+  
   changePageSize(size: number): void {
     this.pageSize = size;
     this.currentPage = 1;
@@ -670,6 +743,10 @@ export class EditReglementComponent implements OnInit {
     return this.selectedFactures.has(documentId);
   }
   
+  getSelectedFacturesCount(): number {
+    return this.selectedFactures.size;
+  }
+  
   toggleAllFactures(event: any): void {
     const checked = event.target.checked;
     const facturesToToggle = this.getPaginatedFactures();
@@ -742,7 +819,7 @@ export class EditReglementComponent implements OnInit {
     }
 
     const formValue = this.reglementForm.value;
-    const reglementData = {
+    const reglementData: any = {
       numero: formValue.numero,
       date: formValue.date,
       part_id: formValue.part_id,
@@ -750,6 +827,11 @@ export class EditReglementComponent implements OnInit {
       reference: formValue.reference || '',
       montant: formValue.montant
     };
+    
+    // Ajouter l'échéance si elle est remplie
+    if (formValue.echeance) {
+      reglementData.echeance = formValue.echeance;
+    }
 
     this.loading = true;
 
@@ -763,7 +845,6 @@ export class EditReglementComponent implements OnInit {
           }, 1500);
         },
         error: (err: any) => {
-          console.error('Erreur lors de la modification:', err);
           this.showError('Erreur lors de la modification du règlement');
           this.loading = false;
         }
@@ -778,7 +859,6 @@ export class EditReglementComponent implements OnInit {
           }, 1500);
         },
         error: (err: any) => {
-          console.error('Erreur lors de la création:', err);
           this.showError('Erreur lors de la création du règlement');
           this.loading = false;
         }
@@ -860,7 +940,6 @@ export class EditReglementComponent implements OnInit {
       },
       error: (error) => {
         this.loading = false;
-        console.error('Erreur lors de l\'enregistrement du lettrage:', error);
         this.showError(error.error?.message || 'Erreur lors de l\'enregistrement du lettrage');
       }
     });
@@ -894,7 +973,6 @@ export class EditReglementComponent implements OnInit {
       },
       error: (error) => {
         this.loading = false;
-        console.error('Erreur lors de la création du document de caisse:', error);
         // Ne pas bloquer si l'enregistrement en caisse échoue
         this.showSuccess('Lettrage enregistré, mais erreur lors de la création du document de caisse');
         const part_id = this.reglementForm.get('part_id')?.value;
@@ -903,6 +981,41 @@ export class EditReglementComponent implements OnInit {
             this.loadFacturesForLettrage(part_id);
           }, 1000);
         }
+      }
+    });
+  }
+
+  // Télécharger le PDF d'un règlement
+  telechargerPDF(regle_id: number): void {
+    if (!regle_id) {
+      this.showError('ID du règlement invalide');
+      return;
+    }
+    
+    Swal.fire({
+      title: 'Génération du PDF...',
+      html: '<div class="loading-spinner"></div><p>Veuillez patienter</p>',
+      showConfirmButton: false,
+      allowOutsideClick: false
+    });
+
+    this.ventesService.telechargerPDF(regle_id).subscribe({
+      next: (blob: Blob) => {
+        Swal.close();
+        
+        // Créer un URL pour le blob et l'ouvrir dans un nouvel onglet
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        
+        // Libérer l'URL après un délai
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+        }, 100);
+      },
+      error: (err: any) => {
+        Swal.close();
+        console.error('Erreur lors du téléchargement du PDF:', err);
+        this.showError('Erreur lors de la génération du PDF. Veuillez réessayer.');
       }
     });
   }

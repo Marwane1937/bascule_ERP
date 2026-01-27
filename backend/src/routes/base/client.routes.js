@@ -27,6 +27,13 @@ router.post('/:id/exoneration', clientController.saveOrUpdateExoneration);
 router.put('/:id/exoneration', clientController.saveOrUpdateExoneration);
 router.delete('/:id/exoneration', clientController.deleteExoneration);
 
+// Routes pour les conditions de paiement (AVANT /:id pour éviter les conflits)
+router.get('/conditions-paiement', clientController.getConditionsPaiement);
+router.get('/:id/conditions', clientController.getPartenaireConditions);
+router.post('/:id/conditions', clientController.createPartenaireCondition);
+router.put('/:id/conditions/:condition_id', clientController.updatePartenaireCondition);
+router.post('/conditions/delete', clientController.deletePartenaireConditions);
+
 router.get('/:id', clientController.getClient);
 router.post('/', clientController.createClient);
 // Création fournisseur (type=2) sans impacter l'ajout Client (type=1)

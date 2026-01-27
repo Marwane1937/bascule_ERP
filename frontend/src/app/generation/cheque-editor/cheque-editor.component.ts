@@ -61,7 +61,6 @@ export class ChequeEditorComponent implements OnInit {
   private teens = ['Dix', 'Onze', 'Douze', 'Treize', 'Quatorze', 'Quinze', 'Seize', 'Dix-sept', 'Dix-huit', 'Dix-neuf'];
   private tens = ['', 'Dix', 'Vingt', 'Trente', 'Quarante', 'Cinquante', 'Soixante', 'Soixante-dix', 'Quatre-vingt', 'Quatre-vingt-dix'];
 
-
   constructor(
     public chequeService: ChequeGenerationService,
     private route: ActivatedRoute,
@@ -179,7 +178,6 @@ export class ChequeEditorComponent implements OnInit {
         });
       },
       error: (err) => {
-        console.error(err);
         this.loading = false;
         Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors du chargement du chèque existant." });
         // Fallback
@@ -210,7 +208,6 @@ export class ChequeEditorComponent implements OnInit {
         this.loadData();
       },
       error: (err) => {
-        console.error(err);
         this.loading = false;
         Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur chargement des modèles." });
       }
@@ -252,7 +249,6 @@ export class ChequeEditorComponent implements OnInit {
         this.loading = false;
       },
       error: (err) => {
-        console.error(err);
         this.loading = false;
         Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors du chargement." });
       }
@@ -489,7 +485,6 @@ export class ChequeEditorComponent implements OnInit {
         }
       },
       error: (err) => {
-        console.error(err);
         this.loading = false;
         Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur enregistrement." });
       }
@@ -544,7 +539,6 @@ export class ChequeEditorComponent implements OnInit {
         document.body.appendChild(iframe);
       },
       error: (err) => {
-        console.error(err);
         Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors de l'impression." });
       }
     });
@@ -652,7 +646,6 @@ export class ChequeEditorComponent implements OnInit {
         text: this.designMode ? 'Enregistré (données + modèle).' : (res?.message || 'Enregistré.')
       });
     } catch (e) {
-      console.error(e);
       Swal.fire({ icon: 'error', title: 'Erreur', text: 'Erreur enregistrement.' });
     } finally {
       this.loading = false;
@@ -680,7 +673,6 @@ export class ChequeEditorComponent implements OnInit {
       this.pdfPreviewSafeUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.pdfPreviewObjectUrl);
       this.showPdfModal = true;
     } catch (e) {
-      console.error(e);
       Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur génération aperçu PDF." });
     } finally {
       this.pdfLoading = false;
@@ -726,7 +718,6 @@ export class ChequeEditorComponent implements OnInit {
       document.body.appendChild(iframe);
       this.closePdfModal(true);
     } catch (e) {
-      console.error(e);
       Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur impression." });
     } finally {
       this.pdfLoading = false;

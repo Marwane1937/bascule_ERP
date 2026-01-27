@@ -1,0 +1,419 @@
+<div class="container py-4">
+    <div class="page-inner">
+
+        <!-- En-tête -->
+        <div class="page-header mb-4">
+            <h3 class="fw-bold text-dark">Achats</h3>
+            <ul class="breadcrumbs d-flex align-items-center">
+                <li class="nav-home me-2"><a href="#"><i class="fas fa-home text-primary"></i></a></li>
+                <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+                <li class="nav-item me-2"><a href="#" class="text-muted">Demande d'achat</a></li>
+                <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+                <li class="nav-item fw-semibold text-muted">Liste Demandes d'Achat</li>
+            </ul>
+        </div>
+     <div
+  *ngIf="successMessage"
+  class="modern-toast"
+  [ngClass]="{ 'toast-success': !isError, 'toast-error': isError }"
+>
+  <span class="toast-icon">
+    <i *ngIf="!isError" class="bi bi-check-circle-fill"></i>
+    <i *ngIf="isError" class="bi bi-exclamation-triangle-fill"></i>
+  </span>
+  <span class="toast-message">{{ successMessage }}</span>
+</div>
+        <!-- Bouton Ajouter Demande d'Achat -->
+        <div class="row mb-4">
+            <div class="col-12 text-end">
+                <button type="button" class="btn btn-gradient px-4 py-2 shadow-sm" data-bs-toggle="modal"
+                    data-bs-target="#addDemandeAchatModal">
+                    <i class="fas fa-plus me-2"></i> Ajouter une Demande d'Achat
+                </button>
+            </div>
+        </div>
+
+        <!-- Modal Formulaire d'ajout demande d'achat -->
+        <div class="modal fade" id="addDemandeAchatModal" tabindex="-1" aria-labelledby="addDemandeAchatModalLabel"
+            aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content modal-elegant shadow">
+                    <div class="modal-header modal-header-custom">
+                        <h5 class="modal-title text-white" id="addDemandeAchatModalLabel">➕ Nouvelle Demande d'Achat</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                            aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form [formGroup]="DemandeAchatForm" (ngSubmit)="onSubmit()">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="Numero" class="form-label">Numéro</label>
+                                    <input id="NumeroDemandeAchat" type="text" class="form-control" [value]="nextDemandeAchatNumero"
+                                        readonly />
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="Date" class="form-label">Date Création</label>
+                                    <input type="datetime-local" class="form-control" id="date" formControlName="date" />
+                                </div>
+                                <div class="col-md-12 mb-3">
+                                    <label for="Description" class="form-label">Description</label>
+                                    <input type="text" class="form-control" id="description" placeholder="Ex: Description"
+                                        formControlName="description" />
+                                </div>
+                                <div class="col-md-12 mb-3 position-relative">
+                                    <label for="FournisseurSearch" class="form-label">Fournisseur</label>
+                                    <input id="FournisseurSearch" type="text" class="form-control"
+                                        placeholder="Commencez à écrire..." formControlName="fournisseurSearch"
+                                        autocomplete="off" />
+                                    <input type="hidden" formControlName="part_id" />
+                                    <ul *ngIf="DemandeAchatForm.get('fournisseurSearch')?.value && filteredFournisseurs.length > 0"
+                                        class="list-group position-absolute w-100 shadow"
+                                        style="max-height: 200px; overflow-y: auto; z-index: 1050;">
+                                        <li class="list-group-item list-group-item-action"
+                                            *ngFor="let fournisseur of filteredFournisseurs" (click)="selectFournisseur(fournisseur)">
+                                            {{ fournisseur.nom }}
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="modal-footer bg-light border-top">
+                                <button type="submit" class="btn btn-info" [disabled]="!DemandeAchatForm.valid">✅
+                                    Enregistrer</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Barre de recherche et filtres -->
+        <div class="row mb-3">
+            <div class="col-md-5">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input 
+                        type="text" 
+                        class="form-control" 
+                        placeholder="Rechercher par numéro ou fournisseur..." 
+                        [(ngModel)]="searchTerm"
+                        (keyup.enter)="onSearch()">
+                    <button class="btn btn-primary" type="button" (click)="onSearch()">
+                        <i class="fas fa-search"></i> Rechercher
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" [(ngModel)]="pageSize" (change)="getDemandesAchat()">
+                    <option [value]="10">10 par page</option>
+                    <option [value]="25">25 par page</option>
+                    <option [value]="50">50 par page</option>
+                    <option [value]="100">100 par page</option>
+                </select>
+            </div>
+            <div class="col-md-5 text-end">
+                <button class="btn btn-outline-secondary me-2" (click)="toggleAdvancedFilters()">
+                    <i class="fas fa-filter"></i> Filtres avancés
+                    <i class="fas" [class.fa-chevron-down]="!showAdvancedFilters" [class.fa-chevron-up]="showAdvancedFilters"></i>
+                </button>
+                <button class="btn btn-outline-success" (click)="exportToCSV()" title="Exporter en CSV/Excel">
+                    <i class="fas fa-file-excel"></i> Exporter
+                </button>
+            </div>
+        </div>
+
+        <!-- Filtres avancés -->
+        <div class="row mb-3" *ngIf="showAdvancedFilters">
+            <div class="col-md-12">
+                <div class="card border-primary">
+                    <div class="card-header bg-primary text-white">
+                        <i class="fas fa-filter"></i> Filtres avancés
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label"><i class="fas fa-calendar-alt"></i> Date de début</label>
+                                <input type="date" class="form-control" [(ngModel)]="filterDateFrom" (change)="getDemandesAchat()">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label"><i class="fas fa-calendar-alt"></i> Date de fin</label>
+                                <input type="date" class="form-control" [(ngModel)]="filterDateTo" (change)="getDemandesAchat()">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label"><i class="fas fa-building"></i> Fournisseur</label>
+                                <input type="text" class="form-control" [(ngModel)]="filterFournisseur" (input)="getDemandesAchat()" placeholder="Nom du fournisseur...">
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-12 text-end">
+                                <button class="btn btn-outline-danger" (click)="resetFilters()">
+                                    <i class="fas fa-times"></i> Réinitialiser les filtres
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tableau Demandes d'Achat -->
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card border-0 shadow-sm rounded-3">
+                    <div class="card-body">
+                        <div class="table-responsive" style="position: relative; min-height: 400px;">
+                            <!-- Loader -->
+                            <div *ngIf="loading" 
+                                class="text-center my-4" 
+                                style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                                    <span class="visually-hidden">Chargement...</span>
+                                </div>
+                                <p class="mt-3 mb-0 text-muted fw-semibold">Chargement des demandes d'achat...</p>
+                            </div>
+
+                            <table 
+                                class="table table-bordered table-striped table-hover" 
+                                width="100%"
+                                [style.opacity]="loading ? '0.5' : '1'">
+                                <thead class="table-light">
+                                    <!-- Bouton pour afficher/masquer les filtres -->
+                                    <tr *ngIf="!showFilterRow" style="background-color: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                                        <td [attr.colspan]="getVisibleColumnsCount() + 1" class="text-center py-2" style="padding: 8px;">
+                                            <button 
+                                                class="btn btn-sm btn-outline-primary" 
+                                                (click)="showFilterRow = true"
+                                                style="border-radius: 4px;">
+                                                <i class="fas fa-filter me-1"></i>
+                                                Afficher les filtres
+                                                <i class="fas fa-chevron-down ms-1" style="font-size: 0.7rem;"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <!-- Ligne des en-têtes avec tri et menu contextuel -->
+                                    <tr>
+                                        <th *ngIf="columnVisibility.numero" 
+                                            (click)="onSort('numero')" 
+                                            (contextmenu)="showColumnContextMenu($event, 'numero')"
+                                            class="sortable column-header" 
+                                            style="cursor: pointer; width: 120px;"
+                                            [style.width]="columnWidths.numero"
+                                            [class.pinned-column]="isColumnPinned('numero')">
+                                            <div class="d-flex align-items-center justify-content-between">
+                                                <span>Numéro</span>
+                                                <div class="d-flex align-items-center gap-1">
+                                                    <i *ngIf="isColumnPinned('numero')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
+                                                    <i class="fas ms-1" [ngClass]="getSortIcon('numero')"></i>
+                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
+                                                            (click)="openColumnMenu($event, 'numero')"
+                                                            style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
+                                                        <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </th>
+                                        <th *ngIf="columnVisibility.date" 
+                                            (click)="onSort('date')" 
+                                            (contextmenu)="showColumnContextMenu($event, 'date')"
+                                            class="sortable column-header" 
+                                            style="cursor: pointer; width: 110px;"
+                                            [style.width]="columnWidths.date"
+                                            [class.pinned-column]="isColumnPinned('date')">
+                                            <div class="d-flex align-items-center justify-content-between">
+                                                <span>Date</span>
+                                                <div class="d-flex align-items-center gap-1">
+                                                    <i *ngIf="isColumnPinned('date')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
+                                                    <i class="fas ms-1" [ngClass]="getSortIcon('date')"></i>
+                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
+                                                            (click)="openColumnMenu($event, 'date')"
+                                                            style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
+                                                        <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </th>
+                                        <th *ngIf="columnVisibility.fournisseur" 
+                                            (click)="onSort('fournisseur')" 
+                                            (contextmenu)="showColumnContextMenu($event, 'fournisseur')"
+                                            class="sortable column-header" 
+                                            style="cursor: pointer; min-width: 150px;"
+                                            [style.width]="columnWidths.fournisseur"
+                                            [class.pinned-column]="isColumnPinned('fournisseur')">
+                                            <div class="d-flex align-items-center justify-content-between">
+                                                <span>Fournisseur</span>
+                                                <div class="d-flex align-items-center gap-1">
+                                                    <i *ngIf="isColumnPinned('fournisseur')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
+                                                    <i class="fas ms-1" [ngClass]="getSortIcon('fournisseur')"></i>
+                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
+                                                            (click)="openColumnMenu($event, 'fournisseur')"
+                                                            style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
+                                                        <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </th>
+                                        <th *ngIf="columnVisibility.description" 
+                                            (contextmenu)="showColumnContextMenu($event, 'description')"
+                                            class="column-header" 
+                                            style="min-width: 200px;"
+                                            [style.width]="columnWidths.description"
+                                            [class.pinned-column]="isColumnPinned('description')">
+                                            <div class="d-flex align-items-center justify-content-between">
+                                                <span>Description</span>
+                                                <div class="d-flex align-items-center gap-1">
+                                                    <i *ngIf="isColumnPinned('description')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
+                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
+                                                            (click)="openColumnMenu($event, 'description')"
+                                                            style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
+                                                        <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </th>
+                                        <th style="width: 200px;" class="text-center">Actions</th>
+                                    </tr>
+                                    <!-- Ligne des filtres (style Excel) -->
+                                    <tr *ngIf="showFilterRow" class="filter-row" style="background-color: #f8f9fa; border-top: 2px solid #dee2e6;">
+                                        <th *ngIf="columnVisibility.numero" style="padding: 4px; position: relative;">
+                                            <input type="text" class="form-control form-control-sm filter-input" placeholder="Rechercher..."
+                                                   [(ngModel)]="columnFilters.numero" (input)="onColumnFilterChange('numero', $any($event.target).value)"
+                                                   style="font-size: 0.85rem; padding-right: 24px;">
+                                            <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 0.75rem; pointer-events: none;"></i>
+                                        </th>
+                                        <th *ngIf="columnVisibility.date" style="padding: 4px; position: relative;">
+                                            <input type="date" class="form-control form-control-sm filter-input"
+                                                   [(ngModel)]="columnFilters.date" (change)="onColumnFilterChange('date', $any($event.target).value)"
+                                                   style="font-size: 0.85rem;">
+                                        </th>
+                                        <th *ngIf="columnVisibility.fournisseur" style="padding: 4px; position: relative;">
+                                            <input type="text" class="form-control form-control-sm filter-input" placeholder="Rechercher..."
+                                                   [(ngModel)]="columnFilters.fournisseur" (input)="onColumnFilterChange('fournisseur', $any($event.target).value)"
+                                                   style="font-size: 0.85rem; padding-right: 24px;">
+                                            <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 0.75rem; pointer-events: none;"></i>
+                                        </th>
+                                        <th *ngIf="columnVisibility.description" style="padding: 4px; position: relative;">
+                                            <input type="text" class="form-control form-control-sm filter-input" placeholder="Rechercher..."
+                                                   [(ngModel)]="columnFilters.description" (input)="onColumnFilterChange('description', $any($event.target).value)"
+                                                   style="font-size: 0.85rem; padding-right: 24px;">
+                                            <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 0.75rem; pointer-events: none;"></i>
+                                        </th>
+                                        <th class="text-center">
+                                            <div class="d-flex align-items-center justify-content-center gap-2">
+                                                <button class="btn btn-sm btn-outline-secondary" (click)="clearColumnFilters()" title="Réinitialiser les filtres">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-primary" (click)="showFilterRow = false" title="Masquer les filtres">
+                                                    <i class="fas fa-chevron-up"></i>
+                                                </button>
+                                            </div>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr *ngIf="!loading && demandesAchat.length === 0">
+                                        <td [attr.colspan]="getVisibleColumnsCount() + 1" class="text-center py-4">
+                                            <p class="text-muted mb-0">Aucune demande d'achat trouvée</p>
+                                        </td>
+                                    </tr>
+                                    <tr *ngFor="let da of demandesAchat; let i = index">
+                                        <td *ngIf="columnVisibility.numero">{{ da.numero }}</td>
+                                        <td *ngIf="columnVisibility.date">{{ da.date ? (da.date | date:'dd/MM/yyyy') : '-' }}</td>
+                                        <td *ngIf="columnVisibility.fournisseur">{{ da.fournisseur || '-' }}</td>
+                                        <td *ngIf="columnVisibility.description">{{ da.description || '-' }}</td>
+                                        <td class="text-center">
+                                            <button class="btn btn-sm btn-outline-info me-1" (click)="editDemandeAchat(da.document_id)" title="Modifier">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-primary me-1" (click)="telechargerPDF(da.document_id)" title="Télécharger PDF">
+                                                <i class="fas fa-file-pdf"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger" (click)="deleteDemandeAchat(da.document_id)" title="Supprimer">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        <div *ngIf="!loading && totalPages > 1" class="d-flex justify-content-between align-items-center mt-3">
+                            <div class="text-muted">
+                                Affichage de {{ getDisplayRange() }} sur {{ totalRecords }} demandes d'achat
+                            </div>
+                            <nav>
+                                <ul class="pagination mb-0">
+                                    <li class="page-item" [class.disabled]="currentPage === 1">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onPageChange(1)">
+                                            <i class="fas fa-angle-double-left"></i>
+                                        </a>
+                                    </li>
+                                    <li class="page-item" [class.disabled]="currentPage === 1">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onPageChange(currentPage - 1)">
+                                            <i class="fas fa-angle-left"></i>
+                                        </a>
+                                    </li>
+                                    <li *ngFor="let page of getPageNumbers()" class="page-item" [class.active]="page === currentPage">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onPageChange(page)">{{ page }}</a>
+                                    </li>
+                                    <li class="page-item" [class.disabled]="currentPage === totalPages">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onPageChange(currentPage + 1)">
+                                            <i class="fas fa-angle-right"></i>
+                                        </a>
+                                    </li>
+                                    <li class="page-item" [class.disabled]="currentPage === totalPages">
+                                        <a class="page-link" href="javascript:void(0)" (click)="onPageChange(totalPages)">
+                                            <i class="fas fa-angle-double-right"></i>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <router-outlet></router-outlet>
+</div>
+
+<!-- Menu contextuel pour la gestion des colonnes -->
+<div *ngIf="showColumnMenu" class="menu-overlay" (click)="hideColumnContextMenu()"></div>
+<div *ngIf="showColumnMenu" 
+     class="column-context-menu" 
+     [style.left.px]="menuPosition.x" 
+     [style.top.px]="menuPosition.y">
+  <div class="menu-header">
+    <i class="fas fa-columns"></i>
+    <span>{{ getColumnDisplayName(activeColumnMenu) }}</span>
+  </div>
+  <div class="menu-divider"></div>
+  <div class="menu-item" (click)="togglePinColumn(activeColumnMenu)">
+    <i class="fas" [ngClass]="{'fa-thumbtack': !isColumnPinned(activeColumnMenu), 'fa-times': isColumnPinned(activeColumnMenu)}"></i>
+    <span>{{ isColumnPinned(activeColumnMenu) ? 'Désépingler' : 'Épingler' }}</span>
+  </div>
+  <div class="menu-item" (click)="autoSizeColumn(activeColumnMenu)">
+    <i class="fas fa-arrows-alt-h"></i>
+    <span>Ajuster automatiquement</span>
+  </div>
+  <div class="menu-divider"></div>
+  <div class="menu-item" (click)="toggleColumnVisibility(activeColumnMenu)">
+    <i class="fas" [ngClass]="{'fa-eye-slash': columnVisibility[activeColumnMenu], 'fa-eye': !columnVisibility[activeColumnMenu]}"></i>
+    <span>{{ columnVisibility[activeColumnMenu] ? 'Masquer' : 'Afficher' }}</span>
+  </div>
+  <div class="menu-divider"></div>
+  <div class="menu-item" (click)="autoSizeAllColumns()">
+    <i class="fas fa-expand-arrows-alt"></i>
+    <span>Ajuster toutes les colonnes</span>
+  </div>
+  <div class="menu-item" (click)="showAllColumns()">
+    <i class="fas fa-eye"></i>
+    <span>Afficher toutes les colonnes</span>
+  </div>
+  <div class="menu-item" (click)="resetColumns()">
+    <i class="fas fa-undo"></i>
+    <span>Réinitialiser les colonnes</span>
+  </div>
+</div>
+

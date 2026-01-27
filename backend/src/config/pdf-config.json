@@ -1,17 +1,37 @@
 {
-  "logo": {
-    "path": "src/public/maties.png",
-    "width": 150,
-    "height": null,
-    "description": "Chemin vers le logo de l'entreprise. width: largeur en points (défaut: 100), height: hauteur en points (optionnel, null = proportionnel)"
-  },
-  "entete": {
-    "path": "",
-    "description": "Chemin vers le fichier JSON contenant l'en-tête avec formatage (fontSize, color, font, align, etc.)"
-  },
-  "pied_page": {
-    "path": "src/config/pied-page.json",
-    "description": "Chemin vers le fichier JSON contenant le pied de page avec formatage (fontSize, color, font, align, etc.)"
+  "configurations": [
+    {
+      "id_db": "LeoErp_Maties",
+      "logo": {
+        "path": "src/public/maties.png",
+        "width": 150,
+        "height": null,
+        "description": "Logo pour la société 1"
+      },
+      "entete": {
+        "path": "",
+        "description": "En-tête pour la société 1"
+      },
+      "pied_page": {
+        "path": "src/config/pied-page.json",
+        "description": "Pied de page pour la société 1"
+      }
+    }
+  ],
+  "default": {
+    "logo": {
+      "path": "src/public/maties.png",
+      "width": 150,
+      "height": null,
+      "description": "Configuration par défaut - Logo de l'entreprise"
+    },
+    "entete": {
+      "path": "",
+      "description": "Configuration par défaut - En-tête"
+    },
+    "pied_page": {
+      "path": "src/config/pied-page.json",
+      "description": "Configuration par défaut - Pied de page"
+    }
   }
 }
-

@@ -80,7 +80,6 @@ export class StockReportingComponent implements OnInit {
         this.allArticles = response.data || [];
       },
       error: (error) => {
-        console.error('Erreur chargement articles:', error);
       }
     });
   }
@@ -146,7 +145,6 @@ export class StockReportingComponent implements OnInit {
         this.etatStockLoading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement état stock:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement de l\'état du stock', 'error');
         this.etatStockLoading = false;
       }
@@ -211,7 +209,6 @@ export class StockReportingComponent implements OnInit {
     // Ne PAS envoyer les filtres texte article/article_nom
     if (this.ficheStockArticleId && this.ficheStockArticleId > 0) {
       options.article_id = this.ficheStockArticleId;
-      console.log('[getFicheStock] article_id sélectionné:', this.ficheStockArticleId);
       // Ne pas ajouter les filtres texte quand article_id est fourni
     } else {
       // Utiliser les filtres texte seulement si article_id n'est pas fourni
@@ -221,13 +218,9 @@ export class StockReportingComponent implements OnInit {
 
     const articleId = this.ficheStockArticleId && this.ficheStockArticleId > 0 ? this.ficheStockArticleId : null;
 
-    console.log('[getFicheStock] Options envoyées:', options);
-
     this.stockService.getFicheStock(articleId, options).subscribe({
       next: (response: any) => {
-        console.log('[getFicheStock] Réponse reçue:', response);
         const newMouvements = response.mouvements || [];
-        console.log('[getFicheStock] Mouvements reçus:', newMouvements.length);
         
         if (reset) {
           this.ficheStockMouvements = newMouvements;
@@ -241,9 +234,6 @@ export class StockReportingComponent implements OnInit {
         this.ficheStockTotalRecords = response.pagination?.total || 0;
         this.ficheStockTotalPages = response.pagination?.totalPages || 0;
         
-        console.log('[getFicheStock] Total records:', this.ficheStockTotalRecords);
-        console.log('[getFicheStock] Total pages:', this.ficheStockTotalPages);
-        console.log('[getFicheStock] Mouvements dans le tableau:', this.ficheStockMouvements.length);
         
         // Vérifier s'il reste des pages à charger
         this.ficheStockHasMore = this.ficheStockCurrentPage < this.ficheStockTotalPages;
@@ -252,8 +242,6 @@ export class StockReportingComponent implements OnInit {
         this.ficheStockLoadingMore = false;
       },
       error: (error) => {
-        console.error('Erreur chargement fiche stock:', error);
-        console.error('Erreur détaillée:', error.error);
         Swal.fire('Erreur', 'Erreur lors du chargement de la fiche de stock', 'error');
         this.ficheStockMouvements = reset ? [] : this.ficheStockMouvements;
         this.ficheStockLoading = false;
@@ -351,7 +339,6 @@ export class StockReportingComponent implements OnInit {
         this.caArticlesLoading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement CA articles:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement du chiffre d\'affaires', 'error');
         this.caArticlesLoading = false;
       }
@@ -476,7 +463,6 @@ export class StockReportingComponent implements OnInit {
         window.URL.revokeObjectURL(url);
       },
       error: (error) => {
-        console.error('Erreur export PDF:', error);
         if (error.status === 401) {
           Swal.fire('Erreur', 'Token d\'accès requis. Veuillez vous reconnecter.', 'error');
         } else {
@@ -504,7 +490,6 @@ export class StockReportingComponent implements OnInit {
         window.URL.revokeObjectURL(url);
       },
       error: (error) => {
-        console.error('Erreur export Excel:', error);
         Swal.fire('Erreur', 'Erreur lors de l\'export Excel', 'error');
       }
     });
@@ -636,7 +621,6 @@ export class StockReportingComponent implements OnInit {
         window.URL.revokeObjectURL(url);
       },
       error: (error) => {
-        console.error('Erreur export Excel:', error);
         Swal.fire('Erreur', 'Erreur lors de l\'export Excel', 'error');
       }
     });
@@ -675,7 +659,6 @@ export class StockReportingComponent implements OnInit {
         window.URL.revokeObjectURL(url);
       },
       error: (error) => {
-        console.error('Erreur export PDF:', error);
         if (error.status === 401) {
           Swal.fire('Erreur', 'Token d\'accès requis. Veuillez vous reconnecter.', 'error');
         } else {
@@ -703,7 +686,6 @@ export class StockReportingComponent implements OnInit {
         window.URL.revokeObjectURL(url);
       },
       error: (error) => {
-        console.error('Erreur export Excel:', error);
         Swal.fire('Erreur', 'Erreur lors de l\'export Excel', 'error');
       }
     });

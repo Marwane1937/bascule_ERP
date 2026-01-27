@@ -15,6 +15,8 @@ export class EditClientComponent implements OnInit, AfterViewInit {
   adresses: any[] = [];
   identifiants: any[] = [];
   contacts: any[] = [];
+  conditions: any[] = [];
+  conditionsPaiement: any[] = [];
   part_id: any;
   clientInfo: { code: any; nom: string } = { code: '', nom: '' };
   villes: any[] = [];
@@ -34,6 +36,7 @@ export class EditClientComponent implements OnInit, AfterViewInit {
   selectedAdresse:any = null;
   selectedContact: any = null;
   selectedIdentifiant: any = null;
+  selectedCondition: any = null;
 
   constructor(private baseService: BaseService, private route: ActivatedRoute,
               private cdr: ChangeDetectorRef
@@ -44,18 +47,20 @@ export class EditClientComponent implements OnInit, AfterViewInit {
     forkJoin({
       villes: this.baseService.getVille().pipe(catchError(() => of({ data: [] }))),
       commerciaux: this.baseService.getCommercial().pipe(catchError(() => of({ data: [] }))),
-      identifiants: this.baseService.getIdentifiants().pipe(catchError(() => of({ data: [] })))
+      identifiants: this.baseService.getIdentifiants().pipe(catchError(() => of({ data: [] }))),
+      conditionsPaiement: this.baseService.getConditionsPaiement().pipe(catchError(() => of({ data: [] })))
     }).subscribe({
       next: (results: any) => {
         this.villes = results.villes?.data || (Array.isArray(results.villes) ? results.villes : []);
         this.comerciaux = results.comerciaux?.data || (Array.isArray(results.comerciaux) ? results.comerciaux : []);
         this.identifs = results.identifiants?.data || (Array.isArray(results.identifiants) ? results.identifiants : []);
+        this.conditionsPaiement = results.conditionsPaiement?.data || (Array.isArray(results.conditionsPaiement) ? results.conditionsPaiement : []);
       },
       error: (err) => {
-        console.error('[EditClientComponent] Erreur chargement données de référence:', err);
         this.villes = [];
         this.comerciaux = [];
         this.identifs = [];
+        this.conditionsPaiement = [];
       }
     });
 
@@ -75,7 +80,8 @@ export class EditClientComponent implements OnInit, AfterViewInit {
     forkJoin({
       client: this.baseService.getClientById(this.part_id).pipe(catchError(() => of(null))),
       details: this.baseService.getClientComplement(this.part_id).pipe(catchError(() => of(null))),
-      exoneration: this.baseService.getExoneration(this.part_id).pipe(catchError(() => of(null)))
+      exoneration: this.baseService.getExoneration(this.part_id).pipe(catchError(() => of(null))),
+      conditions: this.baseService.getPartenaireConditions(this.part_id).pipe(catchError(() => of(null)))
     }).subscribe({
       next: (results: any) => {
         // Traiter les données du client de base
@@ -97,6 +103,14 @@ export class EditClientComponent implements OnInit, AfterViewInit {
           this.adresses = [];
           this.contacts = [];
           this.identifiants = [];
+        }
+
+        // Traiter les conditions de paiement
+        if (results.conditions) {
+          const data = results.conditions?.data || results.conditions;
+          this.conditions = Array.isArray(data) ? data : [];
+        } else {
+          this.conditions = [];
         }
 
         // Traiter l'exonération
@@ -140,10 +154,10 @@ export class EditClientComponent implements OnInit, AfterViewInit {
           this.initOrRefreshDataTable('#adresseTable', { order: [[0, 'desc']] });
           this.initOrRefreshDataTable('#identifiantTable', { order: [[0, 'desc']] });
           this.initOrRefreshDataTable('#contactTable', { order: [[0, 'desc']] });
+          this.initOrRefreshDataTable('#conditionTable', { order: [[0, 'desc']] });
         }, 50); // Réduit de 100ms à 50ms
       },
       error: (err) => {
-        console.error('[EditClientComponent] ❌ Erreur chargement données client:', err);
         this.showError('Erreur lors du chargement des données du client.');
       }
     });
@@ -159,7 +173,6 @@ export class EditClientComponent implements OnInit, AfterViewInit {
         // Pas besoin de detectChanges ici, sera fait dans loadClientData
       },
       error: (err: any) => {
-        console.error('[EditClientComponent] ❌ Erreur chargement client:', err);
         this.showError('❌ Erreur lors du chargement du client.');
       }
     });
@@ -187,7 +200,6 @@ export class EditClientComponent implements OnInit, AfterViewInit {
         this.showSuccess('Client mis à jour avec succès.');
       },
       error: (err: any) => {
-        console.error('[EditClientComponent] ❌ Erreur update client:', err);
         this.showError(err?.error?.message || 'Erreur lors de la mise à jour du client.');
       }
     });
@@ -209,11 +221,29 @@ export class EditClientComponent implements OnInit, AfterViewInit {
   }
 
   getClientDetails(part_id: string): void {
-    this.baseService.getClientComplement(part_id).subscribe({
-      next: (data: any) => {
-        this.adresses = data?.adresses || [];
-        this.contacts = data?.contacts || [];
-        this.identifiants = data?.identifiants || [];
+    forkJoin({
+      details: this.baseService.getClientComplement(part_id).pipe(catchError(() => of(null))),
+      conditions: this.baseService.getPartenaireConditions(part_id).pipe(catchError(() => of(null)))
+    }).subscribe({
+      next: (results: any) => {
+        // Traiter les détails (adresses, contacts, identifiants)
+        if (results.details) {
+          this.adresses = results.details?.adresses || [];
+          this.contacts = results.details?.contacts || [];
+          this.identifiants = results.details?.identifiants || [];
+        } else {
+          this.adresses = [];
+          this.contacts = [];
+          this.identifiants = [];
+        }
+
+        // Traiter les conditions de paiement
+        if (results.conditions) {
+          const data = results.conditions?.data || results.conditions;
+          this.conditions = Array.isArray(data) ? data : [];
+        } else {
+          this.conditions = [];
+        }
 
         // S'assurer que le DOM est à jour avant de (re)initialiser DataTables
         this.cdr.detectChanges();
@@ -222,13 +252,14 @@ export class EditClientComponent implements OnInit, AfterViewInit {
           this.initOrRefreshDataTable('#adresseTable', { order: [[0, 'desc']] });
           this.initOrRefreshDataTable('#identifiantTable', { order: [[0, 'desc']] });
           this.initOrRefreshDataTable('#contactTable', { order: [[0, 'desc']] });
-        }, 50); // Réduit de 100ms à 50ms
+          this.initOrRefreshDataTable('#conditionTable', { order: [[0, 'desc']] });
+        }, 50);
       },
       error: (err: any) => {
-        console.error('[EditClientComponent] ❌ Erreur chargement complément client:', err);
         this.adresses = [];
         this.contacts = [];
         this.identifiants = [];
+        this.conditions = [];
         this.showError(err?.error?.message || 'Erreur lors du chargement des détails client.');
       }
     });
@@ -257,7 +288,6 @@ export class EditClientComponent implements OnInit, AfterViewInit {
       $el.DataTable(options);
     } catch (e) {
       // Ne pas casser l'écran si DataTables n'est pas dispo
-      console.warn('[EditClientComponent] DataTable init skipped/error for', selector, e);
     }
   }
 
@@ -312,46 +342,7 @@ onSaveAdresse(): void {
 
   request$.subscribe({
     next: () => {
-      const table: any = $('#adresseTable').DataTable();
-
-      if (isEdit) {
-        const rowIndex = table
-          .rows()
-          .indexes()
-          .filter((idx: number) => {
-            const row = table.row(idx).node();
-            return $(row).hasClass('editing');
-          })[0];
-
-        table
-          .row(rowIndex)
-          .data([
-            '<input type="checkbox" />',
-            this.selectedAdresse.adresse,
-            this.selectedAdresse.postal_code,
-            this.getVilleNomById(this.selectedAdresse.ville_id),
-            `<button class="btn btn-warning btn-round"><i class="fas fa-edit"></i></button>`
-          ])
-          .draw(false);
-
-        table.row(rowIndex).node().classList.remove('editing');
-        this.showSuccess('Adresse modifiée avec succès.');
-      } else {
-        const newRow = [
-          '<input type="checkbox" />',
-          this.selectedAdresse.adresse,
-          this.selectedAdresse.postal_code,
-          this.getVilleNomById(this.selectedAdresse.ville_id),
-          `<button class="btn btn-warning btn-round"><i class="fas fa-edit"></i></button>`
-        ];
-
-        const rowNode = table.row.add(newRow).draw(false).node();
-        $(rowNode).find('td').css('text-align', 'center');
-        $(rowNode).addClass('ligne-surbrillance');
-
-        this.showSuccess('Adresse ajoutée avec succès.');
-      }
-
+      this.showSuccess(isEdit ? 'Adresse modifiée avec succès.' : 'Adresse ajoutée avec succès.');
       ($('#adresseModal') as any).modal('hide');
 
       this.selectedAdresse = {
@@ -359,14 +350,15 @@ onSaveAdresse(): void {
         postal_code: null,
         ville_id: null
       };
+
+      // Recharger les données depuis le serveur pour garantir la cohérence
+      this.getClientDetails(part_id);
     },
     error: (err) => {
-      console.error('❌ Erreur:', err);
       this.showError(isEdit ? 'Erreur lors de la modification' : 'Erreur lors de l\'ajout de l\'adresse');
     }
   });
 }
-
 
   // ✅ CONTACT
 onAddContact() {
@@ -381,10 +373,6 @@ onAddContact() {
 onSaveContact(): void {
   const part_id = this.part_id;
   const isEdit = !!this.selectedContact.id;
-
-  const commercialObj = this.comerciaux.find(
-    (c: any) => c.id === Number(this.selectedContact.company_contact)
-  );
 
   const payload = {
     adresses: [],
@@ -404,46 +392,8 @@ onSaveContact(): void {
 
   request$.subscribe({
     next: () => {
-      const table: any = $('#contactTable').DataTable();
-
-      if (isEdit) {
-        // 🔁 Mise à jour de la ligne en édition
-        const rowIndex = table
-          .rows()
-          .indexes()
-          .filter((idx: number) => {
-            const row = table.row(idx).node();
-            return $(row).hasClass('editing');
-          })[0];
-
-        table
-          .row(rowIndex)
-          .data([
-            '<input type="checkbox" />',
-            this.selectedContact.ligne,
-            commercialObj ? commercialObj.nom : '',
-            `<button class="btn btn-warning btn-round"><i class="fas fa-edit"></i></button>`
-          ])
-          .draw(false);
-
-        table.row(rowIndex).node().classList.remove('editing');
-        this.showSuccess('Contact modifié avec succès.');
-      } else {
-        // ➕ Ajout d'une nouvelle ligne
-        const newRow = [
-          '<input type="checkbox" />',
-          this.selectedContact.ligne,
-          commercialObj ? commercialObj.nom : '',
-          `<button class="btn btn-warning btn-round"><i class="fas fa-edit"></i></button>`
-        ];
-
-        const rowNode = table.row.add(newRow).draw(false).node();
-        $(rowNode).find('td').css('text-align', 'center');
-        $(rowNode).addClass('ligne-surbrillance');
-
-        this.showSuccess('Contact ajouté avec succès.');
-      }
-
+      this.showSuccess(isEdit ? 'Contact modifié avec succès.' : 'Contact ajouté avec succès.');
+      
       // Fermer la modale
       ($('#contactModal') as any).modal('hide');
 
@@ -452,14 +402,15 @@ onSaveContact(): void {
         ligne: null,
         company_contact: null
       };
+
+      // Recharger les données depuis le serveur pour garantir la cohérence
+      this.getClientDetails(part_id);
     },
     error: (err) => {
-      console.error('❌ Erreur:', err);
       this.showError(isEdit ? 'Erreur lors de la modification' : 'Erreur lors de l\'ajout du contact');
     }
   });
 }
-
 
 getNextLigne(): number {
   if (!this.contacts || this.contacts.length === 0) return 1;
@@ -515,12 +466,10 @@ onSaveIdentifiant(): void {
       this.selectedIdentifiant = { identifiant: '', identifiant_type: null };
     },
     error: (err) => {
-      console.error('❌ Erreur:', err);
       this.showError(isEdit ? 'Erreur lors de la modification de l\'identifiant' : 'Erreur lors de l\'ajout de l\'identifiant');
     }
   });
 }
-
 
   // ✅ Alertes
   showSuccess(message: string) {
@@ -548,7 +497,6 @@ onSaveIdentifiant(): void {
       buttonsStyling: false
     });
   }
-
 
 onCheckboxChange(row: any): void {
   if (row.checked) {
@@ -586,7 +534,6 @@ onDeleteIdentifiants(): void {
       this.getClientDetails(this.part_id);
     },
     error: err => {
-      console.error('❌ Erreur suppression', err);
       this.showError(err?.error?.message || '❌ Erreur suppression identifiants');
     }
   });
@@ -598,23 +545,7 @@ onDeleteAdresses(): void {
     return;
   }
 
-  const table: any = $('#adresseTable').DataTable();
-
   const adressesToDelete = this.checkedIdentifiants.map(item => ({ id: item.id }));
-
-  this.checkedIdentifiants.forEach(item => {
-    table.rows().every((rowIdx: any) => {
-      const data = table.row(rowIdx).data();
-      const adresse = data[1]; // Ajuster selon colonne
-      if (adresse === item.adresse) {
-        table.row(rowIdx).remove();
-      }
-    });
-    this.adresses = this.adresses.filter(a => a.id !== item.id);
-  });
-
-  table.draw(false);
-  this.checkedIdentifiants = [];
 
   this.baseService.deleteClientDetails({
     identifiants: [],
@@ -623,9 +554,12 @@ onDeleteAdresses(): void {
   }).subscribe({
     next: res => {
       this.showSuccess('Les adresses sélectionnées ont été supprimées avec succès ');
+      this.checkedIdentifiants = [];
+      // Recharger les données depuis le serveur pour garantir la cohérence
+      this.getClientDetails(this.part_id);
     },
     error: err => {
-      console.error('❌ Erreur suppression adresses', err);
+      this.showError(err?.error?.message || 'Erreur lors de la suppression des adresses');
     }
   });
 }
@@ -637,23 +571,7 @@ onDeleteContacts(): void {
     return;
   }
 
-  const table: any = $('#contactTable').DataTable();
-
   const contactsToDelete = this.checkedIdentifiants.map(item => ({ id: item.id }));
-
-  this.checkedIdentifiants.forEach(item => {
-    table.rows().every((rowIdx: any) => {
-      const data = table.row(rowIdx).data();
-      const nom = data[1]; // Adapter si nécessaire
-      if (nom === item.nom) {
-        table.row(rowIdx).remove();
-      }
-    });
-    this.contacts = this.contacts.filter(i => i.id !== item.id);
-  });
-
-  table.draw(false);
-  this.checkedIdentifiants = [];
 
   this.baseService.deleteClientDetails({
     identifiants: [],
@@ -662,9 +580,12 @@ onDeleteContacts(): void {
   }).subscribe({
     next: res => {
       this.showSuccess('Les contacts sélectionnés ont été supprimés avec succès');
+      this.checkedIdentifiants = [];
+      // Recharger les données depuis le serveur pour garantir la cohérence
+      this.getClientDetails(this.part_id);
     },
     error: err => {
-      console.error('❌ Erreur suppression contacts', err);
+      this.showError(err?.error?.message || 'Erreur lors de la suppression des contacts');
     }
   });
 }
@@ -794,7 +715,6 @@ onEditIdentifiant(identifiant: any): void {
         }
       },
       error: (err: any) => {
-        console.error('[EditClientComponent] ❌ Erreur chargement exonération:', err);
         // En cas d'erreur (ex: 404), aucune exonération n'existe
         this.hasExoneration = false;
         this.exonerationData = {
@@ -840,7 +760,6 @@ onEditIdentifiant(identifiant: any): void {
         this.loadExoneration(); // Recharger pour s'assurer que les données sont à jour et mettre à jour hasExoneration
       },
       error: (err: any) => {
-        console.error('[EditClientComponent] ❌ Erreur sauvegarde exonération:', err);
         this.showError(err?.error?.message || 'Erreur lors de la sauvegarde de l\'exonération.');
       }
     });
@@ -902,7 +821,6 @@ onEditIdentifiant(identifiant: any): void {
         this.cdr.detectChanges();
       },
       error: (err: any) => {
-        console.error('[EditClientComponent] ❌ Erreur chargement toutes les exonérations:', err);
         // Ne pas afficher d'erreur si c'est juste une 404 (pas d'exonérations)
         if (err.status !== 404) {
           this.showError('Erreur lors du chargement des lettres d\'exonération.');
@@ -911,6 +829,109 @@ onEditIdentifiant(identifiant: any): void {
         // Ouvrir quand même la modale pour afficher le message "Aucune lettre"
         ($('#allExonerationsModal') as any).modal('show');
         this.cdr.detectChanges();
+      }
+    });
+  }
+
+  // ✅ CONDITION DE PAIEMENT
+  onAddCondition(): void {
+    this.selectedCondition = {
+      condition_id: null
+    };
+    ($('#conditionModal') as any).modal('show');
+  }
+
+  onSaveCondition(): void {
+    const part_id = this.part_id;
+    const isEdit = !!this.selectedCondition.id;
+
+    if (!this.selectedCondition.condition_id) {
+      this.showError('Veuillez sélectionner une condition de paiement');
+      return;
+    }
+
+    const request$ = isEdit
+      ? this.baseService.updatePartenaireCondition(part_id, this.selectedCondition.id, this.selectedCondition.condition_id)
+      : this.baseService.createPartenaireCondition(part_id, this.selectedCondition.condition_id);
+
+    request$.subscribe({
+      next: (response: any) => {
+        this.showSuccess(isEdit ? 'Condition de paiement modifiée avec succès.' : 'Condition de paiement ajoutée avec succès.');
+
+        ($('#conditionModal') as any).modal('hide');
+
+        // Réinitialiser le formulaire
+        this.selectedCondition = {
+          condition_id: null
+        };
+
+        // Recharger les conditions depuis le serveur pour garantir la cohérence
+        this.loadPartenaireConditions();
+      },
+      error: (err) => {
+        this.showError(err?.error?.message || (isEdit ? 'Erreur lors de la modification' : 'Erreur lors de l\'ajout de la condition de paiement'));
+      }
+    });
+  }
+
+  onEditCondition(condition: any, index: number): void {
+    // Trouver la condition_id correspondante en cherchant dans conditionsPaiement
+    const conditionPaiement = this.conditionsPaiement.find((cp: any) => cp.nom === condition.condition);
+    
+    // Sauvegarder les données de la ligne à modifier avec la valeur actuelle
+    this.selectedCondition = {
+      id: condition.id,
+      condition_id: conditionPaiement ? conditionPaiement.id : null
+    };
+
+    // Marquer la ligne en cours de modification (pour DataTables)
+    const table = $('#conditionTable').DataTable();
+    table.rows().nodes().to$().removeClass('editing');
+    $(table.row(index).node()).addClass('editing');
+
+    // Ouvrir la modale
+    ($('#conditionModal') as any).modal('show');
+  }
+
+  onDeleteConditions(): void {
+    const selected = (this.conditions || []).filter((x: any) => x?.checked);
+    if (selected.length === 0) {
+      this.showError('Veuillez sélectionner au moins une condition de paiement à supprimer');
+      return;
+    }
+
+    const ids = selected.map((item: any) => item.id);
+
+    this.baseService.deletePartenaireConditions(ids).subscribe({
+      next: () => {
+        this.showSuccess('Les conditions de paiement sélectionnées ont été supprimées avec succès');
+        this.checkedIdentifiants = [];
+        // Recharger les données depuis le serveur pour garantir la cohérence
+        this.loadPartenaireConditions();
+      },
+      error: err => {
+        this.showError(err?.error?.message || 'Erreur lors de la suppression des conditions de paiement');
+      }
+    });
+  }
+
+  loadPartenaireConditions(): void {
+    if (!this.part_id) return;
+
+    this.baseService.getPartenaireConditions(this.part_id).subscribe({
+      next: (response: any) => {
+        const data = response?.data || response;
+        this.conditions = Array.isArray(data) ? data : [];
+        this.cdr.detectChanges();
+
+        // Rafraîchir le DataTable
+        setTimeout(() => {
+          this.initOrRefreshDataTable('#conditionTable', { order: [[0, 'desc']] });
+        }, 50);
+      },
+      error: (err: any) => {
+        this.conditions = [];
+        this.showError('Erreur lors du chargement des conditions de paiement.');
       }
     });
   }

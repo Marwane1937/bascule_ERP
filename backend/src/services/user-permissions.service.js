@@ -201,6 +201,7 @@ class UserPermissionsService {
         category: 'Achats',
         icon: 'fas fa-shopping-cart',
         items: [
+          { name: 'Demande d\'achat', route: '/Demande-Achat' },
           { name: 'Bon de commande', route: '/Bon-Commande' },
           { name: 'Facture Fournisseur', route: '/Facture-Fournisseur' },
           { name: 'Réception', route: '/Reception' }

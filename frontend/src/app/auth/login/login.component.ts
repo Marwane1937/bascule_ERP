@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../service/auth.service';
 
 @Component({
@@ -17,7 +17,8 @@ export class LoginComponent implements OnInit {
   constructor(
     private formBuilder: FormBuilder,
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute
   ) {
     this.loginForm = this.formBuilder.group({
       login: ['', [Validators.required]],
@@ -33,6 +34,14 @@ export class LoginComponent implements OnInit {
     // Si déjà connecté, rediriger vers le dashboard
     if (this.authService.isAuthenticated()) {
       this.router.navigate(['/Dashbord']);
+      return;
+    }
+
+    // Vérifier si on vient d'une redirection d'expiration
+    const queryParams = this.route.snapshot.queryParams;
+    if (queryParams['expired'] === 'true') {
+      const message = queryParams['message'] || 'Votre session a expiré. Veuillez vous reconnecter.';
+      this.errorMessage = message;
     }
   }
 
@@ -54,10 +63,6 @@ export class LoginComponent implements OnInit {
           this.isLoading = false;
         },
         error: (error) => {
-          console.error('[LoginComponent] ❌ Erreur de connexion:', error);
-          console.error('[LoginComponent] Status:', error.status);
-          console.error('[LoginComponent] StatusText:', error.statusText);
-          console.error('[LoginComponent] Error body:', error.error);
           this.errorMessage = error.error?.message || 'Erreur de connexion';
           this.isLoading = false;
         }

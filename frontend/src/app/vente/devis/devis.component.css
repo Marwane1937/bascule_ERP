@@ -1,125 +1,122 @@
-.btn-gradient {
-  background: linear-gradient(135deg, #00b4db, #0083b0);
-  color: white;
-  border: none;
-  border-radius: 25px;
-  font-weight: 500;
-  transition: 0.3s ease;
-}
-.btn-gradient:hover {
-  background: linear-gradient(135deg, #0090c4, #006a8e);
+/* Filtres style Excel */
+.filter-row input[type="text"],
+.filter-row input[type="date"],
+.filter-row select {
+  font-size: 0.85rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  padding: 4px 24px 4px 8px;
 }
 
-.modal-elegant {
-  border-radius: 15px;
-  overflow: hidden;
+.filter-row .fa-filter {
+  position: absolute;
+  right: 8px;
+  font-size: 0.75rem;
+  pointer-events: none;
+  color: #6c757d;
 }
 
-.modal-header-custom {
-  background: linear-gradient(135deg, #00b4db, #0083b0);
-  color: white;
-  border-bottom: none;
+.filter-input:focus {
+  border-color: #80bdff;
+  box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
 }
 
-.card {
-  border-radius: 12px;
+/* En-têtes de colonnes */
+.column-header {
+  position: relative;
 }
 
-.table-hover tbody tr:hover {
-  background-color: #f6f8fc;
+.column-header:hover .column-menu-btn {
+  opacity: 1 !important;
 }
 
-.btn-sm {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.875rem;
-  border-radius: 8px;
-}
-.spinner-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 60vh;
-  background: linear-gradient(to right, #161b2c, #2e2c3a);
-  border-radius: 10px;
-  color: #fff;
+.column-menu-btn {
+  padding: 2px 4px !important;
+  transition: opacity 0.2s;
 }
 
-.custom-spinner {
-  width: 50px;
-  height: 50px;
-  border: 6px solid rgba(255, 255, 255, 0.1);
-  border-top: 6px solid #00bcd4;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+.pinned-column {
+  background-color: #e7f3ff !important;
+  font-weight: 600;
 }
 
-.loading-text {
-  margin-top: 12px;
-  font-size: 16px;
-  letter-spacing: 1px;
-  color: #cccccc;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-.modal-body {
-  padding-bottom: 120px; /* selon la hauteur de ton dropdown max */
-}
-.btn-outline-purple {
-  color: purple;
-  border-color: purple;
-}
-.modern-toast {
+/* Menu contextuel des colonnes */
+.column-context-menu {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 9999;
+  min-width: 220px;
+  padding: 8px 0;
+}
+
+.menu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9998;
+}
+
+.menu-header {
+  padding: 8px 16px;
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.9rem;
+  border-bottom: 1px solid #e9ecef;
+  margin-bottom: 4px;
+}
+
+.menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 0.875rem;
   display: flex;
   align-items: center;
-  padding: 14px 20px;
-  border-radius: 8px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+  color: #495057;
+  transition: background-color 0.2s;
+}
+
+.menu-item:hover {
+  background-color: #f8f9fa;
+}
+
+.menu-item i {
+  width: 20px;
+  margin-right: 8px;
+  text-align: center;
+}
+
+.menu-divider {
+  height: 1px;
+  background-color: #e9ecef;
+  margin: 4px 0;
+}
+
+/* Badges de statut */
+.badge-success {
+  background-color: #28a745;
   color: white;
-  font-size: 15px;
-  z-index: 9999;
-  animation: fadein 0.4s ease-out, fadeout 0.4s ease-in 4.6s;
-  min-width: 250px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
 }
 
-.toast-success {
-  background-color: #198754; /* vert Bootstrap */
+.badge-warning {
+  background-color: #ffc107;
+  color: #212529;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
 }
 
-.toast-error {
-  background-color: #dc3545; /* rouge Bootstrap */
-}
-
-.toast-icon {
-  margin-right: 10px;
-  font-size: 18px;
-}
-
-@keyframes fadein {
-  from {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes fadeout {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
+.badge-danger {
+  background-color: #dc3545;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
 }

@@ -78,7 +78,6 @@ export class FinanceReportingComponent implements OnInit {
         this.compteClientLoading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement compte client:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement des comptes clients', 'error');
         this.compteClientLoading = false;
       }
@@ -137,7 +136,6 @@ export class FinanceReportingComponent implements OnInit {
         this.balanceClientLoading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement balance client:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement de la balance client', 'error');
         this.balanceClientLoading = false;
       }
@@ -193,7 +191,6 @@ export class FinanceReportingComponent implements OnInit {
         this.soldeClientLoading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement solde client:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement des soldes clients', 'error');
         this.soldeClientLoading = false;
       }
@@ -243,7 +240,6 @@ export class FinanceReportingComponent implements OnInit {
         this.vueGlobaleLoading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement vue globale:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement de la vue globale', 'error');
         this.vueGlobaleLoading = false;
       }
@@ -622,6 +618,7 @@ export class FinanceReportingComponent implements OnInit {
     document.body.removeChild(link);
   }
 }
+
 
 
 

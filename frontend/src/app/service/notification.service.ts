@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 export interface Notification {
-  id: number;
+  id: number | string; // Peut être un string pour les notifications calculées
   description: string;
   date: string;
   part_ref?: string;
@@ -16,6 +16,12 @@ export interface Notification {
   etat: number; // 0=non archivé, 1=archivé
   lire?: number; // 3 = lue
   user_id?: number;
+  // Champs pour notifications calculées
+  client?: string;
+  jours_restants?: number;
+  stock_id?: number;
+  redirectRoute?: string;
+  isCalculated?: boolean;
 }
 
 export interface NotificationFilters {
@@ -133,6 +139,13 @@ export class NotificationService {
    */
   updateType(id: number, type: number): Observable<any> {
     return this.http.put(`${this.apiUrl}/${id}/type`, { type });
+  }
+
+  /**
+   * Récupérer les notifications calculées (contrats expirants, etc.)
+   */
+  getCalculatedNotifications(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/calculated`);
   }
 }
 

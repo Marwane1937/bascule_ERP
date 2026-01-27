@@ -47,7 +47,6 @@ export class UserPermissionsComponent implements OnInit {
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur lors du chargement des utilisateurs:', error);
         this.loading = false;
         Swal.fire({
           title: 'Erreur',
@@ -68,7 +67,6 @@ export class UserPermissionsComponent implements OnInit {
         }
       },
       error: (error) => {
-        console.error('Erreur lors du chargement des menu items:', error);
         this.menuCategories = [];
       }
     });
@@ -103,7 +101,6 @@ export class UserPermissionsComponent implements OnInit {
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur lors du chargement des permissions:', error);
         this.loading = false;
         Swal.fire({
           title: 'Erreur',
@@ -257,7 +254,6 @@ export class UserPermissionsComponent implements OnInit {
       },
       error: (error) => {
         this.saving = false;
-        console.error('Erreur lors de la sauvegarde:', error);
         Swal.fire({
           title: 'Erreur',
           text: 'Impossible de sauvegarder les permissions',

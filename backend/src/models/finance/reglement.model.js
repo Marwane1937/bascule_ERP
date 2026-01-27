@@ -1,6 +1,6 @@
 const { getConnection } = require('../../config/database');
 
-// Récupérer tous les règlements avec pagination
+// Récupérer tous les règlements avec pagination depuis v_reglement
 const getAllReglements = async (options = {}, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
   try {
@@ -17,17 +17,17 @@ const getAllReglements = async (options = {}, sequelizeConnection = null) => {
     const safePageSize = parseInt(pageSize) || 25;
     const offset = (safePage - 1) * safePageSize;
 
-    // Vérifier que orderBy est une colonne valide et mapper aux colonnes réelles
-    const validColumns = ['numero', 'date', 'client', 'mode', 'reference', 'montant'];
+    // Vérifier que orderBy est une colonne valide et mapper aux colonnes réelles de v_reglement
+    const validColumns = ['numero', 'date', 'client', 'mode', 'montant', 'solde'];
     const columnMapping = {
-      'numero': 'r.numero',
-      'date': 'r.date',
-      'client': 'p.nom',
-      'mode': 'mr.nom',
-      'reference': 'r.reference',
-      'montant': 'r.montant'
+      'numero': 'numero',
+      'date': 'date',
+      'client': 'client',
+      'mode': 'mode',
+      'montant': 'montant',
+      'solde': 'solde'
     };
-    const safeOrderBy = validColumns.includes(orderBy) ? columnMapping[orderBy] : 'r.date'; // Par défaut trier par date
+    const safeOrderBy = validColumns.includes(orderBy) ? columnMapping[orderBy] : 'date'; // Par défaut trier par date
     const safeOrderDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
     // Construire la clause WHERE pour la recherche
@@ -36,54 +36,47 @@ const getAllReglements = async (options = {}, sequelizeConnection = null) => {
 
     if (search && search.trim()) {
       whereClause = `WHERE (
-        r.numero LIKE :search 
-        OR p.nom LIKE :search
-        OR r.reference LIKE :search
-        OR mr.nom LIKE :search
+        numero LIKE :search 
+        OR client LIKE :search
+        OR mode LIKE :search
       )`;
       replacements.search = `%${search.trim()}%`;
     }
 
-    // Requête avec pagination - inclure l'ID pour les opérations CRUD
+    // Requête avec pagination depuis v_reglement
+    // Note: Si v_reglement n'a pas regle_id, on doit le joindre avec reglement
     const query = `
       SELECT 
-        regle_id,
-        numero,
-        date,
-        client,
-        mode,
-        reference,
-        montant,
-        part_id,
-        mode_id
+        r.regle_id,
+        r.regle_id AS id,
+        v.numero,
+        v.date,
+        v.client,
+        v.mode,
+        v.montant,
+        v.solde
       FROM (
         SELECT 
-          r.regle_id,
-          r.numero,
-          r.date,
-          p.nom AS client,
-          mr.nom AS mode,
-          r.reference,
-          r.montant,
-          r.part_id,
-          r.mode AS mode_id,
+          numero,
+          date,
+          client,
+          mode,
+          montant,
+          solde,
           ROW_NUMBER() OVER (ORDER BY ${safeOrderBy} ${safeOrderDirection}) AS RowNum
-        FROM reglement r
-        INNER JOIN partenaire p ON p.part_id = r.part_id 
-        INNER JOIN mode_regle mr ON mr.id = r.mode
+        FROM v_reglement
         ${whereClause}
-      ) AS PaginatedResults
-      WHERE RowNum > ${offset} AND RowNum <= ${offset + safePageSize}
-      ORDER BY RowNum
+      ) v
+      LEFT JOIN reglement r ON r.numero = v.numero
+      WHERE v.RowNum > ${offset} AND v.RowNum <= ${offset + safePageSize}
+      ORDER BY v.RowNum
     `;
     
     // Requête pour compter le total
     const countReplacements = search && search.trim() ? { search: `%${search.trim()}%` } : {};
     const countQuery = `
       SELECT COUNT(*) as total
-      FROM reglement r
-      INNER JOIN partenaire p ON p.part_id = r.part_id 
-      INNER JOIN mode_regle mr ON mr.id = r.mode
+      FROM v_reglement
       ${whereClause}
     `;
 
@@ -103,18 +96,23 @@ const getAllReglements = async (options = {}, sequelizeConnection = null) => {
     }
     
     try {
+      console.log('[getAllReglements] Exécution requête:', query);
+      console.log('[getAllReglements] Replacements:', replacements);
       const queryResult = await sequelize.query(query, {
         replacements: Object.keys(replacements).length > 0 ? replacements : undefined,
         type: sequelize.QueryTypes.SELECT
       });
+      console.log('[getAllReglements] Résultat brut:', queryResult);
       // Pour SQL Server avec Sequelize QueryTypes.SELECT, les résultats sont directement dans le tableau
       if (Array.isArray(queryResult)) {
         results = queryResult;
       } else {
         results = queryResult ? [queryResult] : [];
       }
+      console.log('[getAllReglements] Résultats finaux:', results.length, 'éléments');
     } catch (queryError) {
       console.error('[getAllReglements] Erreur lors de la requête:', queryError);
+      console.error('[getAllReglements] Stack:', queryError.stack);
       throw new Error(`Erreur lors de la récupération des règlements: ${queryError.message || 'Erreur inconnue'}`);
     }
 
@@ -149,6 +147,7 @@ const getReglementById = async (regle_id) => {
         r.montant,
         r.part_id,
         r.mode AS mode_id,
+        r.echeance,
         p.nom AS client,
         mr.nom AS mode
       FROM reglement r
@@ -175,9 +174,9 @@ const addReglement = async (data, sequelizeConnection = null) => {
   // Utiliser une transaction pour garantir que l'insertion et l'incrémentation du compteur sont atomiques
   return await sequelize.transaction(async (t) => {
     try {
-      const { numero, date, part_id, mode, reference, montant } = data;
+      const { numero, date, part_id, mode, reference, montant, echeance } = data;
       
-      console.log('[addReglement Model] 📥 Ajout règlement avec données:', { numero, date, part_id, mode, reference, montant });
+      console.log('[addReglement Model] 📥 Ajout règlement avec données:', { numero, date, part_id, mode, reference, montant, echeance });
       
       // Si le numéro n'est pas fourni, le générer depuis le compteur REG
       let numeroFinal = numero;
@@ -198,25 +197,47 @@ const addReglement = async (data, sequelizeConnection = null) => {
         console.log('[addReglement Model] ✅ Numéro généré:', numeroFinal);
       }
       
-      // Exécuter l'insertion et l'incrémentation du compteur dans la même transaction
-      const completeQuery = `
-        INSERT INTO reglement (numero, date, part_id, sens, mode, reference, montant) 
-        OUTPUT INSERTED.regle_id 
-        VALUES (:numero, :date, :part_id, 1, :mode, :reference, :montant);
-        UPDATE compteur SET compteur = compteur + 1 WHERE code = 'REG';
-      `;
+      // Construire la requête avec ou sans échéance selon le mode
+      let completeQuery;
+      let replacements;
       
-      console.log('[addReglement Model] Exécution de la requête SQL avec numéro:', numeroFinal);
-      
-      const [result] = await sequelize.query(completeQuery, {
-        replacements: { 
+      if (echeance) {
+        completeQuery = `
+          INSERT INTO reglement (numero, date, part_id, sens, mode, reference, montant, echeance) 
+          OUTPUT INSERTED.regle_id 
+          VALUES (:numero, :date, :part_id, 1, :mode, :reference, :montant, :echeance);
+          UPDATE compteur SET compteur = compteur + 1 WHERE code = 'REG';
+        `;
+        replacements = { 
           numero: numeroFinal, 
           date, 
           part_id, 
           mode, 
           reference: reference || '', 
-          montant 
-        },
+          montant,
+          echeance
+        };
+      } else {
+        completeQuery = `
+          INSERT INTO reglement (numero, date, part_id, sens, mode, reference, montant) 
+          OUTPUT INSERTED.regle_id 
+          VALUES (:numero, :date, :part_id, 1, :mode, :reference, :montant);
+          UPDATE compteur SET compteur = compteur + 1 WHERE code = 'REG';
+        `;
+        replacements = { 
+          numero: numeroFinal, 
+          date, 
+          part_id, 
+          mode, 
+          reference: reference || '', 
+          montant
+        };
+      }
+      
+      console.log('[addReglement Model] Exécution de la requête SQL avec numéro:', numeroFinal);
+      
+      const [result] = await sequelize.query(completeQuery, {
+        replacements,
         type: sequelize.QueryTypes.INSERT,
         transaction: t
       });
@@ -244,21 +265,38 @@ const addReglement = async (data, sequelizeConnection = null) => {
 const updateReglement = async (regle_id, data) => {
   const sequelize = getConnection();
   try {
-    const { numero, date, part_id, mode, reference, montant } = data;
-    await sequelize.query(
-      `UPDATE reglement 
+    const { numero, date, part_id, mode, reference, montant, echeance } = data;
+    
+    let updateQuery;
+    let replacements;
+    
+    if (echeance !== undefined && echeance !== null) {
+      updateQuery = `UPDATE reglement 
+       SET numero = :numero, 
+           date = :date, 
+           part_id = :part_id, 
+           mode = :mode, 
+           reference = :reference, 
+           montant = :montant,
+           echeance = :echeance
+       WHERE regle_id = :regle_id`;
+      replacements = { regle_id, numero, date, part_id, mode, reference, montant, echeance };
+    } else {
+      updateQuery = `UPDATE reglement 
        SET numero = :numero, 
            date = :date, 
            part_id = :part_id, 
            mode = :mode, 
            reference = :reference, 
            montant = :montant
-       WHERE regle_id = :regle_id`,
-      {
-        replacements: { regle_id, numero, date, part_id, mode, reference, montant },
-        type: sequelize.QueryTypes.UPDATE,
-      }
-    );
+       WHERE regle_id = :regle_id`;
+      replacements = { regle_id, numero, date, part_id, mode, reference, montant };
+    }
+    
+    await sequelize.query(updateQuery, {
+      replacements,
+      type: sequelize.QueryTypes.UPDATE,
+    });
     return { regle_id, ...data };
   } catch (error) {
     console.error('[updateReglement] Erreur:', error);
@@ -317,6 +355,7 @@ const getFacturesForLettrage = async (part_id, sequelizeConnection = null) => {
         solde
       FROM v_pre_regle_facture
       WHERE part_id = :part_id
+      group by document_id,numero,date,facture,avoir,reglement,solde
       ORDER BY date DESC, numero DESC
     `;
     
@@ -375,6 +414,43 @@ const saveLettrageFactures = async (regle_id, lettrages) => {
   });
 };
 
+// Récupérer les données d'un règlement pour génération PDF
+const getReglementForPDF = async (regle_id) => {
+  const sequelize = getConnection();
+  try {
+    const query = `
+      Select r.regle_id ,
+      r.numero , 
+      r.date , 
+      p.nom as client , 
+      r.reference , 
+      r.echeance , 
+      mr.nom as mode ,
+      coalesce(r.montant , 0) as montant_reglement ,
+      fm.total_ttc as montant_facture ,
+      fm.facture_num,
+      coalesce(rf.montant , 0) AS montant_regle 
+      from reglement r
+      left join regle_facture rf on r.regle_id = rf.regle_id
+      left join partenaire p on p.part_id = r.part_id
+      left join mode_regle mr on r.mode = mr.id
+      left join v_facture_montant fm on rf.facture_id = fm.facture_id
+      where r.regle_id = :regle_id
+      order by r.date
+    `;
+    
+    const results = await sequelize.query(query, {
+      replacements: { regle_id },
+      type: sequelize.QueryTypes.SELECT,
+    });
+    
+    return results || [];
+  } catch (error) {
+    console.error('[getReglementForPDF] Erreur:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   getAllReglements,
   getReglementById,
@@ -383,6 +459,7 @@ module.exports = {
   deleteReglement,
   getAllModeReglements,
   getFacturesForLettrage,
-  saveLettrageFactures
+  saveLettrageFactures,
+  getReglementForPDF
 };
 

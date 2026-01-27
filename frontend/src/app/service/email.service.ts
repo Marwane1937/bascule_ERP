@@ -34,12 +34,13 @@ export class EmailService {
     window.open(whatsappUrl, '_blank');
   }
 
-  generateDevisPDF(document_id: string, options?: { withStamp?: boolean; printMode?: 'normal' | 'nomenclature'; composeArticle?: any }) {
+  generateDevisPDF(document_id: string, options?: { withStamp?: boolean; printMode?: 'normal' | 'nomenclature'; composeArticle?: any; forceDocumentType?: string }) {
     return this.http.post<any>(`${environment.apiUrl}/pdf/generate`, {
       document_id,
       withStamp: !!options?.withStamp,
       printMode: options?.printMode || 'normal',
-      composeArticle: options?.composeArticle || null
+      composeArticle: options?.composeArticle || null,
+      forceDocumentType: options?.forceDocumentType || null
     });
   }
 

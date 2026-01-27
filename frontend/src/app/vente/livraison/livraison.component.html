@@ -199,48 +199,204 @@
                 width="100%"
                 [style.opacity]="loadingLivraisons ? '0.5' : '1'">
                 <thead class="table-light">
+                  <!-- Bouton pour afficher/masquer les filtres -->
+                  <tr *ngIf="!showFilterRow" style="background-color: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                    <td [attr.colspan]="getVisibleColumnsCount() + 2" class="text-center py-2" style="padding: 8px;">
+                      <button 
+                        class="btn btn-sm btn-outline-primary" 
+                        (click)="showFilterRow = true"
+                        style="border-radius: 4px;">
+                        <i class="fas fa-filter me-1"></i>
+                        Afficher les filtres
+                        <i class="fas fa-chevron-down ms-1" style="font-size: 0.7rem;"></i>
+                      </button>
+                    </td>
+                  </tr>
+                  <!-- Ligne des en-têtes avec tri et menu contextuel -->
                   <tr>
-                    <th (click)="onSortLivraisons('numero')" class="sortable" style="cursor: pointer; width: 120px;">
-                      Numéro
-                      <i class="fas ms-1" [ngClass]="getSortIconLivraisons('numero')"></i>
+                    <th *ngIf="columnVisibility.numero" 
+                        (click)="onSortLivraisons('numero')" 
+                        (contextmenu)="showColumnContextMenu($event, 'numero')"
+                        class="sortable column-header" 
+                        style="cursor: pointer; width: 120px;"
+                        [style.width]="columnWidths.numero"
+                        [class.pinned-column]="isColumnPinned('numero')">
+                      <div class="d-flex align-items-center justify-content-between">
+                        <span>Numéro</span>
+                        <div class="d-flex align-items-center gap-1">
+                          <i *ngIf="isColumnPinned('numero')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
+                          <i class="fas ms-1" [ngClass]="getSortIconLivraisons('numero')"></i>
+                          <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
+                                  (click)="openColumnMenu($event, 'numero')"
+                                  style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
+                            <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
+                          </button>
+                        </div>
+                      </div>
                     </th>
-                    <th (click)="onSortLivraisons('date')" class="sortable" style="cursor: pointer; width: 110px;">
-                      Date
-                      <i class="fas ms-1" [ngClass]="getSortIconLivraisons('date')"></i>
+                    <th *ngIf="columnVisibility.date" 
+                        (click)="onSortLivraisons('date')" 
+                        (contextmenu)="showColumnContextMenu($event, 'date')"
+                        class="sortable column-header" 
+                        style="cursor: pointer; width: 110px;"
+                        [style.width]="columnWidths.date"
+                        [class.pinned-column]="isColumnPinned('date')">
+                      <div class="d-flex align-items-center justify-content-between">
+                        <span>Date</span>
+                        <div class="d-flex align-items-center gap-1">
+                          <i *ngIf="isColumnPinned('date')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
+                          <i class="fas ms-1" [ngClass]="getSortIconLivraisons('date')"></i>
+                          <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
+                                  (click)="openColumnMenu($event, 'date')"
+                                  style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
+                            <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
+                          </button>
+                        </div>
+                      </div>
                     </th>
-                    <th (click)="onSortLivraisons('client')" class="sortable" style="cursor: pointer; min-width: 150px;">
-                      Client
-                      <i class="fas ms-1" [ngClass]="getSortIconLivraisons('client')"></i>
+                    <th *ngIf="columnVisibility.client" 
+                        (click)="onSortLivraisons('client')" 
+                        (contextmenu)="showColumnContextMenu($event, 'client')"
+                        class="sortable column-header" 
+                        style="cursor: pointer; min-width: 150px;"
+                        [style.width]="columnWidths.client"
+                        [class.pinned-column]="isColumnPinned('client')">
+                      <div class="d-flex align-items-center justify-content-between">
+                        <span>Client</span>
+                        <div class="d-flex align-items-center gap-1">
+                          <i *ngIf="isColumnPinned('client')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
+                          <i class="fas ms-1" [ngClass]="getSortIconLivraisons('client')"></i>
+                          <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
+                                  (click)="openColumnMenu($event, 'client')"
+                                  style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
+                            <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
+                          </button>
+                        </div>
+                      </div>
                     </th>
-                    <th (click)="onSortLivraisons('total_ht')" class="sortable text-end" style="cursor: pointer; width: 110px;">
-                      Total HT
-                      <i class="fas ms-1" [ngClass]="getSortIconLivraisons('total_ht')"></i>
+                    <th *ngIf="columnVisibility.total_ht" 
+                        (click)="onSortLivraisons('total_ht')" 
+                        (contextmenu)="showColumnContextMenu($event, 'total_ht')"
+                        class="sortable column-header text-end" 
+                        style="cursor: pointer; width: 110px;"
+                        [style.width]="columnWidths.total_ht"
+                        [class.pinned-column]="isColumnPinned('total_ht')">
+                      <div class="d-flex align-items-center justify-content-between">
+                        <span>Total HT</span>
+                        <div class="d-flex align-items-center gap-1">
+                          <i *ngIf="isColumnPinned('total_ht')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
+                          <i class="fas ms-1" [ngClass]="getSortIconLivraisons('total_ht')"></i>
+                          <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
+                                  (click)="openColumnMenu($event, 'total_ht')"
+                                  style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
+                            <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
+                          </button>
+                        </div>
+                      </div>
                     </th>
-                    <th (click)="onSortLivraisons('total_tva')" class="sortable text-end" style="cursor: pointer; width: 110px;">
-                      Total TVA
-                      <i class="fas ms-1" [ngClass]="getSortIconLivraisons('total_tva')"></i>
+                    <th *ngIf="columnVisibility.total_tva" 
+                        (click)="onSortLivraisons('total_tva')" 
+                        (contextmenu)="showColumnContextMenu($event, 'total_tva')"
+                        class="sortable column-header text-end" 
+                        style="cursor: pointer; width: 110px;"
+                        [style.width]="columnWidths.total_tva"
+                        [class.pinned-column]="isColumnPinned('total_tva')">
+                      <div class="d-flex align-items-center justify-content-between">
+                        <span>Total TVA</span>
+                        <div class="d-flex align-items-center gap-1">
+                          <i *ngIf="isColumnPinned('total_tva')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
+                          <i class="fas ms-1" [ngClass]="getSortIconLivraisons('total_tva')"></i>
+                          <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
+                                  (click)="openColumnMenu($event, 'total_tva')"
+                                  style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
+                            <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
+                          </button>
+                        </div>
+                      </div>
                     </th>
-                    <th (click)="onSortLivraisons('total_ttc')" class="sortable text-end" style="cursor: pointer; width: 110px;">
-                      Total TTC
-                      <i class="fas ms-1" [ngClass]="getSortIconLivraisons('total_ttc')"></i>
+                    <th *ngIf="columnVisibility.total_ttc" 
+                        (click)="onSortLivraisons('total_ttc')" 
+                        (contextmenu)="showColumnContextMenu($event, 'total_ttc')"
+                        class="sortable column-header text-end" 
+                        style="cursor: pointer; width: 110px;"
+                        [style.width]="columnWidths.total_ttc"
+                        [class.pinned-column]="isColumnPinned('total_ttc')">
+                      <div class="d-flex align-items-center justify-content-between">
+                        <span>Total TTC</span>
+                        <div class="d-flex align-items-center gap-1">
+                          <i *ngIf="isColumnPinned('total_ttc')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
+                          <i class="fas ms-1" [ngClass]="getSortIconLivraisons('total_ttc')"></i>
+                          <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
+                                  (click)="openColumnMenu($event, 'total_ttc')"
+                                  style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
+                            <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
+                          </button>
+                        </div>
+                      </div>
                     </th>
                     <th class="text-center" style="width: 130px;">Statut Facturation</th>
-                    <th style="width: 160px;" class="text-center">Actions</th>
+                    <th style="width: 200px;" class="text-center">Actions</th>
+                  </tr>
+                  <!-- Ligne des filtres (style Excel) -->
+                  <tr *ngIf="showFilterRow" class="filter-row" style="background-color: #f8f9fa; border-top: 2px solid #dee2e6;">
+                    <th *ngIf="columnVisibility.numero" style="padding: 4px; position: relative;">
+                      <input type="text" class="form-control form-control-sm filter-input" placeholder="Rechercher..."
+                             [(ngModel)]="columnFilters.numero" (input)="onColumnFilterChange('numero', $any($event.target).value)"
+                             style="font-size: 0.85rem; padding-right: 24px;">
+                      <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 0.75rem; pointer-events: none;"></i>
+                    </th>
+                    <th *ngIf="columnVisibility.date" style="padding: 4px; position: relative;">
+                      <input type="date" class="form-control form-control-sm filter-input"
+                             [(ngModel)]="columnFilters.date" (change)="onColumnFilterChange('date', $any($event.target).value)"
+                             style="font-size: 0.85rem;">
+                    </th>
+                    <th *ngIf="columnVisibility.client" style="padding: 4px; position: relative;">
+                      <input type="text" class="form-control form-control-sm filter-input" placeholder="Rechercher..."
+                             [(ngModel)]="columnFilters.client" (input)="onColumnFilterChange('client', $any($event.target).value)"
+                             style="font-size: 0.85rem; padding-right: 24px;">
+                      <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 0.75rem; pointer-events: none;"></i>
+                    </th>
+                    <th *ngIf="columnVisibility.total_ht" style="padding: 4px;">
+                      <input type="number" class="form-control form-control-sm filter-input" placeholder="Min..."
+                             [(ngModel)]="columnFilters.total_ht" (input)="onColumnFilterChange('total_ht', $any($event.target).value)"
+                             style="font-size: 0.85rem;">
+                    </th>
+                    <th *ngIf="columnVisibility.total_tva" style="padding: 4px;">
+                      <input type="number" class="form-control form-control-sm filter-input" placeholder="Min..."
+                             [(ngModel)]="columnFilters.total_tva" (input)="onColumnFilterChange('total_tva', $any($event.target).value)"
+                             style="font-size: 0.85rem;">
+                    </th>
+                    <th *ngIf="columnVisibility.total_ttc" style="padding: 4px;">
+                      <input type="number" class="form-control form-control-sm filter-input" placeholder="Min..."
+                             [(ngModel)]="columnFilters.total_ttc" (input)="onColumnFilterChange('total_ttc', $any($event.target).value)"
+                             style="font-size: 0.85rem;">
+                    </th>
+                    <th class="text-center"></th>
+                    <th class="text-center">
+                      <div class="d-flex align-items-center justify-content-center gap-2">
+                        <button class="btn btn-sm btn-outline-secondary" (click)="clearColumnFilters()" title="Réinitialiser les filtres">
+                          <i class="fas fa-times"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" (click)="showFilterRow = false" title="Masquer les filtres">
+                          <i class="fas fa-chevron-up"></i>
+                        </button>
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr *ngIf="!loadingLivraisons && livraisons.length === 0">
-                    <td colspan="8" class="text-center py-4">
+                    <td [attr.colspan]="getVisibleColumnsCount() + 2" class="text-center py-4">
                       <p class="text-muted mb-0">Aucune livraison trouvée</p>
                     </td>
                   </tr>
                   <tr *ngFor="let l of livraisons; let i = index">
-                    <td>{{ l.numero }}</td>
-                    <td>{{ l.date ? (l.date | date:'dd/MM/yyyy') : '-' }}</td>
-                    <td>{{ l.client || '-' }}</td>
-                    <td class="text-end">{{ l.total_ht | number:'1.2-2' }} dh</td>
-                    <td class="text-end">{{ l.total_tva | number:'1.2-2' }} dh</td>
-                    <td class="text-end fw-bold">{{ l.total_ttc | number:'1.2-2' }} dh</td>
+                    <td *ngIf="columnVisibility.numero">{{ l.numero }}</td>
+                    <td *ngIf="columnVisibility.date">{{ l.date ? (l.date | date:'dd/MM/yyyy') : '-' }}</td>
+                    <td *ngIf="columnVisibility.client">{{ l.client || '-' }}</td>
+                    <td *ngIf="columnVisibility.total_ht" class="text-end">{{ l.total_ht | number:'1.2-2' }} dh</td>
+                    <td *ngIf="columnVisibility.total_tva" class="text-end">{{ l.total_tva | number:'1.2-2' }} dh</td>
+                    <td *ngIf="columnVisibility.total_ttc" class="text-end fw-bold">{{ l.total_ttc | number:'1.2-2' }} dh</td>
                     <td class="text-center">
                       <span *ngIf="isFacturee(l)" class="badge bg-success">FACTURÉ</span>
                       <span *ngIf="!isFacturee(l)" class="badge bg-danger">NON FACTURÉ</span>
@@ -390,3 +546,41 @@
   </div>
 </div>
 
+<!-- Menu contextuel pour la gestion des colonnes -->
+<div *ngIf="showColumnMenu" class="menu-overlay" (click)="hideColumnContextMenu()"></div>
+<div *ngIf="showColumnMenu" 
+     class="column-context-menu" 
+     [style.left.px]="menuPosition.x" 
+     [style.top.px]="menuPosition.y">
+  <div class="menu-header">
+    <i class="fas fa-columns"></i>
+    <span>{{ getColumnDisplayName(activeColumnMenu) }}</span>
+  </div>
+  <div class="menu-divider"></div>
+  <div class="menu-item" (click)="togglePinColumn(activeColumnMenu)">
+    <i class="fas" [ngClass]="{'fa-thumbtack': !isColumnPinned(activeColumnMenu), 'fa-times': isColumnPinned(activeColumnMenu)}"></i>
+    <span>{{ isColumnPinned(activeColumnMenu) ? 'Désépingler' : 'Épingler' }}</span>
+  </div>
+  <div class="menu-item" (click)="autoSizeColumn(activeColumnMenu)">
+    <i class="fas fa-arrows-alt-h"></i>
+    <span>Ajuster automatiquement</span>
+  </div>
+  <div class="menu-divider"></div>
+  <div class="menu-item" (click)="toggleColumnVisibility(activeColumnMenu)">
+    <i class="fas" [ngClass]="{'fa-eye-slash': columnVisibility[activeColumnMenu], 'fa-eye': !columnVisibility[activeColumnMenu]}"></i>
+    <span>{{ columnVisibility[activeColumnMenu] ? 'Masquer' : 'Afficher' }}</span>
+  </div>
+  <div class="menu-divider"></div>
+  <div class="menu-item" (click)="autoSizeAllColumns()">
+    <i class="fas fa-expand-arrows-alt"></i>
+    <span>Ajuster toutes les colonnes</span>
+  </div>
+  <div class="menu-item" (click)="showAllColumns()">
+    <i class="fas fa-eye"></i>
+    <span>Afficher toutes les colonnes</span>
+  </div>
+  <div class="menu-item" (click)="resetColumns()">
+    <i class="fas fa-undo"></i>
+    <span>Réinitialiser les colonnes</span>
+  </div>
+</div>

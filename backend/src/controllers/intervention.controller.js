@@ -198,11 +198,13 @@ class InterventionController {
    */
   async getClients(req, res) {
     try {
-      const sequelize = getConnection();
+      // Utiliser la connexion injectée par le middleware si disponible, sinon utiliser getConnection()
+      const sequelize = req.sequelize || getConnection();
+      
       const query = `
         SELECT part_id, nom
         FROM partenaire
-        WHERE type = 1 AND etat = 1
+        WHERE type = 1
         ORDER BY nom ASC
       `;
 
@@ -210,6 +212,7 @@ class InterventionController {
         type: sequelize.QueryTypes.SELECT
       });
 
+      console.log(`[getClients] ${clients?.length || 0} clients récupérés`);
       res.json(Array.isArray(clients) ? clients : []);
     } catch (error) {
       console.error('[getClients] Erreur:', error);
@@ -222,11 +225,14 @@ class InterventionController {
    */
   async getEmployes(req, res) {
     try {
-      const employes = await employeModel.getAllEmployes();
+      // Utiliser la connexion injectée par le middleware si disponible
+      const sequelize = req.sequelize || getConnection();
+      const employes = await employeModel.getAllEmployes(sequelize);
       const formattedEmployes = employes.map(emp => ({
         id: emp.id,
         nom: `${emp.prenom} ${emp.nom}`.trim()
       }));
+      console.log(`[getEmployes] ${formattedEmployes?.length || 0} employés récupérés`);
       res.json(formattedEmployes);
     } catch (error) {
       console.error('[getEmployes] Erreur:', error);
@@ -239,7 +245,10 @@ class InterventionController {
    */
   async getRubriques(req, res) {
     try {
-      const rubriques = await listesModel.getListesByGroupId(5000);
+      // Utiliser la connexion injectée par le middleware si disponible
+      const sequelize = req.sequelize || getConnection();
+      const rubriques = await listesModel.getListesByGroupId(5000, sequelize);
+      console.log(`[getRubriques] ${rubriques?.length || 0} rubriques récupérées`);
       res.json(rubriques);
     } catch (error) {
       console.error('[getRubriques] Erreur:', error);

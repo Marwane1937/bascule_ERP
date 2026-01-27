@@ -53,6 +53,8 @@ import { CaisseRecettesComponent } from './vente/caisse/caisse-recettes.componen
 import { CaisseDepensesComponent } from './vente/caisse/caisse-depenses.component';
 import { BonCommandeComponent } from './achat/bon-commande/bon-commande.component';
 import { EditBonCommandeComponent } from './achat/edit/edit-bon-commande/edit-bon-commande.component';
+import { DemandeAchatComponent } from './achat/demande-achat/demande-achat.component';
+import { EditDemandeAchatComponent } from './achat/edit/edit-demande-achat/edit-demande-achat.component';
 import { NotificationComponent } from './notification/notification.component';
 import { FactureFournisseurComponent } from './achat/facture-fournisseur/facture-fournisseur.component';
 import { ReceptionComponent } from './achat/reception/reception.component';
@@ -127,6 +129,8 @@ import { CompteurComponent } from './base/compteur/compteur.component';
     CaisseDepensesComponent,
     BonCommandeComponent,
     EditBonCommandeComponent,
+    DemandeAchatComponent,
+    EditDemandeAchatComponent,
     NotificationComponent,
     FactureFournisseurComponent,
     ReceptionComponent,

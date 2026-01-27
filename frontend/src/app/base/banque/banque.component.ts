@@ -58,7 +58,6 @@ export class BanqueComponent implements OnInit {
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement banques:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement des banques', 'error');
         this.loading = false;
       }
@@ -170,7 +169,6 @@ export class BanqueComponent implements OnInit {
         this.getBanques();
       },
       error: (error) => {
-        console.error('Erreur sauvegarde banque:', error);
         const message = error.error?.message || 'Erreur lors de la sauvegarde';
         Swal.fire('Erreur', message, 'error');
       }
@@ -193,7 +191,6 @@ export class BanqueComponent implements OnInit {
             this.getBanques();
           },
           error: (error) => {
-            console.error('Erreur suppression banque:', error);
             const message = error.error?.message || 'Erreur lors de la suppression';
             Swal.fire('Erreur', message, 'error');
           }
@@ -201,7 +198,6 @@ export class BanqueComponent implements OnInit {
       }
     });
   }
-
 
   validateSwift(): void {
     if (this.currentBanque.swift) {

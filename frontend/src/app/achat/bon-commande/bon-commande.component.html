@@ -23,9 +23,13 @@
   </span>
   <span class="toast-message">{{ successMessage }}</span>
 </div>
-        <!-- Bouton Ajouter Bon de Commande -->
+        <!-- Boutons Ajouter Bon de Commande -->
         <div class="row mb-4">
             <div class="col-12 text-end">
+                <button type="button" class="btn btn-success px-4 py-2 shadow-sm me-2" data-bs-toggle="modal"
+                    data-bs-target="#transformDemandeAchatModal">
+                    <i class="fas fa-exchange-alt me-2"></i> Transformer Demande d'Achat
+                </button>
                 <button type="button" class="btn btn-gradient px-4 py-2 shadow-sm" data-bs-toggle="modal"
                     data-bs-target="#addBonCommandeModal">
                     <i class="fas fa-plus me-2"></i> Ajouter un Bon de Commande
@@ -258,5 +262,146 @@
     </div>
 
     <router-outlet></router-outlet>
+</div>
+
+<!-- Modal Transformation Demande d'Achat -->
+<div class="modal fade" id="transformDemandeAchatModal" tabindex="-1" aria-labelledby="transformDemandeAchatModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content modal-elegant shadow">
+            <div class="modal-header modal-header-custom">
+                <h5 class="modal-title text-white" id="transformDemandeAchatModalLabel">
+                    <i class="fas fa-exchange-alt me-2"></i> Transformer Demande d'Achat en Bon de Commande
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                    aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Liste des demandes d'achat non transformées -->
+                <div *ngIf="!selectedDemandeAchat" class="mb-4">
+                    <h6 class="mb-3">Sélectionner une demande d'achat :</h6>
+                    <div class="table-responsive" style="max-height: 400px;">
+                        <table class="table table-bordered table-hover">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width: 50px;">Sélection</th>
+                                    <th>Numéro</th>
+                                    <th>Date</th>
+                                    <th>Fournisseur</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr *ngIf="loadingDemandesAchat">
+                                    <td colspan="5" class="text-center">
+                                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                                        <span class="ms-2">Chargement...</span>
+                                    </td>
+                                </tr>
+                                <tr *ngIf="!loadingDemandesAchat && demandesAchatNonTransformees.length === 0">
+                                    <td colspan="5" class="text-center text-muted">
+                                        Aucune demande d'achat non transformée
+                                    </td>
+                                </tr>
+                                <tr *ngFor="let da of demandesAchatNonTransformees" 
+                                    (click)="selectDemandeAchat(da)"
+                                    style="cursor: pointer;">
+                                    <td class="text-center">
+                                        <input type="radio" name="selectedDemandeAchat" [value]="da.document_id"
+                                            [checked]="selectedDemandeAchat?.document_id === da.document_id">
+                                    </td>
+                                    <td>{{ da.numero }}</td>
+                                    <td>{{ da.date ? (da.date | date:'dd/MM/yyyy') : '-' }}</td>
+                                    <td>{{ da.fournisseur || '-' }}</td>
+                                    <td>{{ da.description || '-' }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Formulaire pour entrer les prix -->
+                <div *ngIf="selectedDemandeAchat && demandeAchatDetails">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6>Demande d'achat : <strong>{{ selectedDemandeAchat.numero }}</strong></h6>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="cancelSelection()">
+                            <i class="fas fa-times me-1"></i> Annuler
+                        </button>
+                    </div>
+                    <div class="table-responsive" style="max-height: 400px;">
+                        <table class="table table-bordered">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Réf</th>
+                                    <th>Désignation</th>
+                                    <th>Qté</th>
+                                    <th>Prix Unitaire</th>
+                                    <th>Remise (%)</th>
+                                    <th>TVA (%)</th>
+                                    <th style="width: 80px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr *ngFor="let ligne of lignesAvecPrix; let i = index" 
+                                    [class.table-danger]="ligne.supprime">
+                                    <td>{{ ligne.article_cod || '-' }}</td>
+                                    <td>{{ ligne.designation || '-' }}</td>
+                                    <td>{{ ligne.quantite || ligne.qte || 0 }}</td>
+                                    <td>
+                                        <input type="number" step="0.01" min="0" class="form-control form-control-sm"
+                                            [(ngModel)]="ligne.prix" 
+                                            placeholder="0.00"
+                                            [disabled]="ligne.supprime">
+                                    </td>
+                                    <td>
+                                        <input type="number" step="0.01" min="0" max="100" class="form-control form-control-sm"
+                                            [(ngModel)]="ligne.remise" 
+                                            placeholder="0.00"
+                                            [disabled]="ligne.supprime">
+                                    </td>
+                                    <td>
+                                        <input type="number" step="0.01" min="0" max="100" class="form-control form-control-sm"
+                                            [(ngModel)]="ligne.taux_tva" 
+                                            placeholder="0.00"
+                                            [disabled]="ligne.supprime">
+                                    </td>
+                                    <td class="text-center">
+                                        <button type="button" 
+                                            class="btn btn-sm"
+                                            [class.btn-danger]="!ligne.supprime"
+                                            [class.btn-success]="ligne.supprime"
+                                            (click)="toggleSupprimerLigne(i)"
+                                            [title]="ligne.supprime ? 'Restaurer la ligne' : 'Supprimer la ligne'">
+                                            <i [class]="ligne.supprime ? 'fas fa-undo' : 'fas fa-trash'"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr *ngIf="lignesAvecPrix.length === 0">
+                                    <td colspan="7" class="text-center text-muted">
+                                        Aucun article dans cette demande d'achat
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-top">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                <button *ngIf="selectedDemandeAchat && demandeAchatDetails" 
+                    type="button" 
+                    class="btn btn-success" 
+                    (click)="transformerDemandeAchat()"
+                    [disabled]="transforming">
+                    <i class="fas fa-exchange-alt me-2"></i>
+                    <span *ngIf="!transforming">Transférer</span>
+                    <span *ngIf="transforming">
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                        Transfert en cours...
+                    </span>
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 

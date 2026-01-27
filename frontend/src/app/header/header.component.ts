@@ -140,76 +140,165 @@ export class HeaderComponent implements OnInit, OnDestroy {
     // Charger toutes les notifications pour compter les urgentes
     this.notificationService.getNotifications({ etat: '0' }).subscribe({
       next: (response: any) => {
-        if (response && response.success) {
-          const notifications = response.data || [];
-          
-          if (notifications.length === 0) {
+        const normalNotifications = response && response.success ? (response.data || []) : [];
+        
+        // Charger les notifications calculées
+        this.notificationService.getCalculatedNotifications().subscribe({
+          next: (calcResponse: any) => {
+            const calculatedNotifications = calcResponse && calcResponse.success ? (calcResponse.data || []) : [];
+            
+            // Combiner les deux listes
+            const allNotifications = [...calculatedNotifications, ...normalNotifications];
+            
+            if (allNotifications.length === 0) {
+              this.urgentCount = 0;
+              this.recentNotifications = [];
+              this.loadingNotifications = false;
+              return;
+            }
+            
+            // Filtrer uniquement les notifications urgentes (< 10 jours)
+            // non archivées (etat = 0) et non lues (lire !== 3)
+            const urgentNotifications: Notification[] = [];
+            
+            allNotifications.forEach((n: Notification) => {
+              // Exclure les notifications archivées (etat = 1)
+              if (n.etat === 1) {
+                return;
+              }
+              
+              // Exclure les notifications marquées comme lues (lire = 3) - sauf les calculées
+              if (!n.isCalculated && n.lire === 3) {
+                return;
+              }
+              
+              // Vérifier si la notification est urgente (< 10 jours)
+              const isUrgentResult = this.isUrgent(n);
+              
+              if (isUrgentResult) {
+                urgentNotifications.push(n);
+              }
+            });
+            
+            // Compter uniquement les notifications urgentes (< 10 jours)
+            this.urgentCount = urgentNotifications.length;
+            
+            // Charger toutes les notifications urgentes triées par urgence
+            this.recentNotifications = urgentNotifications
+              .sort((a: Notification, b: Notification) => {
+                // Les notifications calculées (type 3 = ERROR) en premier
+                if (a.type === 3 && b.type !== 3) return -1;
+                if (a.type !== 3 && b.type === 3) return 1;
+                
+                // Pour les notifications calculées, trier par jours_restants
+                if (a.isCalculated && b.isCalculated) {
+                  return (a.jours_restants || 0) - (b.jours_restants || 0);
+                }
+                
+                // Pour les notifications normales, utiliser date_alarme
+                const timeA = this.getTimeRemaining(a.date_alarme);
+                const timeB = this.getTimeRemaining(b.date_alarme);
+                
+                // Trier d'abord par statut (en retard en premier)
+                if (timeA.isOverdue && !timeB.isOverdue) return -1;
+                if (!timeA.isOverdue && timeB.isOverdue) return 1;
+                
+                // Ensuite par jours restants (les plus urgents en premier)
+                return timeA.days - timeB.days;
+              });
+            
+            this.loadingNotifications = false;
+          },
+          error: () => {
+            // En cas d'erreur, utiliser seulement les notifications normales
+            this.processNormalNotifications(normalNotifications);
+            this.loadingNotifications = false;
+          }
+        });
+      },
+      error: (error) => {
+        // En cas d'erreur, essayer quand même de charger les notifications calculées
+        this.notificationService.getCalculatedNotifications().subscribe({
+          next: (calcResponse: any) => {
+            const calculatedNotifications = calcResponse && calcResponse.success ? (calcResponse.data || []) : [];
+            this.processNormalNotifications(calculatedNotifications);
+            this.loadingNotifications = false;
+          },
+          error: () => {
             this.urgentCount = 0;
             this.recentNotifications = [];
             this.loadingNotifications = false;
-            return;
           }
-          
-          // Filtrer uniquement les notifications avec date_alarme, moins de 5 jours restants,
-          // non archivées (etat = 0) et non lues (lire !== 3)
-          const urgentNotifications: Notification[] = [];
-          
-          notifications.forEach((n: Notification) => {
-            // Exclure les notifications sans date_alarme
-            if (!n.date_alarme) {
-              return;
-            }
-            
-            // Exclure les notifications archivées (etat = 1)
-            if (n.etat === 1) {
-              return;
-            }
-            
-            // Exclure les notifications marquées comme lues (lire = 3)
-            if (n.lire === 3) {
-              return;
-            }
-            
-            // Vérifier si la notification est urgente (< 5 jours)
-            const isUrgentResult = this.isUrgent(n);
-            
-            if (isUrgentResult) {
-              urgentNotifications.push(n);
-            }
-          });
-          
-          // Compter uniquement les notifications urgentes (< 5 jours)
-          this.urgentCount = urgentNotifications.length;
-          
-          // Charger toutes les notifications urgentes triées par urgence
-          this.recentNotifications = urgentNotifications
-            .sort((a: Notification, b: Notification) => {
-              const timeA = this.getTimeRemaining(a.date_alarme);
-              const timeB = this.getTimeRemaining(b.date_alarme);
-              
-              // Trier d'abord par statut (en retard en premier)
-              if (timeA.isOverdue && !timeB.isOverdue) return -1;
-              if (!timeA.isOverdue && timeB.isOverdue) return 1;
-              
-              // Ensuite par jours restants (les plus urgents en premier)
-              return timeA.days - timeB.days;
-            });
-        } else {
-          this.urgentCount = 0;
-          this.recentNotifications = [];
-        }
-        this.loadingNotifications = false;
-      },
-      error: (error) => {
-        this.urgentCount = 0;
-        this.recentNotifications = [];
-        this.loadingNotifications = false;
+        });
       }
     });
   }
 
-  // Vérifier si une notification est urgente (< 5 jours)
+  private processNormalNotifications(notifications: Notification[]): void {
+    if (notifications.length === 0) {
+      this.urgentCount = 0;
+      this.recentNotifications = [];
+      return;
+    }
+    
+    // Filtrer uniquement les notifications urgentes (< 10 jours)
+    const urgentNotifications: Notification[] = [];
+    
+    notifications.forEach((n: Notification) => {
+      // Exclure les notifications archivées (etat = 1)
+      if (n.etat === 1) {
+        return;
+      }
+      
+      // Exclure les notifications marquées comme lues (lire = 3) - sauf les calculées
+      if (!n.isCalculated && n.lire === 3) {
+        return;
+      }
+      
+      // Vérifier si la notification est urgente (< 10 jours)
+      const isUrgentResult = this.isUrgent(n);
+      
+      if (isUrgentResult) {
+        urgentNotifications.push(n);
+      }
+    });
+    
+    // Compter uniquement les notifications urgentes (< 10 jours)
+    this.urgentCount = urgentNotifications.length;
+    
+    // Charger toutes les notifications urgentes triées par urgence
+    this.recentNotifications = urgentNotifications
+      .sort((a: Notification, b: Notification) => {
+        // Les notifications calculées (type 3 = ERROR) en premier
+        if (a.type === 3 && b.type !== 3) return -1;
+        if (a.type !== 3 && b.type === 3) return 1;
+        
+        // Pour les notifications calculées, trier par jours_restants
+        if (a.isCalculated && b.isCalculated) {
+          return (a.jours_restants || 0) - (b.jours_restants || 0);
+        }
+        
+        // Pour les notifications normales, utiliser date_alarme
+        const timeA = this.getTimeRemaining(a.date_alarme);
+        const timeB = this.getTimeRemaining(b.date_alarme);
+        
+        // Trier d'abord par statut (en retard en premier)
+        if (timeA.isOverdue && !timeB.isOverdue) return -1;
+        if (!timeA.isOverdue && timeB.isOverdue) return 1;
+        
+        // Ensuite par jours restants (les plus urgents en premier)
+        return timeA.days - timeB.days;
+      });
+  }
+
+  // Vérifier si une notification est urgente (< 10 jours)
   isUrgent(notification: Notification): boolean {
+    // Pour les notifications calculées, utiliser jours_restants
+    if (notification.isCalculated && notification.jours_restants !== undefined) {
+      return notification.jours_restants < 10 && notification.jours_restants >= 0;
+    }
+    
+    // Pour les notifications normales, utiliser date_alarme
     if (!notification.date_alarme) {
       return false;
     }
@@ -231,8 +320,8 @@ export class HeaderComponent implements OnInit, OnDestroy {
       const diffTime = alarmDateNormalized.getTime() - nowNormalized.getTime();
       const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
       
-      // Urgent si moins de 5 jours restants (y compris les dates passées)
-      return diffDays < 5;
+      // Urgent si moins de 10 jours restants (y compris les dates passées)
+      return diffDays < 10;
     } catch (error) {
       return false;
     }
@@ -255,9 +344,25 @@ export class HeaderComponent implements OnInit, OnDestroy {
     this.router.navigate(['/Notifications']);
   }
 
-  markNotificationAsRead(id: number, event: Event): void {
+  onNotificationClick(notification: Notification, event: Event): void {
+    // Empêcher la propagation pour éviter de fermer le panneau
+    event.stopPropagation();
+    
+    // Si c'est une notification calculée avec redirection
+    if (notification.isCalculated && notification.redirectRoute) {
+      // Ne pas fermer le panneau, juste naviguer
+      this.router.navigate([notification.redirectRoute]);
+    }
+  }
+
+  markNotificationAsRead(id: number | string, event: Event): void {
     event.stopPropagation();
     if (!this.hasMarkReadPermission()) return;
+    
+    // Les notifications calculées ne peuvent pas être marquées comme lues
+    if (typeof id !== 'number') {
+      return;
+    }
     
     this.notificationService.markAsRead(id).subscribe({
       next: () => {
@@ -446,5 +551,10 @@ export class HeaderComponent implements OnInit, OnDestroy {
       hour: '2-digit',
       minute: '2-digit'
     });
+  }
+
+  // Helper pour vérifier si l'ID est un nombre (utilisable dans le template)
+  isNumericId(id: number | string): boolean {
+    return typeof id === 'number';
   }
 }

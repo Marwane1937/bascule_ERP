@@ -1,7 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { AuthService, Societe } from '../../service/auth.service';
 
-
 @Component({
   selector: 'app-societe-management',
   templateUrl: './societe-management.component.html',
@@ -36,7 +35,6 @@ export class SocieteManagementComponent implements OnInit {
         this.isLoading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement sociétés:', error);
         this.errorMessage = 'Erreur lors du chargement des sociétés';
         this.isLoading = false;
       }
@@ -89,7 +87,6 @@ export class SocieteManagementComponent implements OnInit {
           this.loadSocietes(); // Recharger la liste
         },
         error: (error) => {
-          console.error('Erreur sauvegarde documents:', error);
           this.errorMessage = error.error?.message || 'Erreur lors de la sauvegarde';
           this.isLoading = false;
         }

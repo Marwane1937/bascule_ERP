@@ -28,12 +28,10 @@ export class WebSocketService {
     };
 
     this.ws.onclose = () => {
-      console.warn('❌ WebSocket fermé');
       setTimeout(() => this.connect(), 3000); // tentative de reconnexion
     };
 
     this.ws.onerror = (error) => {
-      console.error('Erreur WebSocket :', error);
     };
   }
 
@@ -41,7 +39,6 @@ export class WebSocketService {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
     } else {
-      console.warn('WebSocket non connecté, message non envoyé');
     }
   }
 

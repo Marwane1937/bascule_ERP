@@ -16,6 +16,7 @@ router.get('/modes', reglementController.getModeReglements);
 router.get('/next-numero', reglementController.getNextReglementNumero);
 router.get('/factures/:part_id', reglementController.getFacturesForLettrage);
 router.post('/:regle_id/lettrage', reglementController.saveLettrageFactures);
+router.get('/:id/pdf', reglementController.genererPDF);
 router.get('/:id', reglementController.getReglementById);
 router.post('/', reglementController.addReglement);
 router.put('/:id', reglementController.updateReglement);

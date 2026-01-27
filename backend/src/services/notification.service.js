@@ -161,6 +161,12 @@ class NotificationService {
    */
   async getNotificationById(notificationId, userId, sequelizeConnection = null) {
     try {
+      // Vérifier si l'ID est un nombre (les notifications calculées ont des IDs string)
+      if (typeof notificationId === 'string' || isNaN(parseInt(notificationId))) {
+        // C'est une notification calculée, elle n'existe pas dans la base de données
+        return null;
+      }
+
       // Utiliser getConnection si disponible pour obtenir la connexion dynamique
       const getConnection = require('../config/database').getConnection;
       const finalSequelize = sequelizeConnection || (getConnection ? getConnection() : Notification.sequelize || require('../config/database'));
@@ -172,7 +178,7 @@ class NotificationService {
       `;
 
       const result = await finalSequelize.query(query, {
-        replacements: { notificationId },
+        replacements: { notificationId: parseInt(notificationId) },
         type: finalSequelize.QueryTypes.SELECT
       });
 
@@ -188,6 +194,12 @@ class NotificationService {
    */
   async markAsRead(notificationId, userId, sequelizeConnection = null) {
     try {
+      // Vérifier si l'ID est un nombre (les notifications calculées ont des IDs string)
+      if (typeof notificationId === 'string' || isNaN(parseInt(notificationId))) {
+        // Les notifications calculées ne peuvent pas être marquées comme lues
+        throw new Error('Les notifications calculées ne peuvent pas être marquées comme lues');
+      }
+
       // Utiliser getConnection si disponible pour obtenir la connexion dynamique
       const getConnection = require('../config/database').getConnection;
       const finalSequelize = sequelizeConnection || (getConnection ? getConnection() : Notification.sequelize || require('../config/database'));
@@ -206,7 +218,7 @@ class NotificationService {
       `;
 
       await finalSequelize.query(query, {
-        replacements: { notificationId },
+        replacements: { notificationId: parseInt(notificationId) },
         type: finalSequelize.QueryTypes.UPDATE
       });
 
@@ -230,10 +242,17 @@ class NotificationService {
         return { success: true, count: 0 };
       }
 
+      // Filtrer uniquement les IDs numériques (exclure les notifications calculées)
+      const numericIds = notificationIds.filter(id => typeof id === 'number' || !isNaN(parseInt(id))).map(id => parseInt(id));
+      
+      if (numericIds.length === 0) {
+        return { success: true, count: 0 };
+      }
+
       // Marquer toutes les notifications comme lues (lire = 3)
-      const placeholders = notificationIds.map((_, index) => `:id${index}`).join(',');
+      const placeholders = numericIds.map((_, index) => `:id${index}`).join(',');
       const replacements = {};
-      notificationIds.forEach((id, index) => {
+      numericIds.forEach((id, index) => {
         replacements[`id${index}`] = id;
       });
 
@@ -248,7 +267,7 @@ class NotificationService {
         type: finalSequelize.QueryTypes.UPDATE
       });
 
-      return { success: true, count: notificationIds.length };
+      return { success: true, count: numericIds.length };
     } catch (error) {
       console.error('[NotificationService] Erreur marquage multiple comme lues:', error);
       throw error;
@@ -260,6 +279,12 @@ class NotificationService {
    */
   async archive(notificationId, userId, sequelizeConnection = null) {
     try {
+      // Vérifier si l'ID est un nombre (les notifications calculées ont des IDs string)
+      if (typeof notificationId === 'string' || isNaN(parseInt(notificationId))) {
+        // Les notifications calculées ne peuvent pas être archivées
+        throw new Error('Les notifications calculées ne peuvent pas être archivées');
+      }
+
       // Utiliser getConnection si disponible pour obtenir la connexion dynamique
       const getConnection = require('../config/database').getConnection;
       const finalSequelize = sequelizeConnection || (getConnection ? getConnection() : Notification.sequelize || require('../config/database'));
@@ -276,7 +301,7 @@ class NotificationService {
       `;
 
       await finalSequelize.query(query, {
-        replacements: { notificationId },
+        replacements: { notificationId: parseInt(notificationId) },
         type: finalSequelize.QueryTypes.UPDATE
       });
 
@@ -292,6 +317,12 @@ class NotificationService {
    */
   async restore(notificationId, userId, sequelizeConnection = null) {
     try {
+      // Vérifier si l'ID est un nombre (les notifications calculées ont des IDs string)
+      if (typeof notificationId === 'string' || isNaN(parseInt(notificationId))) {
+        // Les notifications calculées ne peuvent pas être restaurées
+        throw new Error('Les notifications calculées ne peuvent pas être restaurées');
+      }
+
       // Utiliser getConnection si disponible pour obtenir la connexion dynamique
       const getConnection = require('../config/database').getConnection;
       const finalSequelize = sequelizeConnection || (getConnection ? getConnection() : Notification.sequelize || require('../config/database'));
@@ -308,7 +339,7 @@ class NotificationService {
       `;
 
       await finalSequelize.query(query, {
-        replacements: { notificationId },
+        replacements: { notificationId: parseInt(notificationId) },
         type: finalSequelize.QueryTypes.UPDATE
       });
 
@@ -324,6 +355,12 @@ class NotificationService {
    */
   async updateType(notificationId, type, sequelizeConnection = null) {
     try {
+      // Vérifier si l'ID est un nombre (les notifications calculées ont des IDs string)
+      if (typeof notificationId === 'string' || isNaN(parseInt(notificationId))) {
+        // Les notifications calculées ne peuvent pas avoir leur type modifié
+        throw new Error('Les notifications calculées ne peuvent pas avoir leur type modifié');
+      }
+
       // Utiliser getConnection si disponible pour obtenir la connexion dynamique
       const getConnection = require('../config/database').getConnection;
       const finalSequelize = sequelizeConnection || (getConnection ? getConnection() : Notification.sequelize || require('../config/database'));
@@ -335,7 +372,7 @@ class NotificationService {
       `;
 
       await finalSequelize.query(query, {
-        replacements: { notificationId, type },
+        replacements: { notificationId: parseInt(notificationId), type },
         type: finalSequelize.QueryTypes.UPDATE
       });
 
@@ -351,6 +388,12 @@ class NotificationService {
    */
   async delete(notificationId, userId, sequelizeConnection = null) {
     try {
+      // Vérifier si l'ID est un nombre (les notifications calculées ont des IDs string)
+      if (typeof notificationId === 'string' || isNaN(parseInt(notificationId))) {
+        // Les notifications calculées ne peuvent pas être supprimées
+        throw new Error('Les notifications calculées ne peuvent pas être supprimées');
+      }
+
       // Utiliser getConnection si disponible pour obtenir la connexion dynamique
       const getConnection = require('../config/database').getConnection;
       const finalSequelize = sequelizeConnection || (getConnection ? getConnection() : Notification.sequelize || require('../config/database'));
@@ -363,7 +406,7 @@ class NotificationService {
       const query = `DELETE FROM document WHERE id = :notificationId`;
 
       await finalSequelize.query(query, {
-        replacements: { notificationId },
+        replacements: { notificationId: parseInt(notificationId) },
         type: finalSequelize.QueryTypes.DELETE
       });
 
@@ -438,6 +481,58 @@ class NotificationService {
     } catch (error) {
       console.error('[NotificationService] Erreur création notification:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Récupérer les notifications de contrats expirants
+   * @param {object} sequelizeConnection - Connexion Sequelize (optionnelle)
+   */
+  async getExpiringContractsNotifications(sequelizeConnection = null) {
+    try {
+      const getConnection = require('../config/database').getConnection;
+      const finalSequelize = sequelizeConnection || (getConnection ? getConnection() : Notification.sequelize || require('../config/database'));
+      
+      const query = `
+        SELECT 
+          'le contrat du Client : ' + p.nom + ' ' + 'presque a être expiré il reste juste :' + CAST(DATEDIFF(DAY, GETDATE(), s.date_expire) AS VARCHAR) + 'jours vous voulez le renouveler creer a nouveau dans l interface contrat' AS message,
+          p.nom as client,
+          DATEDIFF(DAY, GETDATE(), s.date_expire) AS jours_restants,
+          s.part_id,
+          s.id as stock_id
+        FROM stock s
+        INNER JOIN partenaire p ON s.part_id = p.part_id
+        WHERE s.type = 50
+          AND s.facture_id IS NOT NULL 
+          AND DATEDIFF(DAY, GETDATE(), s.date_expire) < 10
+          AND DATEDIFF(DAY, GETDATE(), s.date_expire) >= 0
+        ORDER BY jours_restants ASC
+      `;
+
+      const results = await finalSequelize.query(query, {
+        replacements: {},
+        type: finalSequelize.QueryTypes.SELECT
+      });
+
+      // Transformer les résultats en format notification
+      return results.map(item => ({
+        id: `contract_expiring_${item.stock_id}`, // ID unique pour cette notification
+        description: item.message,
+        type: 3, // 3 = ERROR (rouge, très important)
+        etat: 0, // Non archivée
+        lire: null, // Non lue
+        date_alarme: new Date(),
+        emetteur: 'SYSTEM',
+        client: item.client,
+        jours_restants: item.jours_restants,
+        part_id: item.part_id,
+        stock_id: item.stock_id,
+        redirectRoute: '/Contrat', // Route de redirection
+        isCalculated: true // Flag pour identifier les notifications calculées
+      }));
+    } catch (error) {
+      console.error('[NotificationService] Erreur récupération notifications contrats expirants:', error);
+      return [];
     }
   }
 }

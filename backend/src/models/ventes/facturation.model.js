@@ -17,7 +17,7 @@ const getAllFactures = async (options = {}, sequelizeConnection = null) => {
     const safePageSize = parseInt(pageSize) || 25;
     const offset = (safePage - 1) * safePageSize;
 
-    const validColumns = ['facture_id', 'facture_num', 'facture_dat', 'nom', 'facture_ht', 'facture_tva'];
+    const validColumns = ['facture_id', 'facture_num', 'facture_dat', 'client', 'total_ht', 'total_tva', 'total_ttc', 'status'];
     const safeOrderBy = validColumns.includes(orderBy) ? orderBy : 'facture_dat';
     const safeOrderDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
@@ -27,7 +27,7 @@ const getAllFactures = async (options = {}, sequelizeConnection = null) => {
     if (search && search.trim()) {
       whereClause = `WHERE (
         facture_num LIKE :search 
-        OR nom LIKE :search
+        OR client LIKE :search
       )`;
       replacements.search = `%${search.trim()}%`;
     }
@@ -37,25 +37,28 @@ const getAllFactures = async (options = {}, sequelizeConnection = null) => {
       SELECT 
         facture_id,
         facture_num,
+        client,
         facture_dat,
-        nom,
-        part_id,
-        facture_ht,
-        facture_tva,
+        total_ht,
+        remise,
+        total_tva,
+        total_ttc,
+        status,
         total_count
       FROM (
         SELECT 
-          v.facture_id,
-          v.facture_num,
-          v.facture_dat,
-          v.nom,
-          fs.part_id,
-          v.facture_ht,
-          v.facture_tva,
+          facture_id,
+          facture_num,
+          client,
+          facture_dat,
+          total_ht,
+          remise,
+          total_tva,
+          total_ttc,
+          status,
           COUNT(*) OVER() AS total_count,
           ROW_NUMBER() OVER (ORDER BY ${safeOrderBy} ${safeOrderDirection}) AS RowNum
-        FROM v_facture v
-        LEFT JOIN facture_souche fs ON fs.facture_id = v.facture_id
+        FROM v_facture
         ${whereClause}
       ) AS PaginatedResults
       WHERE RowNum > ${offset} AND RowNum <= ${offset + safePageSize}

@@ -57,7 +57,6 @@ export class UsersComponent implements OnInit, AfterViewInit {
         this.loading = false;
       },
       error: (error: any) => {
-        console.error('Erreur lors du chargement des utilisateurs:', error);
         this.loading = false;
         Swal.fire({
           title: 'Erreur',

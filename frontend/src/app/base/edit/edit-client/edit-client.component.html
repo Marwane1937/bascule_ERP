@@ -105,6 +105,9 @@
             <i class="fas fa-lightbulb"></i>
           </span>
         </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="pill" href="#condition">Condition de paiement</a>
       </li> 
     </ul>
 
@@ -283,6 +286,53 @@
           </div>
         </form>
       </div>
+
+      <!-- Condition de paiement -->
+      <div class="tab-pane fade" id="condition">
+        <!-- Note d'information -->
+        <div class="alert alert-warning d-flex align-items-center mb-3" role="alert">
+          <i class="fas fa-info-circle me-2"></i>
+          <div>
+            <strong>Note importante :</strong> Chaque client ne peut avoir qu'une seule condition de paiement. L'ajout de multiples conditions est restreint par l'administration.
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-end mb-2">
+          <button class="btn btn-primary btn-round btn-sm me-2" (click)="onAddCondition()" title="Ajouter">
+            <i class="fas fa-plus"></i>
+          </button>
+          <button class="btn btn-danger btn-round btn-sm" (click)="onDeleteConditions()" title="Supprimer">
+            <i class="fas fa-trash-alt"></i>
+          </button>
+        </div>
+
+        <table id="conditionTable" class="display table table-bordered">
+          <thead>
+            <tr>
+              <th><input type="checkbox" /></th>
+              <th>Code</th>
+              <th>Condition</th>
+              <th>Jours</th>
+              <th>Mode</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let c of conditions, let i = index">
+              <td><input type="checkbox" class="row-checkbox" [(ngModel)]="c.checked" (change)="onCheckboxChange(c)" /></td>
+              <td>{{ c.code || '-' }}</td>
+              <td>{{ c.condition || '-' }}</td>
+              <td><span class="badge bg-success">{{ c.jours || '0' }}</span></td>
+              <td>{{ c.mode || '-' }}</td>
+              <td>
+                <button class="btn btn-warning btn-round" (click)="onEditCondition(c, i)" title="Modifier">
+                  <i class="fas fa-edit"></i>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>  
@@ -444,6 +494,31 @@
       </div>
       <div class="modal-footer bg-light">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ✅ MODALE POUR CONDITION DE PAIEMENT -->
+<div class="modal fade" id="conditionModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-info text-white">
+        <h5 class="modal-title">Ajouter Condition de Paiement</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body px-4" *ngIf="selectedCondition">
+        <div class="mb-3">
+          <label class="form-label">Condition de paiement :</label>
+          <select class="form-select" [(ngModel)]="selectedCondition.condition_id" name="condition_id">
+            <option disabled [value]="null">Choisir une Condition</option>
+            <option *ngFor="let cp of conditionsPaiement" [value]="cp.id">{{ cp.nom }}</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer bg-light">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button class="btn btn-success" (click)="onSaveCondition()">✅ Enregistrer</button>
       </div>
     </div>
   </div>

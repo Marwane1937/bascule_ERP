@@ -8,7 +8,6 @@ import Swal from 'sweetalert2';
 import { Subscription } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 
-
 @Component({
   selector: 'app-retour',
   templateUrl: './retour.component.html',
@@ -48,9 +47,40 @@ export class RetourComponent implements OnInit, AfterViewInit, OnDestroy {
   filterDateFromRetours: string = '';
   filterDateToRetours: string = '';
   filterClientRetours: string = '';
-
+  
+  // Affichage de la ligne de filtres
+  showFilterRow: boolean = false;
+  
   // Liste des clients pour le filtre
   clientsListRetours: string[] = [];
+
+  // Filtres par colonne (style Excel) pour les retours
+  columnFilters: any = {
+    numero: '',
+    date: '',
+    client: '',
+    total_ht: '',
+    total_tva: '',
+    total_ttc: ''
+  };
+
+  allRetours: any[] = []; // Stocker tous les retours pour le filtrage
+
+  // Gestion des colonnes (affichage/masquage, épinglage, etc.)
+  columnVisibility: any = {
+    numero: true,
+    date: true,
+    client: true,
+    total_ht: true,
+    total_tva: true,
+    total_ttc: true
+  };
+
+  pinnedColumns: string[] = [];
+  columnWidths: any = {};
+  showColumnMenu: boolean = false;
+  activeColumnMenu: string = '';
+  menuPosition: any = { x: 0, y: 0 };
 
   private clientSearchSub?: Subscription;
   private commercialSearchSub?: Subscription;
@@ -161,6 +191,16 @@ export class RetourComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
+    // Ajouter un listener pour fermer le menu contextuel quand on clique ailleurs
+    document.addEventListener('click', (event) => {
+      if (this.showColumnMenu) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.column-context-menu') && !target.closest('.column-menu-btn')) {
+          this.hideColumnContextMenu();
+        }
+      }
+    });
+
     const anyWindow = window as any;
     // @ts-ignore
     if (typeof ($) !== 'undefined') {
@@ -185,7 +225,6 @@ export class RetourComponent implements OnInit, AfterViewInit, OnDestroy {
         }
       },
       error: (err) => {
-        console.error('Erreur lors du chargement du numéro de retour:', err);
       }
     });
   }
@@ -213,23 +252,26 @@ export class RetourComponent implements OnInit, AfterViewInit, OnDestroy {
         const pagination = response.pagination || {};
 
         // Les données sont déjà filtrées et paginées par le serveur
-        this.retours = Array.isArray(result) ? result : [];
+        const retoursData = Array.isArray(result) ? result : [];
+        this.retours = retoursData;
+        this.allRetours = [...retoursData]; // Stocker une copie pour les filtres locaux
         this.totalRecordsRetours = pagination.total || 0;
         this.totalPagesRetours = pagination.totalPages || 1;
 
-        console.log(`[RetourComponent] Page ${page}/${this.totalPagesRetours}, ${this.retours.length} retours chargés sur ${this.totalRecordsRetours} total`);
-
         // Extraire la liste des clients uniques pour le filtre (depuis la page actuelle uniquement)
         this.extractClientsListRetours(this.retours);
+
+        // Appliquer les filtres de colonne s'ils existent
+        this.applyColumnFilters();
 
         this.loadingRetours = false;
         this.cdr.detectChanges();
       },
       error: (err) => {
-        console.error('[RetourComponent] ❌ Erreur lors du chargement des retours:', err);
         this.showError("❌ Une erreur s'est produite lors du chargement des retours.");
         this.loadingRetours = false;
         this.retours = [];
+        this.allRetours = [];
         this.cdr.detectChanges();
       }
     });
@@ -356,7 +398,6 @@ export class RetourComponent implements OnInit, AfterViewInit, OnDestroy {
           this.loadNextRetourNumero();
         },
         error: (err) => {
-          console.error('Erreur création retour:', err);
           this.showError(`❌ Une erreur s'est produite lors de la création du retour: ${err.error?.message || err.message || 'Erreur inconnue'}`);
         }
       });
@@ -398,7 +439,6 @@ export class RetourComponent implements OnInit, AfterViewInit, OnDestroy {
             });
           },
           error: (err: any) => {
-            console.error('Erreur de suppression :', err);
             Swal.fire({
               icon: 'error',
               title: 'Erreur',
@@ -640,7 +680,6 @@ export class RetourComponent implements OnInit, AfterViewInit, OnDestroy {
       },
       error: (err: any) => {
         Swal.close();
-        console.error('Erreur génération PDF retour :', err);
         Swal.fire({
           icon: 'error',
           title: 'Erreur',
@@ -648,6 +687,144 @@ export class RetourComponent implements OnInit, AfterViewInit, OnDestroy {
         });
       }
     });
+  }
+
+  // ===== FILTRES PAR COLONNE (STYLE EXCEL) =====
+  onColumnFilterChange(column: string, value: string): void {
+    this.columnFilters[column] = value;
+    this.applyColumnFilters();
+  }
+
+  applyColumnFilters(): void {
+    this.retours = this.allRetours.filter(item => {
+      return Object.keys(this.columnFilters).every(key => {
+        const filterValue = this.columnFilters[key];
+        if (!filterValue) return true;
+        
+        const itemValue = item[key];
+        if (itemValue === null || itemValue === undefined) return false;
+        
+        return itemValue.toString().toLowerCase().includes(filterValue.toLowerCase());
+      });
+    });
+    
+    this.totalRecordsRetours = this.retours.length;
+    this.cdr.detectChanges();
+  }
+
+  clearColumnFilters(): void {
+    this.columnFilters = {
+      numero: '',
+      date: '',
+      client: '',
+      total_ht: '',
+      total_tva: '',
+      total_ttc: ''
+    };
+    this.applyColumnFilters();
+  }
+
+  // ===== GESTION DU MENU CONTEXTUEL DES COLONNES =====
+  showColumnContextMenu(event: MouseEvent, column: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.activeColumnMenu = column;
+    this.menuPosition = {
+      x: event.clientX,
+      y: event.clientY
+    };
+    this.showColumnMenu = true;
+    this.cdr.detectChanges();
+  }
+
+  hideColumnContextMenu(): void {
+    this.showColumnMenu = false;
+    this.activeColumnMenu = '';
+    this.cdr.detectChanges();
+  }
+
+  toggleColumnVisibility(column: string): void {
+    this.columnVisibility[column] = !this.columnVisibility[column];
+    this.hideColumnContextMenu();
+  }
+
+  togglePinColumn(column: string): void {
+    const index = this.pinnedColumns.indexOf(column);
+    if (index > -1) {
+      this.pinnedColumns.splice(index, 1);
+    } else {
+      this.pinnedColumns.push(column);
+    }
+    this.hideColumnContextMenu();
+  }
+
+  isColumnPinned(column: string): boolean {
+    return this.pinnedColumns.includes(column);
+  }
+
+  autoSizeColumn(column: string): void {
+    this.columnWidths[column] = 'auto';
+    this.hideColumnContextMenu();
+  }
+
+  autoSizeAllColumns(): void {
+    Object.keys(this.columnVisibility).forEach(column => {
+      this.columnWidths[column] = 'auto';
+    });
+    this.hideColumnContextMenu();
+  }
+
+  resetColumns(): void {
+    this.columnVisibility = {
+      numero: true,
+      date: true,
+      client: true,
+      total_ht: true,
+      total_tva: true,
+      total_ttc: true
+    };
+    this.pinnedColumns = [];
+    this.columnWidths = {};
+    this.hideColumnContextMenu();
+  }
+
+  getColumnIndex(column: string): number {
+    const columns = Object.keys(this.columnVisibility);
+    return columns.indexOf(column);
+  }
+
+  getColumnDisplayName(column: string): string {
+    const names: any = {
+      numero: 'Numéro',
+      date: 'Date',
+      client: 'Client',
+      total_ht: 'Total HT',
+      total_tva: 'Total TVA',
+      total_ttc: 'Total TTC'
+    };
+    return names[column] || column;
+  }
+
+  getAllColumns(): string[] {
+    return Object.keys(this.columnVisibility);
+  }
+
+  showAllColumns(): void {
+    Object.keys(this.columnVisibility).forEach(key => {
+      this.columnVisibility[key] = true;
+    });
+    this.hideColumnContextMenu();
+  }
+
+  // Helper pour compter les colonnes visibles
+  getVisibleColumnsCount(): number {
+    return Object.keys(this.columnVisibility).filter(key => this.columnVisibility[key]).length;
+  }
+
+  // Helper pour afficher le menu contextuel avec stopPropagation
+  openColumnMenu(event: MouseEvent, column: string): void {
+    event.stopPropagation();
+    this.showColumnContextMenu(event, column);
   }
 
   ngOnDestroy(): void {

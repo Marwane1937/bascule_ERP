@@ -1,9 +1,10 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
 import { AuthService } from './service/auth.service';
 import { PermissionsService } from './service/permissions.service';
 import { UserPermissionsService, MenuCategory } from './service/user-permissions.service';
 import { CaisseModeService } from './service/caisse-mode.service';
+import { BaseService } from './service/base.service';
 import { filter } from 'rxjs/operators';
 
 @Component({
@@ -11,11 +12,12 @@ import { filter } from 'rxjs/operators';
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, OnDestroy {
   title = 'frontend';
   sidebarHidden = false;
   menuCategories: MenuCategory[] = [];
   filteredMenuCategories: MenuCategory[] = [];
+  logoUrl: string = './assets/img/LOGO white.png'; // Logo par défaut
   
   constructor(
     public authService: AuthService,
@@ -23,6 +25,7 @@ export class AppComponent implements OnInit {
     private router: Router,
     private permissionsService: PermissionsService,
     private userPermissionsService: UserPermissionsService,
+    private baseService: BaseService,
     private cdr: ChangeDetectorRef
   ) {}
   
@@ -33,6 +36,33 @@ export class AppComponent implements OnInit {
      * Sinon, après login (navigation vers /Dashbord), ngOnInit() du root ne se relance pas
      * et le menu ne se charge qu'après refresh.
      */
+
+    // Charger le logo depuis pdf-config.json si l'utilisateur est connecté
+    if (this.authService.isAuthenticated()) {
+      this.loadLogo();
+    }
+
+    // Écouter les changements de base de données via localStorage
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'currentDatabaseName' && this.authService.isAuthenticated()) {
+        //console.log('[AppComponent] Base de données changée (autre onglet), rechargement du logo...');
+        this.loadLogo();
+        this.cdr.detectChanges();
+      }
+    });
+
+    // Écouter aussi les changements dans la même fenêtre (pour les cas où storage event ne se déclenche pas)
+    const originalSetItem = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = (key: string, value: string) => {
+      originalSetItem(key, value);
+      if (key === 'currentDatabaseName' && this.authService.isAuthenticated()) {
+        console.log('[AppComponent] Base de données changée (même fenêtre), rechargement du logo...');
+        setTimeout(() => {
+          this.loadLogo();
+          this.cdr.detectChanges();
+        }, 100);
+      }
+    };
 
     // Écouter les changements de permissions (après login, elles arrivent via AuthService.login)
     this.authService.userPermissions$.subscribe((permissions) => {
@@ -45,6 +75,8 @@ export class AppComponent implements OnInit {
           // Sinon, charger les catégories maintenant
           this.loadMenuCategories();
         }
+        // Recharger le logo au cas où la base de données a changé
+        this.loadLogo();
       }
     });
 
@@ -102,7 +134,6 @@ export class AppComponent implements OnInit {
         }
       },
       error: (error) => {
-        console.error('❌ [AppComponent] Erreur chargement menu categories:', error);
       }
     });
   }
@@ -203,5 +234,44 @@ export class AppComponent implements OnInit {
 
   toggleCaisseBlackMode(): void {
     this.caisseModeService.toggleMode();
+  }
+
+  ngOnDestroy(): void {
+    // Libérer le blob URL du logo lors de la destruction du composant
+    if (this.logoUrl && this.logoUrl.startsWith('blob:')) {
+      try {
+        URL.revokeObjectURL(this.logoUrl);
+      } catch (e) {
+        // Ignorer les erreurs de révocation
+      }
+    }
+  }
+
+  /**
+   * Charge le logo depuis pdf-config.json
+   */
+  loadLogo(): void {
+    // Libérer l'ancien blob URL s'il existe
+    if (this.logoUrl && this.logoUrl.startsWith('blob:')) {
+      try {
+        URL.revokeObjectURL(this.logoUrl);
+      } catch (e) {
+        // Ignorer les erreurs de révocation
+      }
+    }
+
+    this.baseService.getLogo().subscribe({
+      next: (blob: Blob) => {
+        // Créer un blob URL à partir du blob
+        const blobUrl = URL.createObjectURL(blob);
+        this.logoUrl = blobUrl;
+      //.log('[AppComponent] ✅ Logo chargé depuis pdf-config.json');
+      },
+      error: (error) => {
+        console.warn('[AppComponent] ⚠️ Erreur chargement logo, utilisation du logo par défaut:', error);
+        // En cas d'erreur, utiliser le logo par défaut
+        this.logoUrl = './assets/img/LOGO white.png';
+      }
+    });
   }
 }

@@ -94,13 +94,10 @@ export class AuthService {
             const permissions = JSON.parse(permissionsStr);
             this.userPermissionsSubject.next(permissions);
           } catch (error) {
-            console.error('❌ [AuthService] Erreur parsing permissions:', error);
           }
         } else {
-          console.warn('⚠️ [AuthService] Aucune permission trouvée dans localStorage');
         }
       } catch (error) {
-        console.error('Erreur parsing données stockées:', error);
         this.clearAuth();
       }
     }
@@ -168,11 +165,6 @@ export class AuthService {
           return response;
         }),
         catchError(error => {
-          console.error('[AuthService] ❌ Erreur de connexion:', error);
-          console.error('[AuthService] Status:', error.status);
-          console.error('[AuthService] StatusText:', error.statusText);
-          console.error('[AuthService] Error body:', error.error);
-          console.error('[AuthService] ========================================');
           return throwError(() => error);
         })
       );
@@ -192,14 +184,75 @@ export class AuthService {
     // IMPORTANT: éviter que currentSociete (souvent base mère) écrase currentDatabaseName dans l'interceptor
     localStorage.removeItem('currentSociete');
     localStorage.removeItem('currentSocieteId');
-    // Nettoyer aussi les informations de base de données
-    localStorage.removeItem('currentDatabaseName');
-    localStorage.removeItem('currentDatabaseId');
-    localStorage.removeItem('currentDatabaseLabel');
+    // IMPORTANT: NE PAS supprimer les informations de base de données lors du logout
+    // car elles sont nécessaires pour restaurer la sélection après reconnexion
+    // Les informations de base de données sont gérées par le switch de base de données
+    // localStorage.removeItem('currentDatabaseName');
+    // localStorage.removeItem('currentDatabaseId');
+    // localStorage.removeItem('currentDatabaseLabel');
     this.currentUserSubject.next(null);
     this.documentSocieteSubject.next(null);
     this.currentSocieteSubject.next(null);
     this.userPermissionsSubject.next([]);
+  }
+
+  // Décoder le token JWT
+  private decodeToken(token: string): any {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map((c) => {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+      return JSON.parse(jsonPayload);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  // Vérifier si le token est expiré
+  isTokenExpired(): boolean {
+    const token = this.getToken();
+    if (!token) {
+      return true;
+    }
+
+    try {
+      const decoded = this.decodeToken(token);
+      if (!decoded || !decoded.exp) {
+        return true;
+      }
+
+      // exp est en secondes, Date.now() est en millisecondes
+      const expirationTime = decoded.exp * 1000;
+      const currentTime = Date.now();
+      
+      // Vérifier si le token expire dans les 5 prochaines minutes (marge de sécurité)
+      return currentTime >= expirationTime - (5 * 60 * 1000);
+    } catch (error) {
+      return true;
+    }
+  }
+
+  // Obtenir le temps restant avant expiration (en millisecondes)
+  getTokenExpirationTime(): number | null {
+    const token = this.getToken();
+    if (!token) {
+      return null;
+    }
+
+    try {
+      const decoded = this.decodeToken(token);
+      if (!decoded || !decoded.exp) {
+        return null;
+      }
+
+      const expirationTime = decoded.exp * 1000;
+      const currentTime = Date.now();
+      return Math.max(0, expirationTime - currentTime);
+    } catch (error) {
+      return null;
+    }
   }
 
   // Vérifier si l'utilisateur est connecté
@@ -229,7 +282,6 @@ export class AuthService {
       .pipe(
         map(response => response.data),
         catchError(error => {
-          console.error('Erreur récupération utilisateur:', error);
           return throwError(() => error);
         })
       );
@@ -241,7 +293,6 @@ export class AuthService {
       .pipe(
         map(response => response.data),
         catchError(error => {
-          console.error('Erreur récupération documents société:', error);
           return throwError(() => error);
         })
       );
@@ -257,7 +308,6 @@ export class AuthService {
           return response.data;
         }),
         catchError(error => {
-          console.error('Erreur mise à jour documents société:', error);
           return throwError(() => error);
         })
       );
@@ -269,7 +319,6 @@ export class AuthService {
       .pipe(
         map(response => response.data),
         catchError(error => {
-          console.error('Erreur récupération sociétés:', error);
           return throwError(() => error);
         })
       );
@@ -283,9 +332,6 @@ export class AuthService {
           return response.data;
         }),
         catchError(error => {
-          console.error('[AuthService] ❌ Erreur récupération bases de données:', error);
-          console.error('[AuthService] Status:', error.status);
-          console.error('[AuthService] Error body:', error.error);
           return throwError(() => error);
         })
       );
@@ -302,7 +348,6 @@ export class AuthService {
           return response;
         }),
         catchError(error => {
-          console.error('❌ Erreur changement de base de données:', error);
           return throwError(() => error);
         })
       );
@@ -316,7 +361,6 @@ export class AuthService {
           return response.data || [];
         }),
         catchError(error => {
-          console.error('[AuthService] ❌ Erreur récupération bases depuis table db:', error);
           return throwError(() => error);
         })
       );
@@ -332,7 +376,6 @@ export class AuthService {
           return response;
         }),
         catchError(error => {
-          console.error('❌ Erreur changement de base de données:', error);
           return throwError(() => error);
         })
       );
@@ -422,7 +465,6 @@ export class AuthService {
           return [];
         }),
         catchError(error => {
-          console.error('Erreur rechargement permissions:', error);
           return of([]);
         })
       );

@@ -46,7 +46,6 @@ export class UnifiedAuthService {
         const user = JSON.parse(userStr);
         this.currentUserSubject.next(user);
       } catch (error) {
-        console.error('Erreur parsing données stockées:', error);
         this.clearAuth();
       }
     }
@@ -67,7 +66,6 @@ export class UnifiedAuthService {
           return response;
         }),
         catchError(error => {
-          console.error('Erreur de connexion:', error);
           return throwError(() => error);
         })
       );
@@ -108,7 +106,6 @@ export class UnifiedAuthService {
       .pipe(
         map(response => response.data),
         catchError(error => {
-          console.error('Erreur récupération utilisateur:', error);
           return throwError(() => error);
         })
       );
@@ -120,7 +117,6 @@ export class UnifiedAuthService {
       .pipe(
         map(response => response.data.databases),
         catchError(error => {
-          console.error('Erreur récupération bases:', error);
           return throwError(() => error);
         })
       );
@@ -136,7 +132,6 @@ export class UnifiedAuthService {
           return response;
         }),
         catchError(error => {
-          console.error('❌ Erreur changement de base de données:', error);
           return throwError(() => error);
         })
       );
@@ -158,7 +153,6 @@ export class UnifiedAuthService {
       .pipe(
         map(response => response.data),
         catchError(error => {
-          console.error('Erreur statut connexion:', error);
           return throwError(() => error);
         })
       );

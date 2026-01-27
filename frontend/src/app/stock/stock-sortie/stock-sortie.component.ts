@@ -72,7 +72,6 @@ export class StockSortieComponent implements OnInit {
         this.filteredClients = [...this.clients];
       },
       error: (error) => {
-        console.error('Erreur chargement clients:', error);
       }
     });
   }
@@ -106,7 +105,6 @@ export class StockSortieComponent implements OnInit {
         }
       },
       error: (error) => {
-        console.error('Erreur chargement numéro:', error);
       }
     });
   }
@@ -197,7 +195,6 @@ export class StockSortieComponent implements OnInit {
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement sorties de stock:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement des sorties de stock', 'error');
         this.loading = false;
       },
@@ -269,7 +266,6 @@ export class StockSortieComponent implements OnInit {
                 this.detailsLoaded[achat.document_id] = true;
               },
               error: (error) => {
-                console.error('Erreur chargement détails:', error);
                 Swal.fire('Erreur', 'Erreur lors du chargement des détails', 'error');
                 this.expandedRows[index] = false;
                 this.loadingDetails[achat.document_id] = false;
@@ -278,7 +274,6 @@ export class StockSortieComponent implements OnInit {
       }
     }
   }
-
 
   getAchatDetails(achatId: number): any[] {
     return this.achatDetails[achatId] || [];
@@ -339,7 +334,6 @@ export class StockSortieComponent implements OnInit {
             this.getSortiesStock();
           },
           error: (error) => {
-            console.error('Erreur création sortie stock:', error);
             Swal.fire('Erreur', error.error?.message || 'Erreur lors de la création de la sortie de stock', 'error');
           }
         });

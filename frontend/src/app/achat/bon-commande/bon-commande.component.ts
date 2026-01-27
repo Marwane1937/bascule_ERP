@@ -46,6 +46,14 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
   // Numéro de bon de commande
   nextBonCommandeNumero: string = 'BCF25-0001';
 
+  // Variables pour la transformation de demande d'achat
+  demandesAchatNonTransformees: any[] = [];
+  selectedDemandeAchat: any = null;
+  demandeAchatDetails: any = null;
+  lignesAvecPrix: any[] = [];
+  loadingDemandesAchat: boolean = false;
+  transforming: boolean = false;
+
   constructor(
     private achatsService: AchatsService, 
     private router: Router,
@@ -59,6 +67,7 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
     this.getBonCommandes();
     this.AllFournisseurs();
     this.loadNextBonCommandeNumero();
+    this.loadDemandesAchatNonTransformees();
 
     // Abonnements sur les changements de texte
     this.BonCommandeForm.get('fournisseurSearch')?.valueChanges.subscribe(value => {
@@ -72,7 +81,6 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
         this.nextBonCommandeNumero = response?.numero || 'BCF25-0001';
       },
       error: (error) => {
-        console.error('Erreur lors du chargement du numéro de bon de commande:', error);
         // Fallback: utiliser la méthode locale
         this.nextBonCommandeNumero = this.getNextLigne();
       }
@@ -151,7 +159,6 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
         this.cdr.detectChanges();
       },
       error: (err) => {
-        console.error('[BonCommandeComponent] ❌ Erreur lors du chargement des bons de commande:', err);
         this.showError("❌ Une erreur s'est produite lors du chargement des bons de commande.");
         this.loading = false;
       }
@@ -245,7 +252,6 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
         this.filteredFournisseurs = [...this.fournisseurs];
       },
       error: (error) => {
-        console.error('Erreur lors du chargement des fournisseurs:', error);
         this.fournisseurs = [];
         this.filteredFournisseurs = [];
       }
@@ -302,7 +308,6 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
           this.closeModal();
         },
         error: (error) => {
-          console.error('Erreur lors de la création:', error);
           Swal.fire('Erreur', 'Erreur lors de la création du bon de commande', 'error');
         }
       });
@@ -316,8 +321,6 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
   }
 
   deleteBonCommande(id: number): void {
-    console.log('🗑️ Début de deleteBonCommande()');
-    console.log('📋 ID du bon de commande à supprimer:', id);
 
     Swal.fire({
       title: 'Êtes-vous sûr?',
@@ -328,33 +331,23 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
       cancelButtonColor: '#d33',
       confirmButtonText: 'Oui, supprimer!'
     }).then((result) => {
-      console.log('🔍 Résultat de la confirmation:', result);
       if (result.isConfirmed) {
-        console.log('✅ Suppression confirmée, appel du service deleteBonCommande avec id:', id);
 
         this.achatsService.deleteBonCommande(id).subscribe({
           next: (response) => {
-            console.log('✅ Suppression réussie, réponse du serveur:', response);
             Swal.fire('Supprimé!', 'Le bon de commande a été supprimé.', 'success');
             this.getBonCommandes();
           },
           error: (error) => {
-            console.error('❌ Erreur lors de la suppression:', error);
-            console.error('❌ Détails de l\'erreur:', error.error);
-            console.error('❌ Statut HTTP:', error.status);
-            console.error('❌ Message d\'erreur:', error.message);
             Swal.fire('Erreur', 'Erreur lors de la suppression', 'error');
           }
         });
       } else {
-        console.log('❌ Suppression annulée par l\'utilisateur');
       }
     });
   }
 
   telechargerPDF(id: number): void {
-    console.log('🚀 Début de telechargerPDF()');
-    console.log('📋 ID du bon de commande:', id);
 
     Swal.fire({
       title: 'Génération du PDF...',
@@ -363,31 +356,22 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
       allowOutsideClick: false
     });
 
-    console.log('📡 Appel du service telechargerPDF avec id:', id);
     this.achatsService.telechargerPDF(id).subscribe({
       next: (blob: Blob) => {
-        console.log('✅ PDF généré avec succès, taille du blob:', blob.size, 'bytes');
-        console.log('📎 Type du blob:', blob.type);
 
         Swal.close();
 
         // Créer un URL pour le blob et l'ouvrir dans un nouvel onglet
         const url = window.URL.createObjectURL(blob);
-        console.log('🔗 URL créée pour le blob:', url);
 
         window.open(url, '_blank');
 
         // Libérer l'URL après un délai
         setTimeout(() => {
           window.URL.revokeObjectURL(url);
-          console.log('🧹 URL du blob libérée');
         }, 10000);
       },
       error: (err) => {
-        console.error('❌ Erreur lors du téléchargement du PDF:', err);
-        console.error('❌ Détails de l\'erreur:', err.error);
-        console.error('❌ Statut HTTP:', err.status);
-        console.error('❌ Message d\'erreur:', err.message);
 
         Swal.fire({
           icon: 'error',
@@ -448,6 +432,129 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
     }
 
     return pages;
+  }
+
+  // Charger les demandes d'achat non transformées
+  loadDemandesAchatNonTransformees(): void {
+    this.loadingDemandesAchat = true;
+    this.achatsService.getDemandesAchatNonTransformees().subscribe({
+      next: (response: any) => {
+        this.demandesAchatNonTransformees = Array.isArray(response) ? response : [];
+        this.loadingDemandesAchat = false;
+      },
+      error: (error) => {
+        console.error('Erreur lors du chargement des demandes d\'achat:', error);
+        this.demandesAchatNonTransformees = [];
+        this.loadingDemandesAchat = false;
+      }
+    });
+  }
+
+  // Sélectionner une demande d'achat
+  selectDemandeAchat(demandeAchat: any): void {
+    this.selectedDemandeAchat = demandeAchat;
+    this.loadingDemandesAchat = true;
+    
+    // Charger les détails de la demande d'achat
+    this.achatsService.getDemandeAchatById(demandeAchat.document_id).subscribe({
+      next: (details: any) => {
+        this.demandeAchatDetails = details;
+        // Initialiser les lignes avec les prix à 0 et toutes les informations nécessaires
+        this.lignesAvecPrix = (details.details || []).map((detail: any) => ({
+          id: detail.id,
+          detail_id: detail.id,
+          article_id: detail.article_id,
+          article_cod: detail.article_cod,
+          designation: detail.designation || detail.description || detail.article_nom || '',
+          quantite: detail.quantite || detail.qte || 0,
+          qte: detail.quantite || detail.qte || 0,
+          prix: detail.prix || 0,
+          remise: detail.remise || 0,
+          taux_tva: detail.taux_tva || 0,
+          supprime: false
+        }));
+        this.loadingDemandesAchat = false;
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('Erreur lors du chargement des détails:', error);
+        Swal.fire('Erreur', 'Impossible de charger les détails de la demande d\'achat', 'error');
+        this.loadingDemandesAchat = false;
+      }
+    });
+  }
+
+  // Basculer l'état de suppression d'une ligne
+  toggleSupprimerLigne(index: number): void {
+    if (this.lignesAvecPrix[index]) {
+      this.lignesAvecPrix[index].supprime = !this.lignesAvecPrix[index].supprime;
+    }
+  }
+
+  // Annuler la sélection
+  cancelSelection(): void {
+    this.selectedDemandeAchat = null;
+    this.demandeAchatDetails = null;
+    this.lignesAvecPrix = [];
+  }
+
+  // Transformer la demande d'achat en bon de commande
+  transformerDemandeAchat(): void {
+    if (!this.selectedDemandeAchat || !this.demandeAchatDetails) {
+      Swal.fire('Erreur', 'Veuillez sélectionner une demande d\'achat', 'error');
+      return;
+    }
+
+    // Filtrer les lignes non supprimées
+    const lignesActives = this.lignesAvecPrix.filter(l => !l.supprime);
+    
+    if (lignesActives.length === 0) {
+      Swal.fire('Erreur', 'Veuillez sélectionner au moins une ligne à transférer', 'error');
+      return;
+    }
+
+    // Vérifier que tous les prix sont remplis pour les lignes actives
+    const prixManquants = lignesActives.filter(l => !l.prix || l.prix <= 0);
+    if (prixManquants.length > 0) {
+      Swal.fire('Erreur', 'Veuillez remplir tous les prix unitaires pour les lignes sélectionnées', 'error');
+      return;
+    }
+
+    this.transforming = true;
+    
+    // Envoyer uniquement les lignes actives (non supprimées)
+    this.achatsService.transformerDemandeAchatEnBonCommande(
+      this.selectedDemandeAchat.document_id,
+      lignesActives
+    ).subscribe({
+      next: (response: any) => {
+        Swal.fire('Succès', 'Demande d\'achat transformée en bon de commande avec succès', 'success');
+        this.transforming = false;
+        this.closeTransformModal();
+        this.getBonCommandes();
+        this.loadDemandesAchatNonTransformees();
+      },
+      error: (error) => {
+        console.error('Erreur lors de la transformation:', error);
+        Swal.fire('Erreur', error.error?.message || 'Erreur lors de la transformation', 'error');
+        this.transforming = false;
+      }
+    });
+  }
+
+  // Fermer la modal de transformation
+  closeTransformModal(): void {
+    const modalElement = document.getElementById('transformDemandeAchatModal');
+    if (modalElement) {
+      const anyWindow = window as any;
+      if (anyWindow.bootstrap) {
+        const modal = anyWindow.bootstrap.Modal.getInstance(modalElement);
+        if (modal) {
+          modal.hide();
+        }
+      }
+    }
+    this.cancelSelection();
   }
 }
 

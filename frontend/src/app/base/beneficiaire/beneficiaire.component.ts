@@ -54,7 +54,6 @@ export class BeneficiaireComponent implements OnInit {
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement bénéficiaires:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement des bénéficiaires', 'error');
         this.loading = false;
       }

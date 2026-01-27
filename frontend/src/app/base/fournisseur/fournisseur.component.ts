@@ -69,7 +69,6 @@ export class FournisseurComponent  implements OnInit {
         this.loading = false;
       },
       error: (err) => {
-        console.error('[FournisseurComponent] ❌ Erreur chargement fournisseurs:', err);
         this.fournisseurs = [];
         this.totalRecords = 0;
         this.totalPages = 1;
@@ -98,7 +97,6 @@ OnEdit(part_id : any){
         this.loadFournisseurs(1);
       },
       error: (err) => {
-        console.error('[FournisseurComponent] ❌ Erreur ajout fournisseur:', err);
         this.showError(`❌ Erreur lors de l'ajout du fournisseur: ${err.error?.message || err.message || 'Erreur inconnue'}`);
       }
     });
@@ -133,7 +131,6 @@ OnEdit(part_id : any){
           this.loadFournisseurs(this.currentPage);
         },
         error: (err) => {
-          console.error('[FournisseurComponent] ❌ Erreur suppression fournisseur:', err);
           this.showError(`❌ Erreur lors de la suppression: ${err.error?.message || err.message || 'Erreur inconnue'}`);
         }
       });

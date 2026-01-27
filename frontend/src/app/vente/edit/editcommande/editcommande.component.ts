@@ -75,8 +75,6 @@ export class EditcommandeComponent implements OnInit {
     transporteur: 'Inconnu'
   };
 
-
-
   conditions: string[] = [
     '30 jours',
     '60 jours',
@@ -96,7 +94,6 @@ export class EditcommandeComponent implements OnInit {
     'DHL', 'FedEx', 'GLS', 'Jumia Logistics', 'La Voie Express', 'Maroc Express',
     'Mondial Relay', 'TNT', 'UPS', 'Yamato Transport'
   ].sort();
-
 
   fraisPort = 0;
   sousTotal = 0;
@@ -317,10 +314,6 @@ export class EditcommandeComponent implements OnInit {
     });
   }
 
-
-
-
-
   toggleEdit(): void {
     const document_id = +this.route.snapshot.paramMap.get('document_id')!;
     this.editInfos = !this.editInfos;
@@ -336,14 +329,10 @@ export class EditcommandeComponent implements OnInit {
           };
         },
         error: (err) => {
-          console.error('❌ Erreur lors de la mise à jour', err);
         }
       });
     }
   }
-
-
-
 
   AllProduits(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -370,7 +359,6 @@ export class EditcommandeComponent implements OnInit {
       });
     });
   }
-
 
   configureQuillModules() {
     this.modules = {
@@ -465,7 +453,6 @@ export class EditcommandeComponent implements OnInit {
     this.calculerTotaux();
   }
 
-
   calculerTotaux() {
     this.sousTotal = this.produits.reduce((acc, p) => acc + p.pu * p.qte, 0);
 
@@ -490,7 +477,6 @@ export class EditcommandeComponent implements OnInit {
       const tva = taux * baseApresReduc;
       return acc + tva;
     }, 0);
-
 
     this.totalGeneral = baseApresReduc + this.taxeTotal + this.fraisPort;
   }
@@ -523,14 +509,10 @@ export class EditcommandeComponent implements OnInit {
     });
   }
 
-
-
-
   toggleReducMode() {
     this.reducMode = this.reducMode === 'pourcentage' ? 'montant' : 'pourcentage';
     this.produits.forEach((_, i) => this.recalculateTotal(i));
   }
-
 
   addProduit() {
     this.produits.push({
@@ -563,7 +545,6 @@ export class EditcommandeComponent implements OnInit {
         },
         error: (err: any) => {
           this.showNotification(err.message, true);
-          console.error('Erreur de suppression :', err);
         }
       });
 
@@ -574,7 +555,6 @@ export class EditcommandeComponent implements OnInit {
     // Recalculer les totaux
     this.calculerTotaux();
   }
-
 
   onProduitSelected(index: number) {
     const articleId = this.produits[index].article_id;
@@ -698,7 +678,6 @@ export class EditcommandeComponent implements OnInit {
   get clientSearchControl() {
     return this.CommandeForm.get('clientSearch') as FormControl;
   }
-
 
   AllCommerciaux() {
     this.baseService.getCommercial().subscribe({
@@ -842,8 +821,6 @@ export class EditcommandeComponent implements OnInit {
       });
       return;
     }
-    //console.log('le traitement exsite la !!!');
-    //console.log(lignesAModifier);
 
     // 🔄 Envoi des lignes modifiées ou nouvelles vers l'API
     this.venteSerivce.SaveLignesDetailDevis(lignesAModifier).subscribe({
@@ -858,7 +835,6 @@ export class EditcommandeComponent implements OnInit {
         this.produitsOriginal = JSON.parse(JSON.stringify(this.produits));
       },
       error: (err) => {
-        console.error("Erreur d'enregistrement :", err);
         Swal.fire({
           icon: 'error',
           title: 'Erreur',
@@ -873,7 +849,6 @@ export class EditcommandeComponent implements OnInit {
     const docId = +this.route.snapshot.paramMap.get('document_id')!;
     this.selectedInfo.document_id = docId.toString();
     if (!this.selectedInfo.document_id) {
-      console.error('document_id non défini');
       return;
     }
 
@@ -886,9 +861,6 @@ export class EditcommandeComponent implements OnInit {
       }
     });
   }
-
-
-
 
   showNotification(message: string, isError: boolean = false) {
     this.successMessage = message;
@@ -914,7 +886,6 @@ export class EditcommandeComponent implements OnInit {
       document_id: +this.route.snapshot.paramMap.get('document_id')!
     };
 
-
     // Affiche le spinner
     Swal.fire({
       title: 'Envoi en cours...',
@@ -937,7 +908,6 @@ export class EditcommandeComponent implements OnInit {
         bootstrap.Modal.getInstance(document.getElementById('emailModal')).hide();
       },
       error: err => {
-        console.error(err);
         Swal.fire({
           icon: 'error',
           title: 'Erreur',
@@ -993,7 +963,6 @@ export class EditcommandeComponent implements OnInit {
         if (document.body.contains(loadingElement)) {
           document.body.removeChild(loadingElement);
         }
-        console.error('Erreur WhatsApp PDF :', err);
         alert('❌ Erreur: ' + (err.error?.message || err.message));
       }
     });
@@ -1015,7 +984,6 @@ export class EditcommandeComponent implements OnInit {
         }
       },
       error: (err) => {
-        console.error('Erreur génération PDF :', err);
         Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors de la génération du PDF." });
       }
     });

@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Router } from '@angular/router';
 import { NotificationService, Notification, NotificationFilters } from '../service/notification.service';
 import { AuthService } from '../service/auth.service';
 import { PermissionsService } from '../service/permissions.service';
@@ -38,7 +39,8 @@ export class NotificationComponent implements OnInit, OnDestroy {
   constructor(
     private notificationService: NotificationService,
     private authService: AuthService,
-    private permissionsService: PermissionsService
+    private permissionsService: PermissionsService,
+    private router: Router
   ) {}
 
   ngOnInit(): void {
@@ -59,20 +61,40 @@ export class NotificationComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.notificationService.getNotifications(this.filters).subscribe({
       next: (response: any) => {
-        if (response.success) {
-          this.notifications = response.data || [];
-          this.applyFilters();
-        } else {
-          this.notifications = [];
-          this.filteredNotifications = [];
-        }
-        this.loading = false;
+        const normalNotifications = response.success ? (response.data || []) : [];
+        
+        // Charger les notifications calculées
+        this.notificationService.getCalculatedNotifications().subscribe({
+          next: (calcResponse: any) => {
+            const calculatedNotifications = calcResponse.success ? (calcResponse.data || []) : [];
+            
+            // Combiner les deux listes (notifications calculées en premier)
+            this.notifications = [...calculatedNotifications, ...normalNotifications];
+            this.applyFilters();
+            this.loading = false;
+          },
+          error: (err) => {
+            console.error('Erreur chargement notifications calculées:', err);
+            this.notifications = normalNotifications;
+            this.applyFilters();
+            this.loading = false;
+          }
+        });
       },
       error: (error) => {
-        console.error('Erreur chargement notifications:', error);
-        this.notifications = [];
-        this.filteredNotifications = [];
-        this.loading = false;
+        // En cas d'erreur, essayer quand même de charger les notifications calculées
+        this.notificationService.getCalculatedNotifications().subscribe({
+          next: (calcResponse: any) => {
+            this.notifications = calcResponse.success ? (calcResponse.data || []) : [];
+            this.applyFilters();
+            this.loading = false;
+          },
+          error: () => {
+            this.notifications = [];
+            this.filteredNotifications = [];
+            this.loading = false;
+          }
+        });
       }
     });
   }
@@ -118,15 +140,26 @@ export class NotificationComponent implements OnInit, OnDestroy {
     });
   }
 
-  // Vérifier si une notification est urgente (< 5 jours)
+  // Vérifier si une notification est urgente (< 10 jours)
   isUrgent(notification: Notification): boolean {
+    // Pour les notifications calculées, utiliser jours_restants
+    if (notification.isCalculated && notification.jours_restants !== undefined) {
+      return notification.jours_restants < 10 && notification.jours_restants >= 0;
+    }
+    
+    // Pour les notifications normales, utiliser date_alarme
     if (!notification.date_alarme) return false;
     const timeRemaining = this.getTimeRemaining(notification.date_alarme);
-    return !timeRemaining.isOverdue && timeRemaining.days < 5;
+    return !timeRemaining.isOverdue && timeRemaining.days < 10;
   }
 
   // Helper pour obtenir la classe de ligne selon l'état
   getRowClass(notification: Notification): string {
+    // Les notifications d'erreur (type 3) ont toujours la priorité
+    if (notification.type === 3) {
+      return 'table-danger';
+    }
+    
     const isUrgent = this.isUrgent(notification);
     const isOverdue = this.isOverdue(notification.date_alarme);
     
@@ -154,6 +187,11 @@ export class NotificationComponent implements OnInit, OnDestroy {
     
     if (notification.type === newType) return;
     
+    // Les notifications calculées ne peuvent pas avoir leur priorité changée
+    if (notification.isCalculated || typeof notification.id !== 'number') {
+      return;
+    }
+    
     // Mettre à jour localement
     notification.type = newType;
     
@@ -164,7 +202,6 @@ export class NotificationComponent implements OnInit, OnDestroy {
         this.applyFilters(); // Réappliquer le tri
       },
       error: (error) => {
-        console.error('Erreur mise à jour priorité:', error);
         Swal.fire('Erreur', 'Impossible de mettre à jour la priorité', 'error');
         // Recharger les notifications pour restaurer l'état
         this.loadNotifications();
@@ -178,21 +215,43 @@ export class NotificationComponent implements OnInit, OnDestroy {
   }
 
   viewNotification(notification: Notification): void {
+    // Si c'est une notification calculée avec redirection
+    if (notification.isCalculated && notification.redirectRoute) {
+      // Rediriger vers la route spécifiée
+      this.router.navigate([notification.redirectRoute]);
+      return;
+    }
+    
     this.selectedNotification = notification;
     // Marquer comme lue si elle est nouvelle (etat = 0)
-    if (notification.etat === 0 && this.hasPermission('notification_mark_read')) {
+    if (notification.etat === 0 && this.hasPermission('notification_mark_read') && typeof notification.id === 'number') {
       this.markAsRead(notification.id, false);
     }
   }
 
-  markAsReadAndClose(id: number): void {
-    this.markAsRead(id);
-    this.closeDetails();
+  onNotificationClick(notification: Notification): void {
+    // Si c'est une notification calculée avec redirection
+    if (notification.isCalculated && notification.redirectRoute) {
+      // Rediriger vers la route spécifiée
+      this.router.navigate([notification.redirectRoute]);
+    } else {
+      // Comportement normal : ouvrir les détails
+      this.viewNotification(notification);
+    }
   }
 
-  restoreAndClose(id: number): void {
-    this.restore(id);
-    this.closeDetails();
+  markAsReadAndClose(id: number | string): void {
+    if (typeof id === 'number') {
+      this.markAsRead(id);
+      this.closeDetails();
+    }
+  }
+
+  restoreAndClose(id: number | string): void {
+    if (typeof id === 'number') {
+      this.restore(id);
+      this.closeDetails();
+    }
   }
 
   closeDetails(): void {
@@ -203,9 +262,14 @@ export class NotificationComponent implements OnInit, OnDestroy {
     event.stopPropagation();
   }
 
-  markAsRead(id: number, showMessage: boolean = true): void {
+  markAsRead(id: number | string, showMessage: boolean = true): void {
     if (!this.hasPermission('notification_mark_read')) {
       Swal.fire('Erreur', 'Permission insuffisante', 'error');
+      return;
+    }
+
+    // Les notifications calculées ne peuvent pas être marquées comme lues
+    if (typeof id !== 'number') {
       return;
     }
 
@@ -229,8 +293,8 @@ export class NotificationComponent implements OnInit, OnDestroy {
     }
 
     const unreadIds = this.filteredNotifications
-      .filter(n => n.etat === 0)
-      .map(n => n.id);
+      .filter(n => n.etat === 0 && typeof n.id === 'number' && !n.isCalculated)
+      .map(n => n.id as number);
 
     if (unreadIds.length === 0) {
       Swal.fire('Info', 'Aucune notification non lue', 'info');
@@ -248,9 +312,14 @@ export class NotificationComponent implements OnInit, OnDestroy {
     });
   }
 
-  archive(id: number): void {
+  archive(id: number | string): void {
     if (!this.hasPermission('notification_archive')) {
       Swal.fire('Erreur', 'Permission insuffisante', 'error');
+      return;
+    }
+
+    // Les notifications calculées ne peuvent pas être archivées
+    if (typeof id !== 'number') {
       return;
     }
 
@@ -279,9 +348,14 @@ export class NotificationComponent implements OnInit, OnDestroy {
     });
   }
 
-  restore(id: number): void {
+  restore(id: number | string): void {
     if (!this.hasPermission('notification_restore')) {
       Swal.fire('Erreur', 'Permission insuffisante', 'error');
+      return;
+    }
+
+    // Les notifications calculées ne peuvent pas être restaurées
+    if (typeof id !== 'number') {
       return;
     }
 
@@ -296,9 +370,14 @@ export class NotificationComponent implements OnInit, OnDestroy {
     });
   }
 
-  delete(id: number): void {
+  delete(id: number | string): void {
     if (!this.hasPermission('notification_delete')) {
       Swal.fire('Erreur', 'Permission insuffisante', 'error');
+      return;
+    }
+
+    // Les notifications calculées ne peuvent pas être supprimées
+    if (typeof id !== 'number') {
       return;
     }
 
@@ -432,6 +511,11 @@ export class NotificationComponent implements OnInit, OnDestroy {
     return this.permissionsService.hasPermission(permission);
   }
 
+  // Helper pour vérifier si l'ID est un nombre (utilisable dans le template)
+  isNumericId(id: number | string): boolean {
+    return typeof id === 'number';
+  }
+
   get unreadCount(): number {
     return this.notifications.filter(n => n.etat === 0).length;
   }
@@ -536,7 +620,6 @@ export class NotificationComponent implements OnInit, OnDestroy {
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur création notification:', error);
         Swal.fire('Erreur', 'Impossible de créer la notification', 'error');
         this.loading = false;
       }

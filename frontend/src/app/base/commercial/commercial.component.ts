@@ -74,7 +74,6 @@ export class CommercialComponent implements OnInit {
         this.loading = false;
       },
       error: (err) => {
-        console.error('[CommercialComponent] ❌ Erreur chargement commerciaux:', err);
         this.commercials = [];
         this.totalRecords = 0;
         this.totalPages = 1;
@@ -95,7 +94,6 @@ export class CommercialComponent implements OnInit {
             this.loadCommercials(this.currentPage);
           },
           error: (err) => {
-            console.error(err);
             this.showError("❌ Une erreur s'est produite lors de la modification du commercial.");
           }
         });
@@ -108,7 +106,6 @@ export class CommercialComponent implements OnInit {
             this.loadCommercials(1);
           },
           error: (err) => {
-            console.error(err);
             this.showError("❌ Une erreur s'est produite lors de l'ajout du commercial.");
           }
         });
@@ -155,7 +152,6 @@ export class CommercialComponent implements OnInit {
             this.loadCommercials(this.currentPage);
           },
           error: (err) => {
-            console.error(err);
             this.showError("❌ Une erreur s'est produite lors de la suppression.");
           }
         });
@@ -192,7 +188,6 @@ export class CommercialComponent implements OnInit {
           this.loadCommercials(this.currentPage);
         },
         error: (err) => {
-          console.error('[CommercialComponent] ❌ Erreur archivage commercial:', err);
           this.showError(`❌ Erreur lors de l'archivage: ${err.error?.message || err.message || 'Erreur inconnue'}`);
         }
       });

@@ -75,8 +75,6 @@ export class EditlivraisonComponent implements OnInit {
     transporteur: 'Inconnu'
   };
 
-
-
   conditions: string[] = [
     '30 jours',
     '60 jours',
@@ -96,7 +94,6 @@ export class EditlivraisonComponent implements OnInit {
     'DHL', 'FedEx', 'GLS', 'Jumia Logistics', 'La Voie Express', 'Maroc Express',
     'Mondial Relay', 'TNT', 'UPS', 'Yamato Transport'
   ].sort();
-
 
   fraisPort = 0;
   sousTotal = 0;
@@ -337,7 +334,6 @@ export class EditlivraisonComponent implements OnInit {
       date_fin: [''],
       etat: [1],
 
-
       clientSearch: [''],   // le texte visible pour client
       commercialSearch: [''] // le texte visible pour commercial
     });
@@ -510,11 +506,6 @@ export class EditlivraisonComponent implements OnInit {
     });
   }
 
-
-
-
-
-
   toggleEdit(): void {
     const document_id = +this.route.snapshot.paramMap.get('document_id')!;
     this.editInfos = !this.editInfos;
@@ -535,9 +526,6 @@ export class EditlivraisonComponent implements OnInit {
       });
     }
   }
-
-
-
 
   AllProduits(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -564,7 +552,6 @@ export class EditlivraisonComponent implements OnInit {
       });
     });
   }
-
 
   configureQuillModules() {
     this.modules = {
@@ -659,7 +646,6 @@ export class EditlivraisonComponent implements OnInit {
     this.calculerTotaux();
   }
 
-
   calculerTotaux() {
     this.sousTotal = this.produits.reduce((acc, p) => acc + p.pu * p.qte, 0);
 
@@ -684,7 +670,6 @@ export class EditlivraisonComponent implements OnInit {
       const tva = taux * baseApresReduc;
       return acc + tva;
     }, 0);
-
 
     this.totalGeneral = baseApresReduc + this.taxeTotal + this.fraisPort;
   }
@@ -717,14 +702,10 @@ export class EditlivraisonComponent implements OnInit {
     });
   }
 
-
-
-
   toggleReducMode() {
     this.reducMode = this.reducMode === 'pourcentage' ? 'montant' : 'pourcentage';
     this.produits.forEach((_, i) => this.recalculateTotal(i));
   }
-
 
   addProduit() {
     this.produits.push({
@@ -767,7 +748,6 @@ export class EditlivraisonComponent implements OnInit {
     // Recalculer les totaux
     this.calculerTotaux();
   }
-
 
   onProduitSelected(index: number) {
     const articleId = this.produits[index].article_id;
@@ -913,7 +893,6 @@ export class EditlivraisonComponent implements OnInit {
   get clientSearchControl() {
     return this.LivraisonForm.get('clientSearch') as FormControl;
   }
-
 
   AllCommerciaux() {
     this.baseService.getCommercial().subscribe({
@@ -1122,9 +1101,6 @@ export class EditlivraisonComponent implements OnInit {
     });
   }
 
-
-
-
   showNotification(message: string, isError: boolean = false) {
     this.successMessage = message;
     this.isError = isError;
@@ -1148,7 +1124,6 @@ export class EditlivraisonComponent implements OnInit {
       ...this.emailForm.value,
       document_id: +this.route.snapshot.paramMap.get('document_id')!
     };
-
 
     // Affiche le spinner
     Swal.fire({

@@ -1,4 +1,5 @@
 const axios = require('axios');
+const FormData = require('form-data');
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN; // Assurez-vous de configurer cette variable d'environnement
 
@@ -13,17 +14,25 @@ async function sendPdfToTechnician(chatId, pdfBuffer, fileName) {
   try {
     const formData = new FormData();
     formData.append('chat_id', chatId);
-    formData.append('document', new Blob([pdfBuffer], { type: 'application/pdf' }), fileName);
+    formData.append('document', pdfBuffer, {
+      filename: fileName,
+      contentType: 'application/pdf'
+    });
 
     const response = await axios.post(telegramApiUrl, formData, {
       headers: {
         ...formData.getHeaders()
-      }
+      },
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity
     });
-    console.log('PDF envoyé à Telegram:', response.data);
+    console.log('[TelegramService] PDF envoyé à Telegram avec succès:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Erreur lors de l\'envoi du PDF à Telegram:', error.response ? error.response.data : error.message);
+    console.error('[TelegramService] Erreur lors de l\'envoi du PDF à Telegram:', error.response ? error.response.data : error.message);
+    if (error.response) {
+      console.error('[TelegramService] Détails de l\'erreur Telegram:', JSON.stringify(error.response.data, null, 2));
+    }
     throw new Error('Échec de l\'envoi du PDF à Telegram.');
   }
 }

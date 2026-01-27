@@ -30,7 +30,6 @@ export class AuthInterceptor implements HttpInterceptor {
       try {
         currentSociete = JSON.parse(currentSocieteStr);
       } catch (e) {
-        console.warn('⚠️ [AuthInterceptor] Erreur parsing currentSociete:', e);
       }
     }
     
@@ -53,7 +52,6 @@ export class AuthInterceptor implements HttpInterceptor {
     if (dbNameToUse) {
       headers['x-database-name'] = dbNameToUse;
     } else {
-      console.warn('⚠️ [AuthInterceptor] No database name found in localStorage');
     }
     
     if (Object.keys(headers).length > 0) {
@@ -84,7 +82,6 @@ export class AuthInterceptor implements HttpInterceptor {
         
         // Si erreur 403 (interdit), afficher un message
         if (error.status === 403) {
-          console.error('Accès interdit:', error);
         }
 
         return throwError(() => error);

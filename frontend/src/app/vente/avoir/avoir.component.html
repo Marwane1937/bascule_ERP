@@ -215,36 +215,49 @@
               <table class="table table-bordered table-striped table-hover" width="100%"
                 [style.opacity]="loadingAvoirs ? '0.5' : '1'">
                 <thead class="table-light">
+                  <!-- Bouton pour afficher/masquer les filtres -->
+                  <tr *ngIf="!showFilterRow" style="background-color: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                    <td [attr.colspan]="getVisibleColumnsCount() + 1" class="text-center py-2" style="padding: 8px;">
+                      <button 
+                        class="btn btn-sm btn-outline-primary" 
+                        (click)="showFilterRow = true"
+                        style="border-radius: 4px;">
+                        <i class="fas fa-filter me-1"></i>
+                        Afficher les filtres
+                        <i class="fas fa-chevron-down ms-1" style="font-size: 0.7rem;"></i>
+                      </button>
+                    </td>
+                  </tr>
                   <tr>
-                    <th (click)="sortAvoirs('facture_num')" class="sortable" style="cursor: pointer; width: 120px;">
+                    <th *ngIf="columnVisibility.facture_num" (click)="sortAvoirs('facture_num')" class="sortable" style="cursor: pointer; width: 120px;">
                       Numéro
                       <i class="fas ms-1"
                         [ngClass]="sortColumnAvoirs === 'facture_num' ? (sortDirectionAvoirs === 'ASC' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
                     </th>
-                    <th (click)="sortAvoirs('facture_dat')" class="sortable" style="cursor: pointer; width: 110px;">
+                    <th *ngIf="columnVisibility.facture_dat" (click)="sortAvoirs('facture_dat')" class="sortable" style="cursor: pointer; width: 110px;">
                       Date
                       <i class="fas ms-1"
                         [ngClass]="sortColumnAvoirs === 'facture_dat' ? (sortDirectionAvoirs === 'ASC' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
                     </th>
-                    <th (click)="sortAvoirs('nom')" class="sortable" style="cursor: pointer; min-width: 150px;">
+                    <th *ngIf="columnVisibility.nom" (click)="sortAvoirs('nom')" class="sortable" style="cursor: pointer; min-width: 150px;">
                       Client
                       <i class="fas ms-1"
                         [ngClass]="sortColumnAvoirs === 'nom' ? (sortDirectionAvoirs === 'ASC' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
                     </th>
-                    <th class="text-center" style="width: 120px;">Type</th>
-                    <th (click)="sortAvoirs('facture_ht')" class="sortable text-end"
+                    <th *ngIf="columnVisibility.type" class="text-center" style="width: 120px;">Type</th>
+                    <th *ngIf="columnVisibility.facture_ht" (click)="sortAvoirs('facture_ht')" class="sortable text-end"
                       style="cursor: pointer; width: 110px;">
                       Total HT
                       <i class="fas ms-1"
                         [ngClass]="sortColumnAvoirs === 'facture_ht' ? (sortDirectionAvoirs === 'ASC' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
                     </th>
-                    <th (click)="sortAvoirs('facture_tva')" class="sortable text-end"
+                    <th *ngIf="columnVisibility.facture_tva" (click)="sortAvoirs('facture_tva')" class="sortable text-end"
                       style="cursor: pointer; width: 110px;">
                       Total TVA
                       <i class="fas ms-1"
                         [ngClass]="sortColumnAvoirs === 'facture_tva' ? (sortDirectionAvoirs === 'ASC' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
                     </th>
-                    <th (click)="sortAvoirs('facture_ttc')" class="sortable text-end"
+                    <th *ngIf="columnVisibility.facture_ttc" (click)="sortAvoirs('facture_ttc')" class="sortable text-end"
                       style="cursor: pointer; width: 110px;">
                       Total TTC
                       <i class="fas ms-1"
@@ -252,18 +265,114 @@
                     </th>
                     <th style="width: 160px;" class="text-center">Actions</th>
                   </tr>
+                  <!-- Ligne des filtres (style Excel) -->
+                  <tr *ngIf="showFilterRow" class="filter-row" style="background-color: #f8f9fa; border-top: 2px solid #dee2e6;">
+                    <th *ngIf="columnVisibility.facture_num" style="padding: 4px; position: relative;">
+                      <div class="d-flex align-items-center">
+                        <input 
+                          type="text" 
+                          class="form-control form-control-sm filter-input" 
+                          placeholder="Rechercher..."
+                          [(ngModel)]="columnFilters.facture_num"
+                          (input)="onColumnFilterChange('facture_num', $any($event.target).value)"
+                          style="font-size: 0.85rem; padding-right: 24px;">
+                        <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
+                      </div>
+                    </th>
+                    <th *ngIf="columnVisibility.facture_dat" style="padding: 4px; position: relative;">
+                      <div class="d-flex align-items-center">
+                        <input 
+                          type="date" 
+                          class="form-control form-control-sm filter-input" 
+                          [(ngModel)]="columnFilters.facture_dat"
+                          (change)="onColumnFilterChange('facture_dat', $any($event.target).value)"
+                          style="font-size: 0.85rem; padding-right: 24px;">
+                        <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
+                      </div>
+                    </th>
+                    <th *ngIf="columnVisibility.nom" style="padding: 4px; position: relative;">
+                      <div class="d-flex align-items-center">
+                        <input 
+                          type="text" 
+                          class="form-control form-control-sm filter-input" 
+                          placeholder="Rechercher..."
+                          [(ngModel)]="columnFilters.nom"
+                          (input)="onColumnFilterChange('nom', $any($event.target).value)"
+                          style="font-size: 0.85rem; padding-right: 24px;">
+                        <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
+                      </div>
+                    </th>
+                    <th *ngIf="columnVisibility.type" style="padding: 4px; position: relative;">
+                      <div class="d-flex align-items-center">
+                        <input 
+                          type="text" 
+                          class="form-control form-control-sm filter-input" 
+                          placeholder="Rechercher..."
+                          [(ngModel)]="columnFilters.type"
+                          (input)="onColumnFilterChange('type', $any($event.target).value)"
+                          style="font-size: 0.85rem; padding-right: 24px;">
+                        <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
+                      </div>
+                    </th>
+                    <th *ngIf="columnVisibility.facture_ht" style="padding: 4px; position: relative;">
+                      <div class="d-flex align-items-center">
+                        <input 
+                          type="number" 
+                          class="form-control form-control-sm filter-input" 
+                          placeholder="Min..."
+                          [(ngModel)]="columnFilters.facture_ht"
+                          (input)="onColumnFilterChange('facture_ht', $any($event.target).value)"
+                          style="font-size: 0.85rem; padding-right: 24px;">
+                        <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
+                      </div>
+                    </th>
+                    <th *ngIf="columnVisibility.facture_tva" style="padding: 4px; position: relative;">
+                      <div class="d-flex align-items-center">
+                        <input 
+                          type="number" 
+                          class="form-control form-control-sm filter-input" 
+                          placeholder="Min..."
+                          [(ngModel)]="columnFilters.facture_tva"
+                          (input)="onColumnFilterChange('facture_tva', $any($event.target).value)"
+                          style="font-size: 0.85rem; padding-right: 24px;">
+                        <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
+                      </div>
+                    </th>
+                    <th *ngIf="columnVisibility.facture_ttc" style="padding: 4px; position: relative;">
+                      <div class="d-flex align-items-center">
+                        <input 
+                          type="number" 
+                          class="form-control form-control-sm filter-input" 
+                          placeholder="Min..."
+                          [(ngModel)]="columnFilters.facture_ttc"
+                          (input)="onColumnFilterChange('facture_ttc', $any($event.target).value)"
+                          style="font-size: 0.85rem; padding-right: 24px;">
+                        <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
+                      </div>
+                    </th>
+                    <th style="width: 160px;" class="text-center">
+                      <div class="d-flex align-items-center justify-content-center gap-2">
+                        <button class="btn btn-sm btn-outline-secondary" (click)="clearColumnFilters()" title="Réinitialiser les filtres">
+                          <i class="fas fa-times"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" (click)="showFilterRow = false" title="Masquer les filtres">
+                          <i class="fas fa-chevron-up"></i>
+                        </button>
+                      </div>
+                    </th>
+                  </tr>
                 </thead>
                 <tbody>
                   <tr *ngIf="!loadingAvoirs && avoirs.length === 0">
-                    <td colspan="8" class="text-center py-4">
+                    <td [attr.colspan]="getVisibleColumnsCount() + 1" class="text-center py-4">
                       <p class="text-muted mb-0">Aucun avoir trouvé</p>
                     </td>
                   </tr>
                   <tr *ngFor="let a of avoirs; let i = index">
-                    <td>{{ a.facture_num }}</td>
-                    <td>{{ a.facture_dat ? (a.facture_dat | date:'dd/MM/yyyy') : '-' }}</td>
-                    <td>{{ a.nom || '-' }}</td>
-                    <td class="text-center">
+                    <td *ngIf="columnVisibility.facture_num">{{ a.facture_num }}</td>
+                    <td *ngIf="columnVisibility.facture_dat">{{ a.facture_dat ? (a.facture_dat | date:'dd/MM/yyyy') : '-' }}</td>
+                    <td *ngIf="columnVisibility.nom">{{ a.nom || '-' }}</td>
+                    <td *ngIf="columnVisibility.type" class="text-center">
                       <span *ngIf="a.type_avoir === 'FINANCIER'" class="badge bg-primary">
                         <i class="fas fa-money-bill-wave me-1"></i> Financier
                       </span>
@@ -271,9 +380,9 @@
                         <i class="fas fa-box me-1"></i> Marchandise
                       </span>
                     </td>
-                    <td class="text-end">{{ a.facture_ht | number:'1.2-2' }} dh</td>
-                    <td class="text-end">{{ a.facture_tva | number:'1.2-2' }} dh</td>
-                    <td class="text-end fw-bold">{{ a.facture_ttc | number:'1.2-2' }} dh</td>
+                    <td *ngIf="columnVisibility.facture_ht" class="text-end">{{ a.facture_ht | number:'1.2-2' }} dh</td>
+                    <td *ngIf="columnVisibility.facture_tva" class="text-end">{{ a.facture_tva | number:'1.2-2' }} dh</td>
+                    <td *ngIf="columnVisibility.facture_ttc" class="text-end fw-bold">{{ a.facture_ttc | number:'1.2-2' }} dh</td>
                     <td class="text-center">
                       <button class="btn btn-sm btn-outline-primary me-1" (click)="onPrintAvoir(a)" title="Imprimer">
                         <i class="fas fa-print"></i>
@@ -333,4 +442,43 @@
 
   </div>
   <router-outlet></router-outlet>
+</div>
+
+<!-- Menu contextuel pour la gestion des colonnes -->
+<div *ngIf="showColumnMenu" class="menu-overlay" (click)="hideColumnContextMenu()"></div>
+<div *ngIf="showColumnMenu" 
+     class="column-context-menu" 
+     [style.left.px]="menuPosition.x" 
+     [style.top.px]="menuPosition.y">
+  <div class="menu-header">
+    <i class="fas fa-columns"></i>
+    <span>{{ getColumnDisplayName(activeColumnMenu) }}</span>
+  </div>
+  <div class="menu-divider"></div>
+  <div class="menu-item" (click)="togglePinColumn(activeColumnMenu)">
+    <i class="fas" [ngClass]="{'fa-thumbtack': !isColumnPinned(activeColumnMenu), 'fa-times': isColumnPinned(activeColumnMenu)}"></i>
+    <span>{{ isColumnPinned(activeColumnMenu) ? 'Désépingler' : 'Épingler' }}</span>
+  </div>
+  <div class="menu-item" (click)="autoSizeColumn(activeColumnMenu)">
+    <i class="fas fa-arrows-alt-h"></i>
+    <span>Ajuster automatiquement</span>
+  </div>
+  <div class="menu-divider"></div>
+  <div class="menu-item" (click)="toggleColumnVisibility(activeColumnMenu)">
+    <i class="fas" [ngClass]="{'fa-eye-slash': columnVisibility[activeColumnMenu], 'fa-eye': !columnVisibility[activeColumnMenu]}"></i>
+    <span>{{ columnVisibility[activeColumnMenu] ? 'Masquer' : 'Afficher' }}</span>
+  </div>
+  <div class="menu-divider"></div>
+  <div class="menu-item" (click)="autoSizeAllColumns()">
+    <i class="fas fa-expand-arrows-alt"></i>
+    <span>Ajuster toutes les colonnes</span>
+  </div>
+  <div class="menu-item" (click)="showAllColumns()">
+    <i class="fas fa-eye"></i>
+    <span>Afficher toutes les colonnes</span>
+  </div>
+  <div class="menu-item" (click)="resetColumns()">
+    <i class="fas fa-undo"></i>
+    <span>Réinitialiser les colonnes</span>
+  </div>
 </div>

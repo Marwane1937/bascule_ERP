@@ -24,5 +24,8 @@ router.post('/delete-lignes', bonCommandeController.deleteLignesParIds);
 // Route pour générer le PDF du bon de commande
 router.get('/pdf/:id', bonCommandeController.genererPDF);
 
+// Route pour transformer une demande d'achat en bon de commande
+router.post('/transformer-demande-achat', bonCommandeController.transformerDemandeAchatEnBonCommande);
+
 module.exports = router;
 

@@ -321,6 +321,12 @@ RemoveDevis(ids: any[]): Observable<any> {
     return this.http.post(url, { lettrages });
   }
 
+  // Télécharger le PDF d'un règlement
+  telechargerPDF(regle_id: number): Observable<Blob> {
+    const url = `${this.apiUrl}/reglements/${regle_id}/pdf`;
+    return this.http.get(url, { responseType: 'blob' });
+  }
+
   // ============ FACTURATIONS ============
   
   // Obtenir toutes les factures avec pagination

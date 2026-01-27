@@ -13,6 +13,7 @@ import Swal from 'sweetalert2';
 })
 export class DevisComponent implements OnInit, AfterViewInit {
   devis: any[] = [];
+  allDevis: any[] = []; // Stocker tous les devis pour le filtrage
   dataTable: any;
   loading: boolean = true;
   searchTerm: string = '';
@@ -33,8 +34,35 @@ export class DevisComponent implements OnInit, AfterViewInit {
   filterDateTo: string = '';
   filterClient: string = '';
   
+  // Affichage de la ligne de filtres
+  showFilterRow: boolean = false;
+  
   // Liste des clients pour le filtre
   clientsList: string[] = [];
+
+  // Filtres par colonne (style Excel)
+  columnFilters: any = {
+    numero: '',
+    date: '',
+    client: '',
+    commercial: '',
+    description: ''
+  };
+
+  // Gestion des colonnes (affichage/masquage, épinglage, etc.)
+  columnVisibility: any = {
+    numero: true,
+    date: true,
+    client: true,
+    commercial: true,
+    description: true
+  };
+
+  pinnedColumns: string[] = [];
+  columnWidths: any = {};
+  showColumnMenu: boolean = false;
+  activeColumnMenu: string = '';
+  menuPosition: any = { x: 0, y: 0 };
   
   clients: any[] = [];
   filteredClients: any[] = [];
@@ -58,7 +86,6 @@ export class DevisComponent implements OnInit, AfterViewInit {
     private cdr: ChangeDetectorRef
   ) {}
 
-
   ngOnInit(): void {
     this.initForm(); // Initialiser le formulaire en premier
     
@@ -78,7 +105,6 @@ export class DevisComponent implements OnInit, AfterViewInit {
       this.onCommercialSearchChange(value);
     });
   }
-
 
   initForm(): void {
     // Date d'aujourd'hui au format YYYY-MM-DD
@@ -106,6 +132,16 @@ export class DevisComponent implements OnInit, AfterViewInit {
   }
 
   ngAfterViewInit(): void {
+    // Ajouter un listener pour fermer le menu contextuel quand on clique ailleurs
+    document.addEventListener('click', (event) => {
+      if (this.showColumnMenu) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.column-context-menu') && !target.closest('.column-menu-btn')) {
+          this.hideColumnContextMenu();
+        }
+      }
+    });
+
     // Recharger le numéro de devis à chaque ouverture du modal
     // @ts-ignore - jQuery disponible globalement à l'exécution
     if (typeof ($) !== 'undefined') {
@@ -147,7 +183,6 @@ export class DevisComponent implements OnInit, AfterViewInit {
         }
       },
       error: (err) => {
-        console.error('Erreur lors du chargement du numéro de devis:', err);
         // Garder la valeur par défaut en cas d'erreur
       }
     });
@@ -199,14 +234,9 @@ export class DevisComponent implements OnInit, AfterViewInit {
       dateTo: this.filterDateTo || undefined
     };
     
-    console.log('[DevisComponent] 🔍 Requête devis avec options:', JSON.stringify(requestOptions, null, 2));
     
     this.ventesService.getDevis(requestOptions).subscribe({
       next: (response: any) => {
-        console.log('[DevisComponent] ✅ Réponse API complète:', JSON.stringify(response, null, 2));
-        console.log('[DevisComponent] response.success:', response.success);
-        console.log('[DevisComponent] response.data:', response.data);
-        console.log('[DevisComponent] response.pagination:', response.pagination);
         
         const result = response.data || [];
         const pagination = response.pagination || {};
@@ -214,38 +244,33 @@ export class DevisComponent implements OnInit, AfterViewInit {
         // Les données sont déjà filtrées et paginées par le serveur
         // IMPORTANT: Ne charger que les données de la page actuelle
         this.devis = Array.isArray(result) ? result : [];
+        this.allDevis = [...this.devis]; // Stocker une copie pour les filtres locaux
         this.totalRecords = pagination.total || 0;
         this.totalPages = pagination.totalPages || 1;
         
-        console.log(`[DevisComponent] 📊 Page ${page}/${this.totalPages}, ${this.devis.length} devis chargés sur ${this.totalRecords} total`);
-        console.log(`[DevisComponent] 🔄 Tri: ${this.sortColumn} ${this.sortDirection}`);
         
         if (this.devis.length > 0) {
-          console.log(`[DevisComponent] ✅ Premier devis:`, this.devis[0]);
         } else {
-          console.warn(`[DevisComponent] ⚠️ Aucun devis trouvé. Total: ${this.totalRecords}`);
           if (this.totalRecords === 0) {
-            console.warn(`[DevisComponent] ⚠️ Aucun devis dans la base de données avec type=1`);
           }
         }
         
         // Extraire la liste des clients uniques pour le filtre (depuis la page actuelle uniquement)
         this.extractClientsList(this.devis);
         
+        // Appliquer les filtres de colonne s'ils existent
+        this.applyColumnFilters();
+        
         this.loading = false;
         this.cdr.detectChanges();
       },
       error: (err) => {
-        console.error('[DevisComponent] ❌ Erreur complète lors du chargement des devis:', err);
-        console.error('[DevisComponent] ❌ Status:', err.status);
-        console.error('[DevisComponent] ❌ Message:', err.message);
-        console.error('[DevisComponent] ❌ Error:', err.error);
         if (err.error && err.error.message) {
-          console.error('[DevisComponent] ❌ Message serveur:', err.error.message);
         }
         this.showError(`❌ Erreur lors du chargement des devis: ${err.error?.message || err.message || 'Erreur inconnue'}`);
         this.loading = false;
         this.devis = [];
+        this.allDevis = [];
         this.totalRecords = 0;
         this.totalPages = 1;
         this.cdr.detectChanges();
@@ -264,15 +289,12 @@ export class DevisComponent implements OnInit, AfterViewInit {
   AllClients() {
     this.baseService.getClient().subscribe((response: any) => {
       this.clients = response?.data || (Array.isArray(response) ? response : []);
-      console.log('[DevisComponent] Clients chargés:', this.clients.length);
       if (this.clients.length > 0) {
-        console.log('[DevisComponent] Exemple client:', this.clients[0]);
       }
       // Ne pas initialiser filteredClients avec tous les clients, laisser vide au départ
       this.filteredClients = [];
       this.cdr.detectChanges();
     }, error => {
-      console.error('[DevisComponent] Erreur chargement clients:', error);
       this.clients = [];
       this.filteredClients = [];
       this.cdr.detectChanges();
@@ -296,7 +318,6 @@ export class DevisComponent implements OnInit, AfterViewInit {
 
     // Vérifier que les clients sont chargés
     if (!this.clients || this.clients.length === 0) {
-      console.warn('[DevisComponent] Aucun client chargé pour la recherche');
       this.filteredClients = [];
       this.cdr.detectChanges();
       return;
@@ -306,7 +327,6 @@ export class DevisComponent implements OnInit, AfterViewInit {
       client?.nom && client.nom.toLowerCase().includes(term)
     );
     
-    console.log('[DevisComponent] Recherche client:', term, 'Résultats:', this.filteredClients.length, 'Clients disponibles:', this.clients.length);
     this.cdr.detectChanges();
   }
 
@@ -319,22 +339,15 @@ export class DevisComponent implements OnInit, AfterViewInit {
   this.searchTerm = client.nom; // facultatif si tu veux garder cette variable
 }
 
-
-
-
-
   AllCommerciaux() {
     this.baseService.getCommercial().subscribe((response: any) => {
       this.commerciaux = response?.data || (Array.isArray(response) ? response : []);
-      console.log('[DevisComponent] Commerciaux chargés:', this.commerciaux.length);
       if (this.commerciaux.length > 0) {
-        console.log('[DevisComponent] Exemple commercial:', this.commerciaux[0]);
       }
       // Ne pas initialiser filteredCommerciaux avec tous les commerciaux, laisser vide au départ
       this.filteredCommerciaux = [];
       this.cdr.detectChanges();
     }, error => {
-      console.error('[DevisComponent] Erreur chargement commerciaux:', error);
       this.commerciaux = [];
       this.filteredCommerciaux = [];
       this.cdr.detectChanges();
@@ -358,7 +371,6 @@ export class DevisComponent implements OnInit, AfterViewInit {
 
     // Vérifier que les commerciaux sont chargés
     if (!this.commerciaux || this.commerciaux.length === 0) {
-      console.warn('[DevisComponent] Aucun commercial chargé pour la recherche');
       this.filteredCommerciaux = [];
       this.cdr.detectChanges();
       return;
@@ -368,7 +380,6 @@ export class DevisComponent implements OnInit, AfterViewInit {
       com?.nom && com.nom.toLowerCase().includes(term)
     );
     
-    console.log('[DevisComponent] Recherche commercial:', term, 'Résultats:', this.filteredCommerciaux.length, 'Commerciaux disponibles:', this.commerciaux.length);
     this.cdr.detectChanges();
   }
 
@@ -381,7 +392,6 @@ export class DevisComponent implements OnInit, AfterViewInit {
   this.searchCommercial = com.nom; // facultatif
 }
 
-
   onSubmit(): void {
     if (this.DevisForm.valid) {
       
@@ -390,7 +400,6 @@ export class DevisComponent implements OnInit, AfterViewInit {
           this.showSuccess('✅ Devis ajouté avec succès !');
         },
         error: (err) => {
-          console.error(err);
           this.showError("❌ Une erreur s'est produite lors de l'ajout du Devis.");
         }
       });
@@ -441,7 +450,6 @@ export class DevisComponent implements OnInit, AfterViewInit {
       // Attendre un petit délai pour s'assurer que le backend a bien enregistré le devis
       // puis recharger la première page avec resetFilters pour voir le nouveau devis
       setTimeout(() => {
-        console.log('[DevisComponent] Rechargement des devis après insertion, tri: date DESC');
         this.loadDevis(1, '', true); // resetFilters = true pour réinitialiser les filtres
       }, 500); // Délai de 500ms pour laisser le temps au backend
     });
@@ -460,7 +468,6 @@ export class DevisComponent implements OnInit, AfterViewInit {
     });
   }
 
-
   get clientSearchControl() {
   return this.DevisForm.get('clientSearch') as FormControl;
 }
@@ -468,7 +475,6 @@ export class DevisComponent implements OnInit, AfterViewInit {
 get commercialSearchControl() {
   return this.DevisForm.get('commercialSearch') as FormControl;
 }
-
 
   removeDevis(index: number) {
   const dev = this.devis[index];
@@ -487,12 +493,10 @@ get commercialSearchControl() {
       },
       error: (err: any) => {
         this.showNotification(err.message, true);
-        console.error('Erreur de suppression :', err);
       }
     });
   }
 }
-
 
 showNotification(message: string, isError: boolean = false) {
   this.successMessage = message;
@@ -629,7 +633,8 @@ onPrintDevis(document_id: any) {
     Swal.fire({ icon: 'error', title: 'Erreur', text: 'document_id introuvable.' });
     return;
   }
-  this.emailService.generateDevisPDF(document_id.toString()).subscribe({
+  // Forcer le type à 'DEVIS' pour s'assurer qu'on génère toujours un devis, même si le document a été transformé
+  this.emailService.generateDevisPDF(document_id.toString(), { forceDocumentType: 'DEVIS' }).subscribe({
     next: (res) => {
       const url = res?.pdfUrl;
       if (url) {
@@ -639,9 +644,144 @@ onPrintDevis(document_id: any) {
       }
     },
     error: (err) => {
-      console.error('Erreur génération PDF :', err);
       Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors de la génération du PDF." });
     }
   });
 }
+
+  // ===== FILTRES PAR COLONNE (STYLE EXCEL) =====
+  onColumnFilterChange(column: string, value: string): void {
+    this.columnFilters[column] = value;
+    this.applyColumnFilters();
+  }
+
+  applyColumnFilters(): void {
+    // Filtrer les données localement
+    this.devis = this.allDevis.filter(item => {
+      return Object.keys(this.columnFilters).every(key => {
+        const filterValue = this.columnFilters[key];
+        if (!filterValue) return true;
+        
+        const itemValue = item[key];
+        if (itemValue === null || itemValue === undefined) return false;
+        
+        return itemValue.toString().toLowerCase().includes(filterValue.toLowerCase());
+      });
+    });
+    
+    this.totalRecords = this.devis.length;
+    this.cdr.detectChanges();
+  }
+
+  clearColumnFilters(): void {
+    this.columnFilters = {
+      numero: '',
+      date: '',
+      client: '',
+      commercial: '',
+      description: ''
+    };
+    this.applyColumnFilters();
+  }
+
+  // ===== GESTION DU MENU CONTEXTUEL DES COLONNES =====
+  showColumnContextMenu(event: MouseEvent, column: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.activeColumnMenu = column;
+    this.menuPosition = {
+      x: event.clientX,
+      y: event.clientY
+    };
+    this.showColumnMenu = true;
+    this.cdr.detectChanges();
+  }
+
+  hideColumnContextMenu(): void {
+    this.showColumnMenu = false;
+    this.activeColumnMenu = '';
+    this.cdr.detectChanges();
+  }
+
+  toggleColumnVisibility(column: string): void {
+    this.columnVisibility[column] = !this.columnVisibility[column];
+    this.hideColumnContextMenu();
+  }
+
+  togglePinColumn(column: string): void {
+    const index = this.pinnedColumns.indexOf(column);
+    if (index > -1) {
+      this.pinnedColumns.splice(index, 1);
+    } else {
+      this.pinnedColumns.push(column);
+    }
+    this.hideColumnContextMenu();
+  }
+
+  isColumnPinned(column: string): boolean {
+    return this.pinnedColumns.includes(column);
+  }
+
+  autoSizeColumn(column: string): void {
+    this.columnWidths[column] = 'auto';
+    this.hideColumnContextMenu();
+  }
+
+  autoSizeAllColumns(): void {
+    Object.keys(this.columnVisibility).forEach(column => {
+      this.columnWidths[column] = 'auto';
+    });
+    this.hideColumnContextMenu();
+  }
+
+  resetColumns(): void {
+    this.columnVisibility = {
+      numero: true,
+      date: true,
+      client: true,
+      commercial: true,
+      description: true
+    };
+    this.pinnedColumns = [];
+    this.columnWidths = {};
+    this.hideColumnContextMenu();
+  }
+
+  getColumnIndex(column: string): number {
+    const columns = Object.keys(this.columnVisibility);
+    return columns.indexOf(column);
+  }
+
+  getColumnDisplayName(column: string): string {
+    const names: any = {
+      numero: 'Numéro',
+      date: 'Date',
+      client: 'Client',
+      commercial: 'Commercial',
+      description: 'Description'
+    };
+    return names[column] || column;
+  }
+
+  getAllColumns(): string[] {
+    return Object.keys(this.columnVisibility);
+  }
+
+  showAllColumns(): void {
+    Object.keys(this.columnVisibility).forEach(key => {
+      this.columnVisibility[key] = true;
+    });
+    this.hideColumnContextMenu();
+  }
+
+  // Helper pour compter les colonnes visibles
+  getVisibleColumnsCount(): number {
+    return Object.keys(this.columnVisibility).filter(key => this.columnVisibility[key]).length;
+  }
+
+  // Helper pour afficher le menu contextuel avec stopPropagation
+  openColumnMenu(event: MouseEvent, column: string): void {
+    event.stopPropagation();
+    this.showColumnContextMenu(event, column);
+  }
 }

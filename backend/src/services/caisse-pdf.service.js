@@ -1881,6 +1881,13 @@ async function genererInterventionPDF(interventionId, options = {}) {
       const PDFDocument = require('pdfkit');
       const { getConnection } = require('../config/database');
       const telegramService = require('./telegram.service'); // Importez le service Telegram
+      const pdfConfigService = require('./pdf-config.service'); // Import du service de configuration PDF
+
+      // Charger la configuration depuis pdf-config.json si documentSociete n'est pas fourni
+      if (!options.documentSociete) {
+        options.documentSociete = pdfConfigService.getDocumentSociete();
+        console.log('[genererInterventionPDF] Configuration chargée depuis pdf-config.json');
+      }
 
       // Récupérer les données complètes de l'intervention avec la requête fournie
       const sequelize = getConnection();
@@ -1945,43 +1952,111 @@ async function genererInterventionPDF(interventionId, options = {}) {
         resolve(pdfBuffer);
       });
 
-      // --- En-tête (Logo et infos entreprise) ---
-      // Récupérer la taille du logo depuis la configuration
-      const logoSize4 = options.documentSociete?.logoSize || { width: 100, height: null };
-      const imageOptions4 = { width: logoSize4.width };
-      if (logoSize4.height) {
-        imageOptions4.height = logoSize4.height;
-      }
-      
-      if (options.documentSociete && options.documentSociete.logo) {
-        try {
-          const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-          const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions4);
-          doc.image(logoBuffer, 50, 20, imageOptions4);
-        } catch (error) {
-          console.warn('Erreur affichage logo personnalisé, utilisation du logo par défaut:', error);
-          // Fallback au logo par défaut si besoin
+      // === FONCTION: Dessiner l'en-tête du document (logo et infos entreprise) ===
+      const drawDocumentHeader = () => {
+        // Récupérer la taille du logo depuis la configuration
+        const logoSize4 = options.documentSociete?.logoSize || { width: 100, height: null };
+        const imageOptions4 = { width: logoSize4.width };
+        if (logoSize4.height) {
+          imageOptions4.height = logoSize4.height;
         }
-      }
-
-      if (options.documentSociete && options.documentSociete.entete) {
-        const enteteText = htmlToPlainText(options.documentSociete.entete);
-        const enteteLines = enteteText.split('\n');
-        let yPosEntete = 30;
-        enteteLines.forEach(line => {
-          if (line.trim()) {
-            doc.fontSize(10).font('Helvetica-Bold').text(line.trim(), 160, yPosEntete);
-            yPosEntete += 12;
+        
+        // Charger le logo depuis la configuration
+        if (options.documentSociete && options.documentSociete.logo) {
+          try {
+            const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
+            doc.image(logoBuffer, 50, 20, imageOptions4);
+          } catch (error) {
+            console.warn('[genererInterventionPDF] Erreur affichage logo personnalisé, utilisation du logo par défaut:', error);
+            // Fallback au logo par défaut si besoin
+            const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
+            if (fs.existsSync(logoPath)) {
+              doc.image(logoPath, 50, 20, imageOptions4);
+            }
           }
-        });
-      } else {
-        doc.fontSize(11).fillColor('#046ba7').font('Helvetica-Bold').text('Balances et Bascules Pont Bascule Electronique', 160, 30);
-        doc.font('Helvetica').fontSize(10)
-          .text('Mecanique - Vente et Reparation - Entretien', 160, 45)
-          .text('Etalonnage Logiciels de Gestion', 160, 58);
-      }
-      doc.rect(40, 100, 520, 1).fill('#000'); // Ligne de séparation
+        } else {
+          // Fallback au logo par défaut si pas de configuration
+          const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
+          if (fs.existsSync(logoPath)) {
+            doc.image(logoPath, 50, 20, imageOptions4);
+          }
+        }
+
+        // Charger l'en-tête depuis la configuration
+        if (options.documentSociete && options.documentSociete.entete) {
+          const entete = options.documentSociete.entete;
+          // Vérifier si c'est un objet JSON ou du texte brut (et non vide)
+          if (typeof entete === 'object' && entete !== null) {
+            // C'est un objet JSON valide, l'afficher
+            renderFormattedText(doc, entete, {
+              startX: 160,
+              startY: 20,
+              defaultFontSize: 10,
+              defaultColor: '#046ba7',
+              defaultFont: 'Helvetica-Bold',
+              defaultAlign: 'left',
+              defaultLineSpacing: 12,
+              width: 435
+            });
+          } else if (typeof entete === 'string' && entete.trim()) {
+            // C'est une chaîne non vide, l'afficher
+            renderFormattedText(doc, entete, {
+              startX: 160,
+              startY: 20,
+              defaultFontSize: 10,
+              defaultColor: '#046ba7',
+              defaultFont: 'Helvetica-Bold',
+              defaultAlign: 'left',
+              defaultLineSpacing: 12,
+              width: 435
+            });
+          }
+          // Si entete est null, undefined ou chaîne vide, ne rien afficher (pas d'en-tête par défaut)
+        }
+        // Ne plus afficher d'en-tête par défaut si la configuration existe mais est vide
+        doc.rect(40, 100, 520, 1).fill('#000'); // Ligne de séparation
+      };
+
+      // === FONCTION: Dessiner le pied de page (appelée sur CHAQUE page) ===
+      const drawPageFooter = () => {
+        const pageHeight = doc.page.height;
+        const bottomMargin = 40;
+        const footerHeight = 50; // Hauteur réservée au footer
+        const footerY = pageHeight - bottomMargin - footerHeight;
+
+        // Fond blanc pour le footer
+        doc.rect(0, footerY, doc.page.width, footerHeight).fill('#FFFFFF');
+        doc.strokeColor('#000').lineWidth(1.5);
+        doc.moveTo(50, footerY + 2).lineTo(545, footerY + 2).stroke(); // Ligne de séparation
+
+        if (options.documentSociete && options.documentSociete.pied_page) {
+          const piedPage = options.documentSociete.pied_page;
+          // Vérifier si c'est un objet JSON ou du texte brut
+          if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
+            renderFormattedText(doc, piedPage, {
+              startX: 50,
+              startY: footerY + 10,
+              defaultFontSize: 7,
+              defaultColor: '#000000',
+              defaultFont: 'Helvetica',
+              defaultAlign: 'center',
+              defaultLineSpacing: 10,
+              width: 495
+            });
+          }
+        }
+      };
+
+      // Fonction helper pour ajouter une page avec en-tête et pied de page
+      const addPageWithHeaderFooter = () => {
+        doc.addPage();
+        drawDocumentHeader();
+        drawPageFooter();
+      };
+
+      // Dessiner l'en-tête et le pied de page sur la première page
+      drawDocumentHeader();
+      drawPageFooter();
 
       // --- Titre ---
       doc.fontSize(18).font('Helvetica-Bold').fillColor('#000').text('FICHE DE DÉPLACEMENT / INTERVENTION', 50, 120);
@@ -2048,8 +2123,9 @@ async function genererInterventionPDF(interventionId, options = {}) {
 
         // Vérifier si une nouvelle page est nécessaire avant d'ajouter la ligne
         if (currentY + rowHeight > contentBottomLimit) {
-          doc.addPage();
-          currentY = 50; // Position de départ sur la nouvelle page
+          // Ajouter une nouvelle page avec en-tête et pied de page
+          addPageWithHeaderFooter();
+          currentY = 120; // Position de départ après l'en-tête (120 pour laisser de l'espace après le titre)
 
           // Redessiner l'en-tête du tableau sur la nouvelle page
           doc.rect(50, currentY, tableWidth, 25).fill('#E0E0E0');
@@ -2084,8 +2160,9 @@ async function genererInterventionPDF(interventionId, options = {}) {
       currentY += 10;
       // Vérifier pour le total aussi si ça dépasse la limite du contenu
       if (currentY + rowHeight > contentBottomLimit) {
-        doc.addPage();
-        currentY = 50;
+        // Ajouter une nouvelle page avec en-tête et pied de page
+        addPageWithHeaderFooter();
+        currentY = 120; // Position de départ après l'en-tête
       }
       doc.rect(50, currentY, tableWidth, 25).fill('#D0D0D0');
       doc.fontSize(10).font('Helvetica-Bold').fillColor('#000');
@@ -2094,39 +2171,8 @@ async function genererInterventionPDF(interventionId, options = {}) {
 
       currentY += 35; // Espace après le total
 
-      // --- Pied de page (sera dessiné une seule fois à la fin du document) ---
-      const drawFooter = () => {
-        const pageHeight = doc.page.height;
-        const bottomMargin = 40;
-        const footerHeight = 50; // Hauteur réservée au footer
-        const footerY = pageHeight - bottomMargin - footerHeight;
-
-        doc.rect(0, footerY, doc.page.width, footerHeight).fill('#FFFFFF'); // Fond blanc pour le footer
-        doc.strokeColor('#000').lineWidth(1.5);
-        doc.moveTo(50, footerY + 2).lineTo(545, footerY + 2).stroke(); // Ligne de séparation
-
-        if (options.documentSociete && options.documentSociete.pied_page) {
-          const piedPage = options.documentSociete.pied_page;
-          // Vérifier si c'est un objet JSON ou du texte brut
-          if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
-            renderFormattedText(doc, piedPage, {
-              startX: 50,
-              startY: footerY + 10,
-              defaultFontSize: 7,
-              defaultColor: '#000000',
-              defaultFont: 'Helvetica',
-              defaultAlign: 'center',
-              defaultLineSpacing: 10,
-              width: 495
-            });
-          }
-        }
-      };
-
-      // Attacher le dessin du footer à l'événement 'end' du document
-      doc.on('end', () => {
-        drawFooter();
-      });
+      // Dessiner le pied de page sur la dernière page
+      drawPageFooter();
 
       doc.end();
 

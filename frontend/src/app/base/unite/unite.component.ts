@@ -57,7 +57,6 @@ export class UniteComponent implements OnInit {
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement unités:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement des unités', 'error');
         this.loading = false;
       }

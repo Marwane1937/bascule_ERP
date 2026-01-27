@@ -114,7 +114,6 @@ export class VehiculeComponent implements OnInit, AfterViewInit {
         this.loading = false;
       },
       error: (err) => {
-        console.error('[VehiculeComponent] ❌ Erreur chargement véhicules:', err);
         this.vehicules = [];
         this.initDataTable();
         this.loading = false;
@@ -212,7 +211,6 @@ export class VehiculeComponent implements OnInit, AfterViewInit {
         this.saving = false;
       },
       error: (err) => {
-        console.error('[VehiculeComponent] ❌ Erreur createVehicule (HTTP):', err);
         const msg = err?.error?.message || err?.message || 'Erreur lors de l’enregistrement du véhicule';
         Swal.fire('Erreur', msg, 'error');
         this.saving = false;

@@ -65,7 +65,6 @@ export class InterventionListComponent implements OnInit {
         this.filteredClients = [...this.clients];
       },
       error: (error) => {
-        console.error('Erreur chargement clients:', error);
       }
     });
 
@@ -75,7 +74,6 @@ export class InterventionListComponent implements OnInit {
         this.filteredEmployes = [...this.employes];
       },
       error: (error) => {
-        console.error('Erreur chargement employés:', error);
       }
     });
   }
@@ -136,7 +134,6 @@ export class InterventionListComponent implements OnInit {
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement interventions:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement des interventions', 'error');
         this.loading = false;
       }
@@ -272,7 +269,6 @@ export class InterventionListComponent implements OnInit {
       },
       error: (error) => {
         this.loadingEditData = false;
-        console.error('Erreur chargement intervention:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement des données de l\'intervention', 'error');
       }
     });
@@ -308,7 +304,6 @@ export class InterventionListComponent implements OnInit {
         this.getInterventions();
       },
       error: (error) => {
-        console.error('Erreur modification:', error);
         Swal.fire('Erreur', 'Erreur lors de la modification de l\'intervention', 'error');
       }
     });
@@ -369,7 +364,6 @@ export class InterventionListComponent implements OnInit {
             this.getInterventions();
           },
           error: (error) => {
-            console.error('Erreur suppression:', error);
             Swal.fire('Erreur', 'Erreur lors de la suppression', 'error');
           }
         });

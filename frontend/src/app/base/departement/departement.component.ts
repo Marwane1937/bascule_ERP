@@ -58,7 +58,6 @@ export class DepartementComponent implements OnInit {
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement départements:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement des départements', 'error');
         this.loading = false;
       }

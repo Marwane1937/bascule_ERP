@@ -54,7 +54,6 @@ export class CompteurComponent implements OnInit {
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement compteurs:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement des compteurs', 'error');
         this.loading = false;
       }
@@ -167,13 +166,13 @@ export class CompteurComponent implements OnInit {
         this.getCompteurs();
       },
       error: (error) => {
-        console.error('Erreur sauvegarde compteur:', error);
         const message = error.error?.message || 'Erreur lors de la sauvegarde';
         Swal.fire('Erreur', message, 'error');
       }
     });
   }
 }
+
 
 
 

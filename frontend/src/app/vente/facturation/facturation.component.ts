@@ -2,6 +2,7 @@ import { AfterViewInit, ChangeDetectorRef, Component, OnInit } from '@angular/co
 import { Router } from '@angular/router';
 import { VentesService } from 'src/app/service/ventes.service';
 import { EmailService } from 'src/app/service/email.service';
+import { PermissionsService } from 'src/app/service/permissions.service';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -11,6 +12,7 @@ import Swal from 'sweetalert2';
 })
 export class FacturationComponent implements OnInit, AfterViewInit {
   factures: any[] = [];
+  allFactures: any[] = []; // Stocker toutes les factures pour le filtrage
   loading: boolean = true;
   successMessage: string | null = null;
   isError: boolean = false;
@@ -34,23 +36,79 @@ export class FacturationComponent implements OnInit, AfterViewInit {
   filterMontantMin: number | null = null;
   filterMontantMax: number | null = null;
   
+  // Affichage de la ligne de filtres
+  showFilterRow: boolean = false;
+  
   // Liste des clients pour le filtre
   clientsList: string[] = [];
+
+  // Filtres par colonne (style Excel)
+  columnFilters: any = {
+    facture_num: '',
+    facture_dat: '',
+    client: '',
+    total_ht: '',
+    total_tva: '',
+    total_ttc: '',
+    status: ''
+  };
+
+  // Options pour le filtre Etat
+  etatOptions = [
+    { value: 'Payée', label: 'Payée', checked: false },
+    { value: 'Partiellement Payée', label: 'Partiellement Payée', checked: false },
+    { value: 'Non Payée', label: 'Non Payée', checked: false }
+  ];
+
+  // Menu déroulant ouvert pour Etat
+  showEtatFilter: boolean = false;
+
+  // Gestion des colonnes (affichage/masquage, épinglage, etc.)
+  columnVisibility: any = {
+    facture_num: true,
+    facture_dat: true,
+    client: true,
+    total_ht: true,
+    total_tva: true,
+    total_ttc: true,
+    status: true
+  };
+
+  pinnedColumns: string[] = [];
+  columnWidths: any = {};
+  showColumnMenu: boolean = false;
+  activeColumnMenu: string = '';
+  menuPosition: any = { x: 0, y: 0 };
+
+  // Vérifier si l'utilisateur a accès à l'interface contrat
+  hasContratAccess: boolean = false;
 
   constructor(
     private ventesService: VentesService,
     private router: Router,
     private emailService: EmailService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private permissionsService: PermissionsService
   ) {}
 
   ngOnInit(): void {
+    // Vérifier si l'utilisateur a accès à l'interface contrat
+    this.hasContratAccess = this.permissionsService.hasAccessToRoute('/Contrat');
+    
     // Toujours utiliser loadFactures avec pagination dès le démarrage
     this.loadFactures(1, '', false);
   }
 
   ngAfterViewInit(): void {
-    // Ne rien faire ici
+    // Ajouter un listener pour fermer le menu contextuel quand on clique ailleurs
+    document.addEventListener('click', (event) => {
+      if (this.showColumnMenu) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.column-context-menu') && !target.closest('.column-menu-btn')) {
+          this.hideColumnContextMenu();
+        }
+      }
+    });
   }
 
   loadFactures(page: number = 1, search: string = '', resetFilters: boolean = false): void {
@@ -64,6 +122,25 @@ export class FacturationComponent implements OnInit, AfterViewInit {
       this.filterClient = '';
       this.filterMontantMin = null;
       this.filterMontantMax = null;
+      // Réinitialiser les filtres de colonnes
+      this.columnFilters = {
+        facture_num: '',
+        facture_dat: '',
+        client: '',
+        total_ht: '',
+        total_tva: '',
+        total_ttc: '',
+        status: ''
+      };
+    }
+
+    // Construire la recherche combinée avec les filtres de colonnes
+    let combinedSearch = search;
+    if (this.columnFilters.facture_num) {
+      combinedSearch += (combinedSearch ? ' ' : '') + this.columnFilters.facture_num;
+    }
+    if (this.columnFilters.client) {
+      combinedSearch += (combinedSearch ? ' ' : '') + this.columnFilters.client;
     }
 
     this.ventesService.getFactures({
@@ -71,18 +148,24 @@ export class FacturationComponent implements OnInit, AfterViewInit {
       pageSize: this.pageSize,
       orderBy: this.sortColumn,
       orderDirection: this.sortDirection,
-      search: search
+      search: combinedSearch
     }).subscribe({
       next: (response: any) => {
         const result = response.data || [];
         const pagination = response.pagination || {};
         
         // Les données sont déjà filtrées et paginées par le serveur
-        this.factures = Array.isArray(result) ? result : [];
+        let factures = Array.isArray(result) ? result : [];
+        
+        // Stocker toutes les factures pour le filtrage
+        this.allFactures = factures;
+        
+        // Appliquer les filtres de colonnes côté client
+        this.factures = this.applyColumnFilters(factures);
+        
         this.totalRecords = pagination.total || 0;
         this.totalPages = pagination.totalPages || 1;
         
-        console.log(`[FacturationComponent] Page ${page}/${this.totalPages}, ${this.factures.length} factures chargées sur ${this.totalRecords} total`);
         
         // Extraire la liste des clients uniques pour le filtre (depuis la page actuelle uniquement)
         this.extractClientsList(this.factures);
@@ -91,8 +174,6 @@ export class FacturationComponent implements OnInit, AfterViewInit {
         this.cdr.detectChanges();
       },
       error: (err) => {
-        console.error('[FacturationComponent] ❌ Erreur lors du chargement des factures:', err);
-        console.error('[FacturationComponent] ❌ Détails de l\'erreur:', JSON.stringify(err, null, 2));
         this.showError("❌ Une erreur s'est produite lors du chargement des factures.");
         this.loading = false;
         this.factures = [];
@@ -249,11 +330,295 @@ export class FacturationComponent implements OnInit, AfterViewInit {
   extractClientsList(factures: any[]): void {
     const clients = new Set<string>();
     factures.forEach(f => {
-      if (f.nom) {
-        clients.add(f.nom);
+      if (f.client) {
+        clients.add(f.client);
       }
     });
     this.clientsList = Array.from(clients).sort();
+  }
+
+  // Appliquer les filtres de colonnes
+  applyColumnFilters(factures: any[]): any[] {
+    let filtered = [...factures];
+
+    // Filtre par numéro de facture
+    if (this.columnFilters.facture_num) {
+      filtered = filtered.filter(f => 
+        f.facture_num?.toLowerCase().includes(this.columnFilters.facture_num.toLowerCase())
+      );
+    }
+
+    // Filtre par date
+    if (this.columnFilters.facture_dat) {
+      const filterDate = new Date(this.columnFilters.facture_dat);
+      filtered = filtered.filter(f => {
+        if (!f.facture_dat) return false;
+        const factureDate = new Date(f.facture_dat);
+        return factureDate.toDateString() === filterDate.toDateString();
+      });
+    }
+
+    // Filtre par client
+    if (this.columnFilters.client) {
+      filtered = filtered.filter(f => 
+        f.client?.toLowerCase().includes(this.columnFilters.client.toLowerCase())
+      );
+    }
+
+    // Filtre par montant HT
+    if (this.columnFilters.total_ht) {
+      const amount = parseFloat(this.columnFilters.total_ht);
+      if (!isNaN(amount)) {
+        filtered = filtered.filter(f => (f.total_ht || 0) >= amount);
+      }
+    }
+
+    // Filtre par TVA
+    if (this.columnFilters.total_tva) {
+      const amount = parseFloat(this.columnFilters.total_tva);
+      if (!isNaN(amount)) {
+        filtered = filtered.filter(f => (f.total_tva || 0) >= amount);
+      }
+    }
+
+    // Filtre par TTC
+    if (this.columnFilters.total_ttc) {
+      const amount = parseFloat(this.columnFilters.total_ttc);
+      if (!isNaN(amount)) {
+        filtered = filtered.filter(f => (f.total_ttc || 0) >= amount);
+      }
+    }
+
+    // Filtre par statut
+    if (this.columnFilters.status) {
+      filtered = filtered.filter(f => 
+        f.status?.toLowerCase().includes(this.columnFilters.status.toLowerCase())
+      );
+    }
+
+    return filtered;
+  }
+
+  // Gérer les changements de filtres de colonnes
+  onColumnFilterChange(column: string, value: any): void {
+    this.columnFilters[column] = value;
+    // Appliquer le filtre immédiatement sur les données de la page actuelle
+    this.factures = this.applyColumnFilters([...this.allFactures]);
+  }
+
+  // Gérer le filtre Etat avec checkboxes
+  onEtatFilterChange(option: any): void {
+    option.checked = !option.checked;
+    this.columnFilters.etat = this.etatOptions
+      .filter(opt => opt.checked)
+      .map(opt => opt.value);
+    this.loadFactures(1, this.searchTerm);
+  }
+
+  // Sélectionner/désélectionner tout pour le filtre Etat
+  toggleAllEtatFilters(selectAll: boolean): void {
+    this.etatOptions.forEach(opt => opt.checked = selectAll);
+    if (selectAll) {
+      this.columnFilters.etat = this.etatOptions.map(opt => opt.value);
+    } else {
+      this.columnFilters.etat = [];
+    }
+    this.loadFactures(1, this.searchTerm);
+  }
+
+  // Vérifier si tous les états sont sélectionnés
+  areAllEtatFiltersSelected(): boolean {
+    return this.etatOptions.every(opt => opt.checked);
+  }
+
+  // Réinitialiser les filtres de colonnes
+  clearColumnFilters(): void {
+    this.columnFilters = {
+      facture_num: '',
+      facture_dat: '',
+      client: '',
+      total_ht: '',
+      total_tva: '',
+      total_ttc: '',
+      status: ''
+    };
+    this.loadFactures(1, this.searchTerm);
+  }
+
+  // Gestion du menu contextuel des colonnes
+  showColumnContextMenu(event: MouseEvent, column: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    this.activeColumnMenu = column;
+    
+    // Positionner le menu près de l'en-tête de colonne
+    const rect = (event.target as HTMLElement).closest('th')?.getBoundingClientRect();
+    if (rect) {
+      this.menuPosition = {
+        x: rect.right - 250, // Ajuster pour que le menu ne dépasse pas
+        y: rect.bottom + 5
+      };
+    } else {
+      this.menuPosition = {
+        x: event.clientX,
+        y: event.clientY
+      };
+    }
+    
+    // S'assurer que le menu ne dépasse pas de l'écran
+    if (this.menuPosition.x < 10) {
+      this.menuPosition.x = 10;
+    }
+    if (this.menuPosition.y < 10) {
+      this.menuPosition.y = 10;
+    }
+    
+    this.showColumnMenu = true;
+  }
+
+  hideColumnContextMenu(): void {
+    this.showColumnMenu = false;
+    this.activeColumnMenu = '';
+  }
+
+  // Toggle visibilité d'une colonne
+  toggleColumnVisibility(column: string): void {
+    this.columnVisibility[column] = !this.columnVisibility[column];
+    this.hideColumnContextMenu();
+    this.cdr.detectChanges();
+  }
+
+  // Épingler/Désépingler une colonne
+  togglePinColumn(column: string): void {
+    const index = this.pinnedColumns.indexOf(column);
+    if (index > -1) {
+      this.pinnedColumns.splice(index, 1);
+    } else {
+      this.pinnedColumns.push(column);
+    }
+    this.hideColumnContextMenu();
+    this.cdr.detectChanges();
+  }
+
+  isColumnPinned(column: string): boolean {
+    return this.pinnedColumns.includes(column);
+  }
+
+  // Ajuster automatiquement la taille d'une colonne
+  autoSizeColumn(column: string): void {
+    // Utiliser setTimeout pour s'assurer que le DOM est rendu
+    setTimeout(() => {
+      const table = document.getElementById('facturationTable');
+      if (table) {
+        const columnIndex = this.getColumnIndex(column);
+        if (columnIndex >= 0) {
+          let maxWidth = 100; // Largeur minimale
+          
+          // Parcourir toutes les cellules de la colonne pour trouver la largeur maximale
+          const headerCell = table.querySelector(`thead tr:first-child th:nth-child(${columnIndex + 1})`);
+          if (headerCell) {
+            const headerWidth = (headerCell as HTMLElement).scrollWidth;
+            if (headerWidth > maxWidth) {
+              maxWidth = headerWidth;
+            }
+          }
+          
+          const cells = table.querySelectorAll(`tbody td:nth-child(${columnIndex + 1})`);
+          cells.forEach((cell: any) => {
+            const cellWidth = cell.scrollWidth;
+            if (cellWidth > maxWidth) {
+              maxWidth = cellWidth;
+            }
+          });
+          
+          // Ajouter un peu de padding
+          maxWidth += 30;
+          this.columnWidths[column] = maxWidth + 'px';
+          this.cdr.detectChanges();
+        }
+      }
+    }, 100);
+    this.hideColumnContextMenu();
+  }
+
+  // Ajuster automatiquement toutes les colonnes
+  autoSizeAllColumns(): void {
+    const columns = ['facture_num', 'facture_dat', 'nom', 'facture_ht', 'facture_tva', 'facture_ttc'];
+    columns.forEach(col => {
+      if (this.columnVisibility[col]) {
+        this.autoSizeColumn(col);
+      }
+    });
+  }
+
+  // Réinitialiser toutes les colonnes
+  resetColumns(): void {
+    this.columnVisibility = {
+      facture_num: true,
+      facture_dat: true,
+      nom: true,
+      facture_ht: true,
+      facture_tva: true,
+      facture_ttc: true
+    };
+    this.pinnedColumns = [];
+    this.columnWidths = {};
+    this.hideColumnContextMenu();
+    this.cdr.detectChanges();
+  }
+
+  // Obtenir l'index d'une colonne
+  getColumnIndex(column: string): number {
+    const columnOrder = ['facture_num', 'facture_dat', 'client', 'total_ht', 'total_tva', 'total_ttc', 'status'];
+    return columnOrder.indexOf(column);
+  }
+
+  // Obtenir le nom d'affichage d'une colonne
+  getColumnDisplayName(column: string): string {
+    const names: any = {
+      facture_num: 'Numéro',
+      facture_dat: 'Date',
+      client: 'Client',
+      total_ht: 'HT',
+      total_tva: 'TVA',
+      total_ttc: 'TTC',
+      status: 'Statut'
+    };
+    return names[column] || column;
+  }
+
+  // Obtenir toutes les colonnes disponibles
+  getAllColumns(): string[] {
+    return ['facture_num', 'facture_dat', 'client', 'total_ht', 'total_tva', 'total_ttc', 'status'];
+  }
+
+  // Obtenir la classe CSS pour le badge de statut
+  getStatusBadgeClass(status: string): string {
+    if (!status) return 'badge-secondary';
+    const statusLower = status.toLowerCase().trim();
+    if (statusLower === 'réglé' || statusLower === 'regele' || statusLower === 'regle') {
+      return 'badge-success';
+    } else if (statusLower === 'en cours' || statusLower === 'encours') {
+      return 'badge-warning';
+    } else if (statusLower === 'non réglé' || statusLower === 'non regele' || statusLower === 'non regle') {
+      return 'badge-danger';
+    }
+    return 'badge-secondary';
+  }
+
+  // Afficher toutes les colonnes
+  showAllColumns(): void {
+    this.getAllColumns().forEach(col => {
+      this.columnVisibility[col] = true;
+    });
+    this.hideColumnContextMenu();
+    this.cdr.detectChanges();
+  }
+
+  // Compter les colonnes visibles
+  getVisibleColumnsCount(): number {
+    return Object.keys(this.columnVisibility).filter(key => this.columnVisibility[key]).length;
   }
 
   // Export des données
@@ -286,7 +651,6 @@ export class FacturationComponent implements OnInit, AfterViewInit {
     this.showNotification('✅ Export CSV réussi !', false);
   }
 
-
   onPrintFacture(facture_id: any, type: 'standard' | 'contrat' = 'standard') {
     if (!facture_id) {
       Swal.fire({ icon: 'error', title: 'Erreur', text: 'ID de facture introuvable.' });
@@ -317,7 +681,6 @@ export class FacturationComponent implements OnInit, AfterViewInit {
       },
       error: (err: any) => {
         Swal.close();
-        console.error('Erreur génération PDF :', err);
         Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors de la génération du PDF." });
       }
     });

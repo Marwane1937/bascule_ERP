@@ -178,12 +178,10 @@ onSaveAdresse(): void {
       };
     },
     error: (err) => {
-      console.error('❌ Erreur:', err);
       this.showError(isEdit ? 'Erreur lors de la modification' : 'Erreur lors de l\'ajout de l\'adresse');
     }
   });
 }
-
 
   // ✅ CONTACT
 onAddContact() {
@@ -271,12 +269,10 @@ onSaveContact(): void {
       };
     },
     error: (err) => {
-      console.error('❌ Erreur:', err);
       this.showError(isEdit ? 'Erreur lors de la modification' : 'Erreur lors de l\'ajout du contact');
     }
   });
 }
-
 
 getNextLigne(): number {
   if (!this.contacts || this.contacts.length === 0) return 1;
@@ -365,12 +361,10 @@ onSaveIdentifiant(): void {
       };
     },
     error: (err) => {
-      console.error('❌ Erreur:', err);
       this.showError(isEdit ? 'Erreur lors de la modification de l\'identifiant' : 'Erreur lors de l\'ajout de l\'identifiant');
     }
   });
 }
-
 
   // ✅ Alertes
   showSuccess(message: string) {
@@ -398,7 +392,6 @@ onSaveIdentifiant(): void {
       buttonsStyling: false
     });
   }
-
 
 onCheckboxChange(row: any): void {
   if (row.checked) {
@@ -443,7 +436,6 @@ onDeleteIdentifiants(): void {
       this.showSuccess('Les identifiants sélectionnés ont été supprimés avec succès ');
     },
     error: err => {
-      console.error('❌ Erreur suppression', err);
     }
   });
 }
@@ -481,7 +473,6 @@ onDeleteAdresses(): void {
       this.showSuccess('Les adresses sélectionnées ont été supprimées avec succès ');
     },
     error: err => {
-      console.error('❌ Erreur suppression adresses', err);
     }
   });
 }
@@ -520,7 +511,6 @@ onDeleteContacts(): void {
       this.showSuccess('Les contacts sélectionnés ont été supprimés avec succès');
     },
     error: err => {
-      console.error('❌ Erreur suppression contacts', err);
     }
   });
 }

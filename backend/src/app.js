@@ -134,6 +134,7 @@ const reglementRoutes = require('./routes/finance/reglement.routes');
 const financeReportingRoutes = require('./routes/finance/finance-reporting.routes');
 // ✅ Achats
 const bonCommandeRoutes = require('./routes/achats/bon-commande.routes');
+const demandeAchatRoutes = require('./routes/achats/demande-achat.routes');
 const factureFournisseurRoutes = require('./routes/achats/facture-fournisseur.routes');
 // ✅ Base
 const employeRoutes = require('./routes/base/employe.routes');
@@ -186,6 +187,7 @@ app.use('/api/reglements', authenticateToken, reglementRoutes); // Alias pour co
 app.use('/api/finance/reporting', authenticateToken, financeReportingRoutes);
 // ✅ Achats
 app.use('/api/bon-commande', authenticateToken, bonCommandeRoutes);
+app.use('/api/demande-achat', authenticateToken, demandeAchatRoutes);
 app.use('/api/achats', authenticateToken, bonCommandeRoutes); // Alias pour compatibilité frontend
 app.use('/api/factures-fournisseur', authenticateToken, factureFournisseurRoutes);
 const receptionRoutes = require('./routes/achats/reception.routes');
@@ -218,8 +220,10 @@ app.use('/api/email', authenticateToken, emailRoutes);
 app.use('/api/pdf', pdfRoutes);
 // ✅ PDF spécialisés
 app.use('/api/caisse-pdf', authenticateToken, caissePdfRoutes);
-app.use('/api/facturation-pdf', authenticateToken, facturationPdfRoutes);
-app.use('/api/retour-pdf', authenticateToken, retourPdfRoutes);
+// Route facturation-pdf : les routes POST sont protégées dans facturation-pdf.routes.js, la route GET est publique
+app.use('/api/facturation-pdf', facturationPdfRoutes);
+// Route retour-pdf : la route GET est publique (pour servir les PDFs), les routes POST sont protégées dans retour-pdf.routes.js
+app.use('/api/retour-pdf', retourPdfRoutes);
 app.use('/commandes', commandePdfPublicRoutes); // Routes publiques pour servir les PDFs
 // Route commande-pdf : les routes POST sont protégées dans commande-pdf.routes.js, la route GET est publique
 app.use('/api/commande-pdf', commandePdfRoutes);

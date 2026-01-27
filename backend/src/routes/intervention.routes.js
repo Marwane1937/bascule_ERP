@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const interventionController = require('../controllers/intervention.controller');
 const { authenticateToken } = require('../middleware/auth.middleware');
+const databaseInjector = require('../middleware/database-injector.middleware');
 
 // Appliquer l'authentification à toutes les routes
 // Routes pour les interventions qui n'ont pas besoin d'authentification (e.g., PDF)
@@ -10,6 +11,8 @@ router.get('/test/pdf', interventionController.testPDF); // Route de test
 
 // Appliquer l'authentification à toutes les routes suivantes
 router.use(authenticateToken);
+// Injecter la connexion à la base de données appropriée
+router.use(databaseInjector.injectConnection);
 
 // Routes pour les interventions (avec authentification)
 router.get('/', interventionController.getInterventions);

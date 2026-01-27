@@ -213,3 +213,108 @@ body.modal-open .modal-backdrop.show {
 #addReglementModal.modal.show {
   display: block !important;
 }
+
+/* ============================================
+   STYLES POUR LES FILTRES PAR COLONNE ET MENU CONTEXTUEL
+   ============================================ */
+
+.filter-row input[type="text"],
+.filter-row input[type="date"],
+.filter-row input[type="number"],
+.filter-row select {
+  font-size: 0.85rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  padding: 4px 24px 4px 8px;
+}
+
+.filter-row .fa-filter {
+  position: absolute;
+  right: 8px;
+  font-size: 0.75rem;
+  pointer-events: none;
+  color: #6c757d;
+}
+
+.filter-input:focus {
+  border-color: #80bdff;
+  box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+}
+
+/* En-têtes de colonnes */
+.column-header {
+  position: relative;
+}
+
+.column-header:hover .column-menu-btn {
+  opacity: 1 !important;
+}
+
+.column-menu-btn {
+  padding: 2px 4px !important;
+  transition: opacity 0.2s;
+}
+
+.pinned-column {
+  background-color: #e7f3ff !important;
+  font-weight: 600;
+}
+
+/* Menu contextuel des colonnes */
+.column-context-menu {
+  position: fixed;
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 9999;
+  min-width: 220px;
+  padding: 8px 0;
+}
+
+.menu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9998;
+}
+
+.menu-header {
+  padding: 8px 16px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #495057;
+  border-bottom: 1px solid #dee2e6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.menu-divider {
+  height: 1px;
+  background: #dee2e6;
+  margin: 4px 0;
+}
+
+.menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: #495057;
+  transition: background-color 0.2s;
+}
+
+.menu-item:hover {
+  background-color: #f8f9fa;
+}
+
+.menu-item i {
+  width: 16px;
+  text-align: center;
+  color: #6c757d;
+}

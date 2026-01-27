@@ -104,7 +104,6 @@ export class EditInventaireComponent implements OnInit {
         }
       },
       error: (err) => {
-        console.error('Erreur chargement stock calcul:', err);
       }
     });
   }

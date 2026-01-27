@@ -61,7 +61,6 @@ export class FamilleComponent implements OnInit, AfterViewInit {
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur lors du chargement des familles:', error);
         this.loading = false;
       }
     });
@@ -119,7 +118,6 @@ export class FamilleComponent implements OnInit, AfterViewInit {
           this.getFamilles();
         },
         error: (error) => {
-          console.error('Erreur lors de la modification:', error);
           Swal.fire({
             icon: 'error',
             title: 'Erreur',
@@ -143,7 +141,6 @@ export class FamilleComponent implements OnInit, AfterViewInit {
           this.getFamilles();
         },
         error: (error) => {
-          console.error('Erreur lors de l\'ajout:', error);
           Swal.fire({
             icon: 'error',
             title: 'Erreur',
@@ -179,7 +176,6 @@ export class FamilleComponent implements OnInit, AfterViewInit {
             this.getFamilles();
           },
           error: (error) => {
-            console.error('Erreur lors de la suppression:', error);
             Swal.fire({
               icon: 'error',
               title: 'Erreur',

@@ -72,7 +72,6 @@ export class StockEntreeComponent implements OnInit {
         this.filteredFournisseurs = [...this.fournisseurs];
       },
       error: (error) => {
-        console.error('Erreur chargement fournisseurs:', error);
       }
     });
   }
@@ -106,7 +105,6 @@ export class StockEntreeComponent implements OnInit {
         }
       },
       error: (error) => {
-        console.error('Erreur chargement numéro:', error);
       }
     });
   }
@@ -196,7 +194,6 @@ export class StockEntreeComponent implements OnInit {
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement entrées de stock:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement des entrées de stock', 'error');
         this.loading = false;
       },
@@ -268,7 +265,6 @@ export class StockEntreeComponent implements OnInit {
                 this.detailsLoaded[achat.document_id] = true;
               },
               error: (error) => {
-                console.error('Erreur chargement détails:', error);
                 Swal.fire('Erreur', 'Erreur lors du chargement des détails', 'error');
                 this.expandedRows[index] = false;
                 this.loadingDetails[achat.document_id] = false;
@@ -277,7 +273,6 @@ export class StockEntreeComponent implements OnInit {
       }
     }
   }
-
 
   getAchatDetails(achatId: number): any[] {
     return this.achatDetails[achatId] || [];
@@ -337,7 +332,6 @@ export class StockEntreeComponent implements OnInit {
             this.getEntreesStock();
           },
           error: (error) => {
-            console.error('Erreur création entrée stock:', error);
             Swal.fire('Erreur', error.error?.message || 'Erreur lors de la création de l\'entrée de stock', 'error');
           }
         });

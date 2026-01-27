@@ -121,13 +121,10 @@ export class CaisseDepensesComponent implements OnInit, OnDestroy {
           this.rubriques = [];
         }
         if (this.rubriques.length > 0) {
-          console.log('[CaisseDepenses] Rubriques chargées:', this.rubriques.length);
         } else {
-          console.warn('[CaisseDepenses] Aucune rubrique trouvée');
         }
       },
       error: (error) => {
-        console.error('[CaisseDepenses] Erreur lors du chargement des rubriques:', error);
         this.rubriques = [];
       }
     });
@@ -149,12 +146,10 @@ export class CaisseDepensesComponent implements OnInit, OnDestroy {
           this.employes = [];
         }
         if (this.employes.length > 0) {
-          console.log('[CaisseDepenses] Employés chargés:', this.employes.length);
         }
       },
       error: (error) => {
         this.employes = [];
-        console.error('[CaisseDepenses] Erreur lors du chargement des employés:', error);
       }
     });
   }
@@ -226,20 +221,13 @@ export class CaisseDepensesComponent implements OnInit, OnDestroy {
             // Fallback si la structure est différente
             this.nextNumero = response.numero;
           } else {
-            console.warn('[CaisseDepenses] Réponse sans numéro:', response);
             this.nextNumero = '';
           }
         } else {
-          console.warn('[CaisseDepenses] Réponse vide');
           this.nextNumero = '';
         }
       },
       error: (err: any) => {
-        console.error('[CaisseDepenses] Erreur lors du chargement du numéro:', err);
-        console.error('[CaisseDepenses] Status:', err.status);
-        console.error('[CaisseDepenses] StatusText:', err.statusText);
-        console.error('[CaisseDepenses] Détails erreur:', err.error);
-        console.error('[CaisseDepenses] Message erreur:', err.message);
         // En cas d'erreur, générer un numéro par défaut pour éviter un affichage vide
         const anneeCourte = new Date().getFullYear().toString().slice(2);
         this.nextNumero = `${prefix}${anneeCourte}-0001`;
@@ -610,7 +598,6 @@ export class CaisseDepensesComponent implements OnInit, OnDestroy {
       return;
     }
 
-
     // Afficher un message de chargement
     Swal.fire({
       title: 'Génération du PDF...',
@@ -632,7 +619,6 @@ export class CaisseDepensesComponent implements OnInit, OnDestroy {
         }
       },
       error: (error) => {
-        console.error('[CaisseDepenses] Erreur génération PDF:', error);
         Swal.fire('Erreur', error.error?.message || 'Erreur lors de la génération du PDF', 'error');
       }
     });
@@ -664,7 +650,6 @@ export class CaisseDepensesComponent implements OnInit, OnDestroy {
 
     // Si le telegram_id existe, l'utiliser directement
     if (telegramId) {
-      console.log('[CaisseDepenses] Telegram ID trouvé pour l\'employé:', telegramId);
       this.sendTelegramWithChatId(finalEmployeId, telegramId);
       return;
     }
@@ -749,7 +734,6 @@ export class CaisseDepensesComponent implements OnInit, OnDestroy {
         }
       },
       error: (error) => {
-        console.error('[CaisseDepenses] Erreur envoi Telegram:', error);
         
         // Vérifier si c'est une erreur d'authentification (401)
         if (error.status === 401) {
@@ -936,7 +920,6 @@ export class CaisseDepensesComponent implements OnInit, OnDestroy {
             }
           },
           error: (error) => {
-            console.error('Erreur lors de la clôture:', error);
             Swal.fire('Erreur', error.error?.message || 'Erreur lors de la clôture', 'error');
           }
         });
@@ -1026,7 +1009,6 @@ export class CaisseDepensesComponent implements OnInit, OnDestroy {
         }
       },
       error: (error) => {
-        console.error('Erreur génération PDF:', error);
         Swal.fire('Erreur', 'Erreur lors de la génération du PDF', 'error');
       }
     });

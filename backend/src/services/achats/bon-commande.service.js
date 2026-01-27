@@ -1,4 +1,5 @@
 const bonCommandeModel = require('../../models/achats/bon-commande.model');
+const demandeAchatModel = require('../../models/achats/demande-achat.model');
 const { getCompteurFormate } = require('../compteur.service');
 const bonCommandePdfService = require('./bon-commande-pdf.service');
 const documentSocieteService = require('../document_societe.service');
@@ -95,6 +96,104 @@ const genererPDF = async (id, options = {}) => {
   return pdfPath;
 };
 
+// Transformer une demande d'achat en bon de commande avec les prix
+const transformerDemandeAchatEnBonCommande = async (demandeAchatId, lignesAvecPrix) => {
+  const sequelize = require('../../config/database').getConnection();
+  
+  return await sequelize.transaction(async (t) => {
+    try {
+      // 1. Récupérer la demande d'achat
+      const demandeAchat = await demandeAchatModel.getDemandeAchatById(demandeAchatId);
+      if (!demandeAchat) {
+        throw new Error('Demande d\'achat non trouvée');
+      }
+
+      // 2. Vérifier qu'elle n'a pas déjà été transformée
+      const checkQuery = `
+        SELECT COUNT(*) as count 
+        FROM achat_document 
+        WHERE parent = :demandeAchatId AND type = 2
+      `;
+      const [checkResult] = await sequelize.query(checkQuery, {
+        replacements: { demandeAchatId },
+        type: sequelize.QueryTypes.SELECT,
+        transaction: t
+      });
+      
+      if (checkResult && checkResult.count > 0) {
+        throw new Error('Cette demande d\'achat a déjà été transformée en bon de commande');
+      }
+
+      // 3. Créer le bon de commande avec parent = demandeAchatId
+      // S'assurer que la date est au bon format
+      let dateValue = demandeAchat.date;
+      if (!dateValue) {
+        dateValue = new Date().toISOString();
+      } else if (dateValue instanceof Date) {
+        dateValue = dateValue.toISOString();
+      } else if (typeof dateValue !== 'string') {
+        dateValue = String(dateValue);
+      }
+      
+      const bonCommandeData = {
+        date: dateValue,
+        description: demandeAchat.description || '',
+        part_id: demandeAchat.part_id,
+        type: 2,
+        parent: demandeAchatId
+      };
+
+      // Passer la transaction à addBonCommande pour qu'elle utilise la même transaction
+      const bonCommande = await bonCommandeModel.addBonCommande(bonCommandeData, t);
+      
+      // S'assurer que le document_id est correctement récupéré
+      // addBonCommande retourne { document_id: ..., numero: ... }
+      const bonCommandeId = bonCommande?.document_id;
+      
+      if (!bonCommandeId) {
+        console.error('[transformerDemandeAchatEnBonCommande] Résultat addBonCommande:', bonCommande);
+        throw new Error('Impossible de récupérer le document_id du bon de commande créé');
+      }
+      
+      console.log('[transformerDemandeAchatEnBonCommande] Bon de commande créé avec document_id:', bonCommandeId);
+
+      // 4. Créer les détails du bon de commande avec les prix
+      // Utiliser directement les lignesAvecPrix envoyées (déjà filtrées pour exclure les lignes supprimées)
+      for (const ligneAvecPrix of lignesAvecPrix) {
+        if (!ligneAvecPrix.prix || ligneAvecPrix.prix <= 0) {
+          throw new Error(`Prix manquant ou invalide pour l'article ${ligneAvecPrix.article_cod || ligneAvecPrix.article_id}`);
+        }
+
+        const prixValue = parseFloat(ligneAvecPrix.prix);
+        const detailData = {
+          document_id: bonCommandeId, // Utiliser le nouveau document_id créé
+          article_id: ligneAvecPrix.article_id,
+          designation: ligneAvecPrix.designation || '',
+          qte: ligneAvecPrix.quantite || ligneAvecPrix.qte || 0,
+          prix: prixValue,
+          remise: parseFloat(ligneAvecPrix.remise) || 0,
+          taux_tva: parseFloat(ligneAvecPrix.taux_tva) || 0.2
+        };
+
+        console.log('[transformerDemandeAchatEnBonCommande] Insertion détail avec document_id:', bonCommandeId, 'prix:', prixValue, 'detailData:', detailData);
+        await bonCommandeModel.saveDetail(detailData, t);
+      }
+
+      // 5. Les infos ne sont plus copiées automatiquement dans achat_document_info
+
+      return {
+        success: true,
+        bonCommandeId: bonCommandeId,
+        numero: bonCommande.numero,
+        message: 'Demande d\'achat transformée en bon de commande avec succès'
+      };
+    } catch (error) {
+      console.error('[transformerDemandeAchatEnBonCommande] Erreur:', error);
+      throw error;
+    }
+  });
+};
+
 module.exports = {
   getBonCommande,
   getBonCommandeById,
@@ -105,6 +204,7 @@ module.exports = {
   updateBonCommande,
   deleteBonCommande,
   deleteLignesParIds,
-  genererPDF
+  genererPDF,
+  transformerDemandeAchatEnBonCommande
 };
 

@@ -97,7 +97,6 @@ export class CaisseComponent implements OnInit, OnDestroy {
       this.rubriques = combined.sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
       this.loadingRubriques = false;
     }).catch(err => {
-      console.error('Erreur chargement rubriques:', err);
       this.loadingRubriques = false;
     });
   }
@@ -114,7 +113,6 @@ export class CaisseComponent implements OnInit, OnDestroy {
         this.loadingEmployes = false;
       },
       error: (error) => {
-        console.error('[CaisseComponent] Erreur chargement employés:', error);
         this.employes = [];
         this.loadingEmployes = false;
       }
@@ -125,7 +123,6 @@ export class CaisseComponent implements OnInit, OnDestroy {
     // Par défaut (chargement initial), afficher uniquement les caisses non clôturées du jour
     // Quand l'utilisateur sélectionne une date, afficher toutes les caisses
     const onlyNonCloturees = this.isInitialLoad;
-    console.log('[CaisseComponent] 📥 Chargement solde pour date:', this.selectedDate, 'Type:', this.caisseType, 'Non clôturées seulement:', onlyNonCloturees);
     this.loadingSolde = true;
     const params: any = { date: this.selectedDate };
     if (this.caisseType) {
@@ -133,16 +130,13 @@ export class CaisseComponent implements OnInit, OnDestroy {
     }
     this.caisseService.getSoldeCaisse(this.selectedDate, this.caisseType, onlyNonCloturees).subscribe({
       next: (response) => {
-        console.log('[CaisseComponent] 📥 Réponse API solde:', response);
         if (response && response.success) {
           this.solde = response.data || {
             total_entrees: 0,
             total_sorties: 0,
             solde: 0
           };
-          console.log('[CaisseComponent] ✅ Solde mis à jour:', this.solde);
         } else {
-          console.warn('[CaisseComponent] ⚠️ Réponse API sans success, initialisation à 0');
           this.solde = {
             total_entrees: 0,
             total_sorties: 0,
@@ -152,8 +146,6 @@ export class CaisseComponent implements OnInit, OnDestroy {
         this.loadingSolde = false;
       },
       error: (error) => {
-        console.error('[CaisseComponent] ❌ Erreur lors du chargement du solde:', error);
-        console.error('[CaisseComponent] ❌ Détails:', error.error || error.message);
         this.solde = {
           total_entrees: 0,
           total_sorties: 0,
@@ -167,7 +159,6 @@ export class CaisseComponent implements OnInit, OnDestroy {
   }
 
   onDateChange(): void {
-    console.log('[CaisseComponent] 📅 Date changée:', this.selectedDate);
     // L'utilisateur a sélectionné une date manuellement, afficher toutes les caisses (y compris clôturées)
     this.isInitialLoad = false;
     this.loadSolde();
@@ -236,10 +227,6 @@ export class CaisseComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         this.generatingReport = false;
-        console.error('Erreur génération rapport:', error);
-        console.error('Status:', error.status);
-        console.error('StatusText:', error.statusText);
-        console.error('Error body:', error.error);
 
         let errorMessage = 'Erreur lors de la génération du rapport';
         if (error.error) {
@@ -312,7 +299,6 @@ export class CaisseComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         this.generatingReportByEmploye = false;
-        console.error('Erreur génération rapport par employé:', error);
 
         let errorMessage = 'Erreur lors de la génération du rapport';
         if (error.error) {
@@ -403,7 +389,6 @@ export class CaisseComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         this.generatingReportGroup = false;
-        console.error('Erreur génération rapport rubriques:', error);
 
         let errorMessage = 'Erreur lors de la génération du rapport';
         if (error.error) {

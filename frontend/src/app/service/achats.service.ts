@@ -178,5 +178,88 @@ export class AchatsService {
       withStamp: !!withStamp
     });
   }
+
+  // ================= DEMANDE D'ACHAT =================
+  
+  private demandeAchatBaseUrl = `${this.apiUrl}/demande-achat`;
+
+  // Liste des demandes d'achat avec pagination
+  getDemandeAchat(options: any = {}): Observable<any> {
+    const params = new URLSearchParams();
+    if (options.page) params.append('page', options.page.toString());
+    if (options.pageSize) params.append('pageSize', options.pageSize.toString());
+    if (options.orderBy) params.append('orderBy', options.orderBy);
+    if (options.orderDirection) params.append('orderDirection', options.orderDirection);
+    if (options.search) params.append('search', options.search);
+    const url = `${this.demandeAchatBaseUrl}/demande-achat${params.toString() ? '?' + params.toString() : ''}`;
+    return this.http.get(url);
+  }
+
+  // Récupérer une demande d'achat par ID
+  getDemandeAchatById(id: number): Observable<any> {
+    const url = `${this.demandeAchatBaseUrl}/${id}`;
+    return this.http.get(url);
+  }
+
+  // Créer une demande d'achat
+  addDemandeAchat(data: any): Observable<any> {
+    return this.http.post(`${this.demandeAchatBaseUrl}`, data);
+  }
+
+  // Obtenir le prochain numéro de demande d'achat
+  getNextDemandeAchatNumero(): Observable<any> {
+    const url = `${this.demandeAchatBaseUrl}/next-demande-achat-numero`;
+    return this.http.get(url);
+  }
+
+  // Mettre à jour une demande d'achat
+  updateDemandeAchat(id: number, data: any): Observable<any> {
+    return this.http.put(`${this.demandeAchatBaseUrl}/${id}`, data);
+  }
+
+  // Supprimer une demande d'achat
+  deleteDemandeAchat(id: number): Observable<any> {
+    return this.http.post(`${this.demandeAchatBaseUrl}/delete`, { id });
+  }
+
+  // Sauvegarder un détail de demande d'achat
+  saveDemandeAchatDetail(data: any): Observable<any> {
+    return this.http.post(`${this.demandeAchatBaseUrl}/save`, data);
+  }
+
+  // Sauvegarder plusieurs lignes de détail de demande d'achat
+  saveDemandeAchatDetails(lignes: any[]): Observable<any> {
+    return this.http.post(`${this.demandeAchatBaseUrl}/save`, lignes);
+  }
+
+  // Sauvegarder les infos de demande d'achat
+  saveDemandeAchatInfo(data: any): Observable<any> {
+    return this.http.post(`${this.demandeAchatBaseUrl}/info`, data);
+  }
+
+  // Supprimer des lignes de demande d'achat par IDs
+  deleteDemandeAchatLignesParIds(ids: number[]): Observable<any> {
+    return this.http.post(`${this.demandeAchatBaseUrl}/delete-lignes`, { ids });
+  }
+
+  // Télécharger PDF de demande d'achat
+  telechargerPDFDemandeAchat(id: number, withStamp: boolean = false): Observable<Blob> {
+    const url = `${this.demandeAchatBaseUrl}/pdf/${id}${withStamp ? '?withStamp=true' : ''}`;
+    return this.http.get(url, { responseType: 'blob' });
+  }
+
+  // Récupérer les demandes d'achat non transformées
+  getDemandesAchatNonTransformees(): Observable<any> {
+    const url = `${this.demandeAchatBaseUrl}/non-transformees`;
+    return this.http.get(url);
+  }
+
+  // Transformer une demande d'achat en bon de commande
+  transformerDemandeAchatEnBonCommande(demandeAchatId: number, lignesAvecPrix: any[]): Observable<any> {
+    return this.http.post(`${this.achatsBaseUrl}/transformer-demande-achat`, {
+      demandeAchatId,
+      lignesAvecPrix
+    });
+  }
 }
 

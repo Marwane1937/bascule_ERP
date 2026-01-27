@@ -86,9 +86,9 @@ router.get('/:folder/:filename', async (req, res) => {
 // Route POST protégée pour générer les PDFs (nécessite authentification)
 router.post('/generate', authenticateToken, databaseInjector.injectConnection.bind(databaseInjector), async (req, res) => { 
   try {
-    const { document_id, withStamp, printMode, composeArticle } = req.body;
+    const { document_id, withStamp, printMode, composeArticle, forceDocumentType } = req.body;
     const docId = parseInt(document_id, 10);
-    console.log('📄 Génération PDF demandée pour document_id:', docId, '(type:', typeof docId, ')');
+    console.log('📄 Génération PDF demandée pour document_id:', docId, '(type:', typeof docId, ')', forceDocumentType ? `[Force: ${forceDocumentType}]` : '');
     
     if (isNaN(docId)) {
       console.error('❌ document_id invalide:', document_id);
@@ -130,7 +130,8 @@ router.post('/generate', authenticateToken, databaseInjector.injectConnection.bi
       sequelize,
       document_id: docId,
       printMode: printMode || 'normal',
-      composeArticle: composeArticle || null
+      composeArticle: composeArticle || null,
+      forceDocumentType: forceDocumentType || null
     });
     
     // Déterminer le nom du fichier selon le type de document
@@ -414,5 +415,52 @@ router.post('/send-whatsapp', authenticateToken, databaseInjector.injectConnecti
   }
 });
 
+
+// Route GET pour récupérer le logo depuis pdf-config.json
+router.get('/logo', authenticateToken, (req, res) => {
+  try {
+    console.log('[PDF Route] 🔍 Requête logo reçue');
+    const logoPath = pdfConfigService.getLogoPath();
+    
+    if (!logoPath) {
+      console.warn('[PDF Route] ⚠️ Aucun chemin de logo retourné par pdfConfigService');
+      return res.status(404).json({
+        success: false,
+        message: 'Logo non trouvé dans la configuration'
+      });
+    }
+
+    if (!fs.existsSync(logoPath)) {
+      console.error('[PDF Route] ❌ Fichier logo introuvable:', logoPath);
+      return res.status(404).json({
+        success: false,
+        message: 'Logo non trouvé dans la configuration',
+        path: logoPath
+      });
+    }
+
+    // Déterminer le type MIME basé sur l'extension
+    const ext = path.extname(logoPath).toLowerCase();
+    let contentType = 'image/png';
+    if (ext === '.jpg' || ext === '.jpeg') {
+      contentType = 'image/jpeg';
+    } else if (ext === '.gif') {
+      contentType = 'image/gif';
+    } else if (ext === '.svg') {
+      contentType = 'image/svg+xml';
+    }
+
+    console.log('[PDF Route] ✅ Envoi du logo:', logoPath, 'Content-Type:', contentType);
+    res.setHeader('Content-Type', contentType);
+    res.sendFile(path.resolve(logoPath));
+  } catch (error) {
+    console.error('[PDF Route] ❌ Erreur récupération logo:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération du logo',
+      error: error.message
+    });
+  }
+});
 
 module.exports = router;

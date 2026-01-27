@@ -126,13 +126,10 @@ export class CaisseRecettesComponent implements OnInit, OnDestroy {
           this.rubriques = [];
         }
         if (this.rubriques.length > 0) {
-          console.log('[CaisseRecettes] Rubriques chargées:', this.rubriques.length);
         } else {
-          console.warn('[CaisseRecettes] Aucune rubrique trouvée');
         }
       },
       error: (error) => {
-        console.error('[CaisseRecettes] Erreur lors du chargement des rubriques:', error);
         this.rubriques = [];
       }
     });
@@ -154,16 +151,13 @@ export class CaisseRecettesComponent implements OnInit, OnDestroy {
           this.employes = [];
         }
         if (this.employes.length > 0) {
-          console.log('[CaisseRecettes] Employés chargés:', this.employes.length);
         }
       },
       error: (error) => {
         this.employes = [];
-        console.error('[CaisseRecettes] Erreur lors du chargement des employés:', error);
       }
     });
   }
-
 
   initForm(): void {
     this.RecetteForm = this.fb.group({
@@ -232,20 +226,13 @@ export class CaisseRecettesComponent implements OnInit, OnDestroy {
             // Fallback si la structure est différente
             this.nextNumero = response.numero;
           } else {
-            console.warn('[CaisseRecettes] Réponse sans numéro:', response);
             this.nextNumero = '';
           }
         } else {
-          console.warn('[CaisseRecettes] Réponse vide');
           this.nextNumero = '';
         }
       },
       error: (err: any) => {
-        console.error('[CaisseRecettes] Erreur lors du chargement du numéro:', err);
-        console.error('[CaisseRecettes] Status:', err.status);
-        console.error('[CaisseRecettes] StatusText:', err.statusText);
-        console.error('[CaisseRecettes] Détails erreur:', err.error);
-        console.error('[CaisseRecettes] Message erreur:', err.message);
         // En cas d'erreur, générer un numéro par défaut pour éviter un affichage vide
         const anneeCourte = new Date().getFullYear().toString().slice(2);
         this.nextNumero = `${prefix}${anneeCourte}-0001`;
@@ -613,7 +600,6 @@ export class CaisseRecettesComponent implements OnInit, OnDestroy {
       return;
     }
 
-
     // Afficher un message de chargement
     Swal.fire({
       title: 'Génération du PDF...',
@@ -635,7 +621,6 @@ export class CaisseRecettesComponent implements OnInit, OnDestroy {
         }
       },
       error: (error) => {
-        console.error('[CaisseRecettes] Erreur génération PDF:', error);
         Swal.fire('Erreur', error.error?.message || 'Erreur lors de la génération du PDF', 'error');
       }
     });
@@ -667,7 +652,6 @@ export class CaisseRecettesComponent implements OnInit, OnDestroy {
 
     // Si le telegram_id existe, l'utiliser directement
     if (telegramId) {
-      console.log('[CaisseRecettes] Telegram ID trouvé pour l\'employé:', telegramId);
       this.sendTelegramWithChatId(finalEmployeId, telegramId);
       return;
     }
@@ -741,7 +725,6 @@ export class CaisseRecettesComponent implements OnInit, OnDestroy {
         }
       },
       error: (error) => {
-        console.error('[CaisseRecettes] Erreur envoi Telegram:', error);
         
         // Vérifier si c'est une erreur d'authentification (401)
         if (error.status === 401) {
@@ -928,7 +911,6 @@ export class CaisseRecettesComponent implements OnInit, OnDestroy {
             }
           },
           error: (error) => {
-            console.error('Erreur lors de la clôture:', error);
             Swal.fire('Erreur', error.error?.message || 'Erreur lors de la clôture', 'error');
           }
         });
@@ -1018,7 +1000,6 @@ export class CaisseRecettesComponent implements OnInit, OnDestroy {
         }
       },
       error: (error) => {
-        console.error('Erreur génération PDF:', error);
         Swal.fire('Erreur', 'Erreur lors de la génération du PDF', 'error');
       }
     });

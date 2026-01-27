@@ -66,13 +66,14 @@
                     formControlName="clientSearch"
                     placeholder="Rechercher un client..."
                     (input)="onClientSearch($event)"
+                    (focus)="onClientFocus()"
                     autocomplete="off"
                     [class.is-invalid]="interventionForm.get('clientId')?.invalid && interventionForm.get('clientId')?.touched">
 
                   <!-- Liste des clients filtrés -->
                   <div class="autocomplete-list position-absolute w-100 bg-white border rounded-bottom shadow-sm"
-                       *ngIf="interventionForm.get('clientSearch')?.value && filteredClients.length > 0"
-                       style="z-index: 1000; max-height: 200px; overflow-y: auto;">
+                       *ngIf="filteredClients.length > 0 && !interventionForm.get('clientId')?.value"
+                       style="z-index: 1000; max-height: 200px; overflow-y: auto; top: 100%;">
                     <div *ngFor="let client of filteredClients"
                          class="autocomplete-item p-2 border-bottom cursor-pointer"
                          (click)="selectClient(client)"
@@ -84,6 +85,10 @@
 
                   <div class="invalid-feedback d-block" *ngIf="interventionForm.get('clientId')?.invalid && interventionForm.get('clientId')?.touched">
                     Le client est requis
+                  </div>
+                  <div class="text-warning small mt-1" *ngIf="clients.length === 0 && !loading">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    Aucun client disponible. Veuillez vérifier votre connexion ou contacter l'administrateur.
                   </div>
                 </div>
               </div>
@@ -102,13 +107,14 @@
                     formControlName="technicienSearch"
                     placeholder="Rechercher un technicien..."
                     (input)="onEmployeSearch($event)"
+                    (focus)="onEmployeFocus()"
                     autocomplete="off"
                     [class.is-invalid]="interventionForm.get('technicienId')?.invalid && interventionForm.get('technicienId')?.touched">
 
                   <!-- Liste des techniciens filtrés -->
                   <div class="autocomplete-list position-absolute w-100 bg-white border rounded-bottom shadow-sm"
-                       *ngIf="interventionForm.get('technicienSearch')?.value && filteredEmployes.length > 0"
-                       style="z-index: 1000; max-height: 200px; overflow-y: auto;">
+                       *ngIf="filteredEmployes.length > 0 && !interventionForm.get('technicienId')?.value"
+                       style="z-index: 1000; max-height: 200px; overflow-y: auto; top: 100%;">
                     <div *ngFor="let employe of filteredEmployes"
                          class="autocomplete-item p-2 border-bottom cursor-pointer"
                          (click)="selectEmploye(employe)"

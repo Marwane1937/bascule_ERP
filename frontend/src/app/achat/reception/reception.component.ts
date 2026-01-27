@@ -70,7 +70,6 @@ export class ReceptionComponent implements OnInit {
         this.cdr.detectChanges();
       },
       error: (err) => {
-        console.error('[ReceptionComponent] ❌ Erreur chargement réceptions:', err);
         this.loadingReceptions = false;
         this.receptions = [];
         this.totalRecords = 0;
@@ -132,7 +131,6 @@ export class ReceptionComponent implements OnInit {
         this.cdr.detectChanges();
       },
       error: (err) => {
-        console.error('[ReceptionComponent] ❌ Erreur chargement commandes non réceptionnées:', err);
         this.loadingCommandes = false;
         this.commandesNonReceptionnees = [];
         this.commandesNonReceptionneesFiltered = [];
@@ -235,7 +233,6 @@ export class ReceptionComponent implements OnInit {
         this.cdr.detectChanges();
       },
       error: (err) => {
-        console.error('[ReceptionComponent] ❌ Erreur chargement détails commande:', err);
         this.loadingDetails = false;
         this.commandeDetails = [];
         this.cdr.detectChanges();
@@ -286,7 +283,6 @@ export class ReceptionComponent implements OnInit {
           this.cdr.detectChanges();
         },
         error: (err) => {
-          console.error('[ReceptionComponent] ❌ Erreur création réception:', err);
           Swal.fire('Erreur', err.error?.message || 'Impossible de créer la réception.', 'error');
         }
       });
@@ -323,7 +319,6 @@ export class ReceptionComponent implements OnInit {
           this.loadReceptions(1, this.searchTerm);
         },
         error: (err) => {
-          console.error('[ReceptionComponent] ❌ Erreur création réception:', err);
           Swal.fire('Erreur', err.error?.message || `Impossible de créer la réception pour ${numero || 'cette commande'}.`, 'error');
         }
       });
@@ -363,7 +358,6 @@ export class ReceptionComponent implements OnInit {
           this.loadReceptions(this.currentPage, this.searchTerm);
         },
         error: (err) => {
-          console.error('[ReceptionComponent] ❌ Erreur suppression réception:', err);
           Swal.fire('Erreur', err.error?.message || 'Impossible de supprimer la réception.', 'error');
         }
       });
@@ -400,5 +394,4 @@ export class ReceptionComponent implements OnInit {
     });
   }
 }
-
 

@@ -53,4 +53,7 @@ console.error = (...args: any[]): void => {
 };
 
 platformBrowserDynamic().bootstrapModule(AppModule)
-  .catch(err => console.error(err));
+  .catch(err => {
+    // Erreur critique de bootstrap - doit être visible
+    originalConsoleError('Erreur critique lors du démarrage de l\'application:', err);
+  });

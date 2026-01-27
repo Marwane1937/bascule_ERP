@@ -62,7 +62,6 @@ export class StockHistoriqueComponent implements OnInit {
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement historique:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement de l\'historique', 'error');
         this.loading = false;
       }
@@ -150,7 +149,6 @@ export class StockHistoriqueComponent implements OnInit {
         }
       },
       error: (error) => {
-        console.error('Erreur génération PDF:', error);
         this.loading = false;
         Swal.fire('Erreur', 'Erreur lors de la génération du PDF', 'error');
       }
@@ -181,7 +179,6 @@ export class StockHistoriqueComponent implements OnInit {
         Swal.fire('Succès', 'Export Excel téléchargé avec succès', 'success');
       },
       error: (error) => {
-        console.error('Erreur export Excel:', error);
         this.loading = false;
         Swal.fire('Erreur', 'Erreur lors de l\'export Excel', 'error');
       }

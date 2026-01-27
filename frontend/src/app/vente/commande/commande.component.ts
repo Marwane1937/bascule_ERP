@@ -6,7 +6,6 @@ import { VentesService } from 'src/app/service/ventes.service';
 import { EmailService } from 'src/app/service/email.service';
 import Swal from 'sweetalert2';
 
-
 @Component({
   selector: 'app-commande',
   templateUrl: './commande.component.html',
@@ -62,11 +61,40 @@ export class CommandeComponent implements OnInit, AfterViewInit {
   // Filtres avancés pour les commandes
   showAdvancedFiltersCommandes: boolean = false;
   filterDateFromCommandes: string = '';
+  
+  // Affichage de la ligne de filtres
+  showFilterRow: boolean = false;
   filterDateToCommandes: string = '';
   filterClientCommandes: string = '';
   
   // Liste des clients pour le filtre
   clientsListCommandes: string[] = [];
+
+  // Filtres par colonne (style Excel) pour les commandes
+  columnFilters: any = {
+    numero: '',
+    date: '',
+    client: '',
+    commercial: '',
+    description: ''
+  };
+
+  allCommandes: any[] = []; // Stocker toutes les commandes pour le filtrage
+
+  // Gestion des colonnes (affichage/masquage, épinglage, etc.)
+  columnVisibility: any = {
+    numero: true,
+    date: true,
+    client: true,
+    commercial: true,
+    description: true
+  };
+
+  pinnedColumns: string[] = [];
+  columnWidths: any = {};
+  showColumnMenu: boolean = false;
+  activeColumnMenu: string = '';
+  menuPosition: any = { x: 0, y: 0 };
 
   getSelectedCount(): number {
     const count = this.devis.filter(d => {
@@ -102,7 +130,6 @@ export class CommandeComponent implements OnInit, AfterViewInit {
       // pour éviter les conflits avec [(ngModel)]
   }
 
-
   initForm(): void {
     this.DevisForm = this.fb.group({
       date: [new Date().toISOString().split('T')[0]], // Date du jour par défaut
@@ -121,6 +148,16 @@ export class CommandeComponent implements OnInit, AfterViewInit {
   }
 
   ngAfterViewInit(): void {
+    // Ajouter un listener pour fermer le menu contextuel quand on clique ailleurs
+    document.addEventListener('click', (event) => {
+      if (this.showColumnMenu) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.column-context-menu') && !target.closest('.column-menu-btn')) {
+          this.hideColumnContextMenu();
+        }
+      }
+    });
+
     // Ne rien faire ici, on initialise dans getClients après chargement
     // Ajuster les colonnes lorsque le modal est affiché pour que DataTables calcule correctement les largeurs
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -162,7 +199,6 @@ export class CommandeComponent implements OnInit, AfterViewInit {
         }
       },
       error: (err) => {
-        console.error('Erreur lors du chargement du numéro de commande:', err);
         // Garder la valeur par défaut en cas d'erreur
       }
     });
@@ -191,7 +227,6 @@ export class CommandeComponent implements OnInit, AfterViewInit {
           lengthChange: true
         });
 
-
       }, 0);
       this.loading = false; // ✅ on cache le spinner après le chargement
     });
@@ -199,11 +234,9 @@ export class CommandeComponent implements OnInit, AfterViewInit {
 
   getDevisNonTransferes(): void {
     this.loading = true;
-    console.log('[getDevisNonTransferes] Début du chargement...');
 
     this.ventesService.getDevisNonTransferes().subscribe({
       next: (response: any) => {
-        console.log('[getDevisNonTransferes] Réponse reçue:', response);
         
       // Préserver l'état checked des devis existants
       const existingChecked = new Map();
@@ -217,16 +250,12 @@ export class CommandeComponent implements OnInit, AfterViewInit {
         let data = response;
         if (response && response.data && Array.isArray(response.data)) {
           data = response.data;
-          console.log('[getDevisNonTransferes] Données extraites depuis response.data:', data.length);
         } else if (Array.isArray(response)) {
           data = response;
-          console.log('[getDevisNonTransferes] Réponse est directement un tableau:', data.length);
         } else {
-          console.error('[getDevisNonTransferes] Format de réponse inattendu:', response);
           data = [];
         }
 
-        console.log(`[getDevisNonTransferes] ${data.length} devis trouvés`);
       this.devis = data.map((d: any) => ({ 
         ...d, 
         checked: existingChecked.get(d.document_id) || false 
@@ -235,11 +264,9 @@ export class CommandeComponent implements OnInit, AfterViewInit {
       // Appliquer le filtre et la pagination
       this.applyFilterAndPagination();
       
-        console.log(`[getDevisNonTransferes] ${this.filteredDevis.length} devis après filtrage/pagination`);
       this.loading = false; // ✅ on cache le spinner après le chargement
       },
       error: (error) => {
-        console.error('[getDevisNonTransferes] Erreur lors du chargement des devis non transférés:', error);
       this.loading = false;
         this.devis = [];
         this.filteredDevis = [];
@@ -355,7 +382,6 @@ export class CommandeComponent implements OnInit, AfterViewInit {
       // NE PAS vider le tbody manuellement - laisser Angular gérer via *ngFor
       // Angular va automatiquement mettre à jour le DOM quand this.commandes change
     } catch (e) {
-      console.warn('Erreur lors de la destruction de DataTables:', e);
     }
   }
 
@@ -381,24 +407,28 @@ export class CommandeComponent implements OnInit, AfterViewInit {
         const result = response.data || [];
         const pagination = response.pagination || {};
         
-        const allCommandes = Array.isArray(result) ? result : [];
+        const commandesData = Array.isArray(result) ? result : [];
         this.totalRecordsCommandes = pagination.total || 0;
         this.totalPagesCommandes = pagination.totalPages || 1;
         
         // Extraire la liste des clients uniques pour le filtre
-        this.extractClientsListCommandes(allCommandes);
+        this.extractClientsListCommandes(commandesData);
         
         // Appliquer les filtres avancés côté client
-        this.commandes = this.applyAdvancedFiltersCommandes(allCommandes).map((d: any) => ({ ...d, checked: false }));
+        this.commandes = this.applyAdvancedFiltersCommandes(commandesData).map((d: any) => ({ ...d, checked: false }));
+        this.allCommandes = [...this.commandes]; // Stocker une copie pour les filtres locaux
+        
+        // Appliquer les filtres de colonne s'ils existent
+        this.applyColumnFilters();
         
         this.loadingCommandes = false;
         this.cdr.detectChanges();
       },
       error: (err) => {
-        console.error('[CommandeComponent] ❌ Erreur lors du chargement des commandes:', err);
         this.showError("❌ Une erreur s'est produite lors du chargement des commandes.");
         this.loadingCommandes = false;
         this.commandes = [];
+        this.allCommandes = [];
         this.cdr.detectChanges();
       }
     });
@@ -605,12 +635,9 @@ export class CommandeComponent implements OnInit, AfterViewInit {
         const rowCountAfterInit = this.dataTableCommande.rows().count();
         
         if (rowCountAfterInit === 0 && this.commandes.length > 0) {
-          console.error('❌ DataTables ne voit aucune ligne alors qu\'il y a des commandes !');
-          console.error(`📋 Nombre de commandes: ${this.commandes.length}, Lignes dans le DOM: ${rowCount}`);
         }
       }
     } catch (error) {
-      console.error('❌ Erreur lors de l\'initialisation de DataTables:', error);
     }
   }
 
@@ -650,7 +677,6 @@ export class CommandeComponent implements OnInit, AfterViewInit {
       }
       
     } else {
-      console.error(`❌ Devis ${devis.numero} non trouvé dans le tableau`);
     }
     // Ne plus déclencher automatiquement le transfert - l'utilisateur doit cliquer sur le bouton "Transférer"
   }
@@ -666,7 +692,6 @@ export class CommandeComponent implements OnInit, AfterViewInit {
                 this.loadCommandes(); // Rafraîchir la liste des commandes
       },
       error: (err) => {
-        console.error(err);
         this.showError(`❌ Une erreur s'est produite lors du transfert du devis ${devis.numero}.`);
         devis.checked = false;
       }
@@ -737,7 +762,6 @@ export class CommandeComponent implements OnInit, AfterViewInit {
           }
         },
         error: (err) => {
-          console.error(err);
           errors++;
           devis.checked = false;
           
@@ -783,7 +807,6 @@ export class CommandeComponent implements OnInit, AfterViewInit {
         }
       },
       error: (err: any) => {
-        console.error('Erreur génération PDF :', err);
         Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors de la génération du PDF." });
       }
     });
@@ -804,10 +827,8 @@ export class CommandeComponent implements OnInit, AfterViewInit {
         
         this.clients = clientsData;
         this.filteredClients = [];
-        console.log(`[AllClients] ${this.clients.length} clients chargés`);
       },
       error: (err) => {
-        console.error('Erreur lors du chargement des clients:', err);
         this.clients = [];
         this.filteredClients = [];
       }
@@ -830,7 +851,6 @@ export class CommandeComponent implements OnInit, AfterViewInit {
   }
 
   if (!this.clients || this.clients.length === 0) {
-    console.warn('Aucun client chargé pour la recherche');
     this.filteredClients = [];
     return;
   }
@@ -852,10 +872,6 @@ export class CommandeComponent implements OnInit, AfterViewInit {
   this.searchTerm = client.nom;
 }
 
-
-
-
-
   AllCommerciaux() {
     this.baseService.getCommercial().subscribe({
       next: (data) => {
@@ -871,10 +887,8 @@ export class CommandeComponent implements OnInit, AfterViewInit {
         
         this.commerciaux = commerciauxData;
         this.filteredCommerciaux = [];
-        console.log(`[AllCommerciaux] ${this.commerciaux.length} commerciaux chargés`);
       },
       error: (err) => {
-        console.error('Erreur lors du chargement des commerciaux:', err);
         this.commerciaux = [];
         this.filteredCommerciaux = [];
       }
@@ -897,7 +911,6 @@ export class CommandeComponent implements OnInit, AfterViewInit {
   }
 
   if (!this.commerciaux || this.commerciaux.length === 0) {
-    console.warn('Aucun commercial chargé pour la recherche');
     this.filteredCommerciaux = [];
     return;
   }
@@ -918,7 +931,6 @@ export class CommandeComponent implements OnInit, AfterViewInit {
   this.filteredCommerciaux = [];
   this.searchCommercial = com.nom;
 }
-
 
   onSubmit(): void {
     if (this.DevisForm.valid) {
@@ -947,7 +959,6 @@ export class CommandeComponent implements OnInit, AfterViewInit {
           this.loadNextCommandeNumero(); // Recharger le prochain numéro
         },
         error: (err) => {
-          console.error('Erreur création commande:', err);
           this.showError(`❌ Une erreur s'est produite lors de la création de la commande: ${err.error?.message || err.message || 'Erreur inconnue'}`);
         }
       });
@@ -990,7 +1001,6 @@ export class CommandeComponent implements OnInit, AfterViewInit {
       buttonsStyling: false
     });
   }
-
 
   private closeModalIfOpen(modalId: string) {
     // @ts-ignore - jQuery/Bootstrap dispo globalement
@@ -1035,7 +1045,6 @@ get commercialSearchControl() {
   return this.DevisForm.get('commercialSearch') as FormControl;
 }
 
-
   removeDevis(index: number) {
   const dev = this.devis[index];
 
@@ -1053,7 +1062,6 @@ get commercialSearchControl() {
       },
       error: (err: any) => {
         this.showNotification(err.message, true);
-        console.error('Erreur de suppression :', err);
       }
     });
   }
@@ -1103,7 +1111,6 @@ get commercialSearchControl() {
               });
             },
             error: (err: any) => {
-              console.error('Erreur de suppression :', err);
               Swal.fire({
                 icon: 'error',
                 title: 'Erreur',
@@ -1132,7 +1139,6 @@ get commercialSearchControl() {
     });
 }
 
-
 showNotification(message: string, isError: boolean = false) {
   this.successMessage = message;
   this.isError = isError;
@@ -1141,4 +1147,139 @@ showNotification(message: string, isError: boolean = false) {
     this.successMessage = null;
   }, 5000);
 }
+
+  // ===== FILTRES PAR COLONNE (STYLE EXCEL) =====
+  onColumnFilterChange(column: string, value: string): void {
+    this.columnFilters[column] = value;
+    this.applyColumnFilters();
+  }
+
+  applyColumnFilters(): void {
+    this.commandes = this.allCommandes.filter(item => {
+      return Object.keys(this.columnFilters).every(key => {
+        const filterValue = this.columnFilters[key];
+        if (!filterValue) return true;
+        
+        const itemValue = item[key];
+        if (itemValue === null || itemValue === undefined) return false;
+        
+        return itemValue.toString().toLowerCase().includes(filterValue.toLowerCase());
+      });
+    });
+    
+    this.totalRecordsCommandes = this.commandes.length;
+    this.cdr.detectChanges();
+  }
+
+  clearColumnFilters(): void {
+    this.columnFilters = {
+      numero: '',
+      date: '',
+      client: '',
+      commercial: '',
+      description: ''
+    };
+    this.applyColumnFilters();
+  }
+
+  // ===== GESTION DU MENU CONTEXTUEL DES COLONNES =====
+  showColumnContextMenu(event: MouseEvent, column: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.activeColumnMenu = column;
+    this.menuPosition = {
+      x: event.clientX,
+      y: event.clientY
+    };
+    this.showColumnMenu = true;
+    this.cdr.detectChanges();
+  }
+
+  hideColumnContextMenu(): void {
+    this.showColumnMenu = false;
+    this.activeColumnMenu = '';
+    this.cdr.detectChanges();
+  }
+
+  toggleColumnVisibility(column: string): void {
+    this.columnVisibility[column] = !this.columnVisibility[column];
+    this.hideColumnContextMenu();
+  }
+
+  togglePinColumn(column: string): void {
+    const index = this.pinnedColumns.indexOf(column);
+    if (index > -1) {
+      this.pinnedColumns.splice(index, 1);
+    } else {
+      this.pinnedColumns.push(column);
+    }
+    this.hideColumnContextMenu();
+  }
+
+  isColumnPinned(column: string): boolean {
+    return this.pinnedColumns.includes(column);
+  }
+
+  autoSizeColumn(column: string): void {
+    this.columnWidths[column] = 'auto';
+    this.hideColumnContextMenu();
+  }
+
+  autoSizeAllColumns(): void {
+    Object.keys(this.columnVisibility).forEach(column => {
+      this.columnWidths[column] = 'auto';
+    });
+    this.hideColumnContextMenu();
+  }
+
+  resetColumns(): void {
+    this.columnVisibility = {
+      numero: true,
+      date: true,
+      client: true,
+      commercial: true,
+      description: true
+    };
+    this.pinnedColumns = [];
+    this.columnWidths = {};
+    this.hideColumnContextMenu();
+  }
+
+  getColumnIndex(column: string): number {
+    const columns = Object.keys(this.columnVisibility);
+    return columns.indexOf(column);
+  }
+
+  getColumnDisplayName(column: string): string {
+    const names: any = {
+      numero: 'Numéro',
+      date: 'Date',
+      client: 'Client',
+      commercial: 'Commercial',
+      description: 'Description'
+    };
+    return names[column] || column;
+  }
+
+  getAllColumns(): string[] {
+    return Object.keys(this.columnVisibility);
+  }
+
+  showAllColumns(): void {
+    Object.keys(this.columnVisibility).forEach(key => {
+      this.columnVisibility[key] = true;
+    });
+    this.hideColumnContextMenu();
+  }
+
+  // Helper pour compter les colonnes visibles
+  getVisibleColumnsCount(): number {
+    return Object.keys(this.columnVisibility).filter(key => this.columnVisibility[key]).length;
+  }
+
+  // Helper pour afficher le menu contextuel avec stopPropagation
+  openColumnMenu(event: MouseEvent, column: string): void {
+    event.stopPropagation();
+    this.showColumnContextMenu(event, column);
+  }
 }

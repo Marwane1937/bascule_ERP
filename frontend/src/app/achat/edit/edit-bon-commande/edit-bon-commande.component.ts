@@ -145,7 +145,6 @@ export class EditBonCommandeComponent implements OnInit {
         this.processBonCommandeData(data.bonCommande, id);
       },
       error: (err) => {
-        console.error('Erreur chargement données:', err);
         Swal.fire({ icon: 'error', title: 'Erreur', text: 'Erreur lors du chargement des données.' });
       }
     });
@@ -291,7 +290,6 @@ export class EditBonCommandeComponent implements OnInit {
           this.showNotification('Informations mises à jour', false);
         },
         error: (err) => {
-          console.error('❌ Erreur lors de la mise à jour', err);
           this.showNotification('Erreur lors de la mise à jour', true);
         }
       });
@@ -406,7 +404,6 @@ export class EditBonCommandeComponent implements OnInit {
         },
         error: (err: any) => {
           this.showNotification(err.message || 'Erreur de suppression', true);
-          console.error('Erreur de suppression :', err);
         }
       });
     }
@@ -466,7 +463,6 @@ export class EditBonCommandeComponent implements OnInit {
     this.produits[index].taxe = (article.taxe ?? 0.2);
     this.recalculateTotal(index);
   }
-
 
   AllFournisseurs() {
     this.baseService.getFournisseur().subscribe({
@@ -611,7 +607,6 @@ export class EditBonCommandeComponent implements OnInit {
         this.produitsOriginal = JSON.parse(JSON.stringify(this.produits));
       },
       error: (err) => {
-        console.error("Erreur d'enregistrement :", err);
         Swal.fire({
           icon: 'error',
           title: 'Erreur',
@@ -626,7 +621,6 @@ export class EditBonCommandeComponent implements OnInit {
     this.selectedInfo.document_id = docId.toString();
 
     if (!this.selectedInfo.document_id) {
-      console.error('document_id non défini');
       return;
     }
 
@@ -683,16 +677,11 @@ export class EditBonCommandeComponent implements OnInit {
 
   voirBonCommande() {
     const id = this.route.snapshot.paramMap.get('document_id');
-    console.log('🚀 Début de voirBonCommande()');
-    console.log('📋 document_id récupéré:', id);
 
     if (!id) {
-      console.error('❌ document_id introuvable dans l\'URL');
       Swal.fire({ icon: 'error', title: 'Erreur', text: 'document_id introuvable.' });
       return;
     }
-
-    console.log('✅ document_id valide:', id);
 
     Swal.fire({
       title: 'Génération du PDF...',
@@ -701,31 +690,22 @@ export class EditBonCommandeComponent implements OnInit {
       allowOutsideClick: false
     });
 
-    console.log('📡 Appel du service telechargerPDF avec id:', +id);
     this.achatsService.telechargerPDF(+id).subscribe({
       next: (blob: Blob) => {
-        console.log('✅ PDF généré avec succès, taille du blob:', blob.size, 'bytes');
-        console.log('📎 Type du blob:', blob.type);
 
         Swal.close();
 
         // Créer un URL pour le blob et l'ouvrir dans un nouvel onglet
         const url = window.URL.createObjectURL(blob);
-        console.log('🔗 URL créée pour le blob:', url);
 
         window.open(url, '_blank');
 
         // Libérer l'URL après un délai
         setTimeout(() => {
           window.URL.revokeObjectURL(url);
-          console.log('🧹 URL du blob libérée');
         }, 10000);
       },
       error: (err) => {
-        console.error('❌ Erreur lors du téléchargement du PDF:', err);
-        console.error('❌ Détails de l\'erreur:', err.error);
-        console.error('❌ Statut HTTP:', err.status);
-        console.error('❌ Message d\'erreur:', err.message);
 
         Swal.fire({
           icon: 'error',

@@ -265,7 +265,6 @@ export class EditReceptionComponent implements OnInit {
     });
   }
 
-
   recalculateTotal(index: number) {
     const prod = this.produits[index];
     const base = prod.pu * prod.qte;
@@ -457,7 +456,6 @@ export class EditReceptionComponent implements OnInit {
     this.produits[index].taxe = (article.taxe ?? 0.2);
     this.recalculateTotal(index);
   }
-
 
   AllFournisseurs() {
     this.baseService.getFournisseur().subscribe({

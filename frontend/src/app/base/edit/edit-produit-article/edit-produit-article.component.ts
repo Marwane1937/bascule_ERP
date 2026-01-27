@@ -327,5 +327,3 @@ export class EditProduitArticleComponent implements OnInit {
   }
 }
 
-
-

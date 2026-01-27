@@ -319,6 +319,10 @@ class FacturationPdfService {
         const tableBorderRadius = 5;
         const articlesTableHeaderHeight = 20;
         const firstLine = factureData[0];
+        
+        // Compteur de pages pour la numérotation
+        let currentPageNumber = 1;
+        let totalPagesNumber = 1;
 
         // === FONCTION: Dessiner l'en-tête du document (logo, titre, client) ===
         const drawDocumentHeader = (isFirstPage = false) => {
@@ -370,7 +374,7 @@ class FacturationPdfService {
           // Bloc client
           const clientTop = 110;
           const clientBoxWidth = 260;
-          const clientBoxHeight = 60;
+          const clientBoxHeight = 80; // Augmenté pour accommoder ICE
           const clientBoxX = 300;
 
           doc.roundedRect(clientBoxX, clientTop, clientBoxWidth, clientBoxHeight, tableBorderRadius).stroke('#000');
@@ -378,10 +382,11 @@ class FacturationPdfService {
           doc.text(`Client : ${firstLine.client || firstLine.nom_client || ''}`, clientBoxX + 10, clientTop + 10);
           doc.text(`Adresse : ${firstLine.adresse || ''}`, clientBoxX + 10, clientTop + 28);
           doc.text(`${firstLine.ville || ''}`, clientBoxX + 10, clientTop + 46);
+          doc.text(`ICE : ${firstLine.ice || ''}`, clientBoxX + 10, clientTop + 64);
 
           // Tableau d'info (Numéro, Date, BL) - uniquement sur la première page
           if (isFirstPage) {
-            const infoTableY = 210;
+            const infoTableY = 230; // Ajusté pour accommoder le bloc client agrandi (80px au lieu de 60px)
             const infoTableHeaderHeight = 25;
             const infoTableRowHeight = 20;
             const infoTableTotalHeight = infoTableHeaderHeight + infoTableRowHeight;
@@ -404,8 +409,9 @@ class FacturationPdfService {
 
             return infoTableY + infoTableTotalHeight + 10;
           } else {
-            // Pages suivantes : retourner position après l'en-tête client
-            return 180;
+            // Pages suivantes : retourner position après l'en-tête client avec espacement supplémentaire
+            // Ajouter 20px d'espace entre le cadre client et le tableau pour une meilleure lisibilité
+            return 200; // Augmenté de 180 à 200 pour ajouter de l'espace
           }
         };
 
@@ -443,7 +449,7 @@ class FacturationPdfService {
         };
 
         // === FONCTION: Dessiner le pied de page (appelée sur CHAQUE page) ===
-        const drawPageFooter = () => {
+        const drawPageFooter = (pageNum = null) => {
           const footerBgColor = '#E8F4F8';
           const footerPageHeight = 842;
           const bottomMargin = 40;
@@ -472,11 +478,36 @@ class FacturationPdfService {
               });
             }
           }
+          
+          // Numérotation des pages (au centre, directement en haut du pied de page)
+          // Utiliser le numéro de page passé en paramètre et le total pré-calculé
+          const pageNumToDisplay =
+            pageNum !== null && pageNum !== undefined ? pageNum : currentPageNumber;
+          const totalPagesToDisplay =
+            totalPagesNumber && totalPagesNumber > 0 ? totalPagesNumber : currentPageNumber;
+          
+          doc.font('Helvetica').fontSize(8).fillColor('#000000');
+          // Positionner au centre, directement en haut du pied de page (5px au-dessus de la bande bleue)
+          doc.text(
+            `Page ${pageNumToDisplay} / ${totalPagesToDisplay}`,
+            50,
+            footerY - 5,
+            { width: 495, align: 'center' }
+          );
         };
 
         // === DESSINER L'EN-TÊTE DE LA PREMIÈRE PAGE ===
         let y = drawDocumentHeader(true);
         y = drawTableHeader(y);
+        const tableStartY = y; // Position de départ du tableau (après l'en-tête)
+        
+        // Dessiner le footer sur la première page (le total sera mis à jour à la fin)
+        drawPageFooter(1);
+        
+        // === DÉFINIR LA HAUTEUR FIXE DU TABLEAU ===
+        // Le tableau doit occuper une hauteur fixe jusqu'à la limite avant le bloc récapitulatif
+        const maxYBeforeFooter = 550; // Position Y maximale avant le bloc récapitulatif
+        const fixedTableHeight = maxYBeforeFooter - tableStartY; // Hauteur fixe du tableau
 
         // Positions des colonnes (tableau occupe toute la largeur disponible - commence à X=40, largeur totale 525px) - COMME LIVRAISON
         const tableStartX = 40; // Tableau commence à X=40 (marge gauche) - COMME LIVRAISON
@@ -485,7 +516,7 @@ class FacturationPdfService {
         const colRefWidth = 50;
         const colDesignationX = 90; // 40 + 50
         const colDesignationWidth = 280; // Colonne Désignation considérablement élargie - COMME LIVRAISON
-        const colDesignationPadding = 8;
+        const colDesignationPadding = 3;
         const colQteX = 370; // 90 + 280
         const colQteWidth = 45; // Légèrement réduit - COMME LIVRAISON
         const colPUX = 415; // 370 + 45
@@ -495,10 +526,26 @@ class FacturationPdfService {
         const colHTX = 500; // 460 + 35 + 5 (marge)
         const colHTWidth = 50; // Réduit pour tenir dans la page - COMME LIVRAISON
 
+        // === DESSINER D'ABORD LE CONTOUR DU TABLEAU AVEC HAUTEUR FIXE ===
+        // Dessiner le rectangle extérieur du tableau avec la hauteur fixe
+        doc.roundedRect(tableStartX, tableStartY, tableWidth, fixedTableHeight, tableBorderRadius).stroke('#000');
+        // Dessiner les lignes verticales de séparation des colonnes sur toute la hauteur
+        doc.moveTo(90, tableStartY).lineTo(90, tableStartY + fixedTableHeight).stroke('#000');
+        doc.moveTo(370, tableStartY).lineTo(370, tableStartY + fixedTableHeight).stroke('#000');
+        doc.moveTo(415, tableStartY).lineTo(415, tableStartY + fixedTableHeight).stroke('#000');
+        doc.moveTo(460, tableStartY).lineTo(460, tableStartY + fixedTableHeight).stroke('#000');
+        doc.moveTo(500, tableStartY).lineTo(500, tableStartY + fixedTableHeight).stroke('#000');
+
+        // Les lignes gardent leur hauteur naturelle (basée sur le contenu)
+        // Le tableau occupe toute la zone disponible avec une hauteur fixe
+
         doc.font('Helvetica').fillColor('#000').stroke('#000');
         let totalHT = 0, totalTVA = 0, totalTTC = 0, totalReduction = 0;
 
-        // === RENDU DES LIGNES DU TABLEAU AVEC PAGINATION ===
+        // === RENDU DES LIGNES DU TABLEAU DANS L'ESPACE FIXE ===
+        let currentRowY = tableStartY; // Position Y courante pour les lignes
+        let tableStartYCurrent = tableStartY; // Position Y actuelle du début du tableau (peut changer avec pagination)
+        
         if (factureData && factureData.length > 0) {
           factureData.forEach((line, index) => {
           // Traitement de chaque ligne de facture
@@ -587,37 +634,42 @@ class FacturationPdfService {
           doc.fontSize(9).font('Helvetica');
           const textHeight = doc.heightOfString(designationPlain || ' ', { width: effectiveDesignationWidth, align: 'left' });
           const naturalHeight = Math.max(baseRowHeight, Math.ceil(textHeight) + (colDesignationPadding * 2) + 10);
-          const rowHeight = Math.min(maxRowHeight, naturalHeight);
-
-          // === VÉRIFICATION DE SAUT DE PAGE AVANT RENDU ===
-          const currentY = isNaN(y) || y < 0 ? 0 : y;
-          const estimatedNextY = currentY + rowHeight;
-          const pageLimit = 700; // Limite avant d'ajouter une nouvelle page
-
-          if (estimatedNextY > pageLimit && !isNaN(estimatedNextY)) {
-            // Dessiner le pied de page sur la page courante
-            drawPageFooter();
-            // Ajouter une nouvelle page
-            doc.addPage();
-            // Redessiner l'en-tête du document
-            y = drawDocumentHeader(false);
-            // Redessiner l'en-tête du tableau
-            y = drawTableHeader(y);
+          const validRowHeight = Math.min(maxRowHeight, naturalHeight);
+          
+          // CRITIQUE : Vérifier AVANT de rendre la ligne si elle rentre dans l'espace restant du tableau
+          // Si non, créer une nouvelle page AVANT de rendre la ligne
+          const currentY = currentRowY;
+          const estimatedNextY = currentY + validRowHeight;
+          const tableEndY = tableStartYCurrent + fixedTableHeight; // Fin du tableau fixe sur la page actuelle
+          
+          // Vérifier si la ligne dépasse la hauteur fixe du tableau
+          // Si oui, créer une nouvelle page AVANT de rendre cette ligne
+            if (estimatedNextY > tableEndY && !isNaN(estimatedNextY)) {
+              // La ligne va dépasser, créer une nouvelle page AVANT de la rendre
+              doc.addPage();
+              currentPageNumber++;
+              const newY = drawDocumentHeader(false);
+            const newTableStartY = drawTableHeader(newY);
+            // Redessiner le contour du tableau avec hauteur fixe sur la nouvelle page
+            const newFixedTableHeight = maxYBeforeFooter - newTableStartY;
+            doc.roundedRect(tableStartX, newTableStartY, tableWidth, newFixedTableHeight, tableBorderRadius).stroke('#000');
+            doc.moveTo(90, newTableStartY).lineTo(90, newTableStartY + newFixedTableHeight).stroke('#000');
+            doc.moveTo(370, newTableStartY).lineTo(370, newTableStartY + newFixedTableHeight).stroke('#000');
+            doc.moveTo(415, newTableStartY).lineTo(415, newTableStartY + newFixedTableHeight).stroke('#000');
+            doc.moveTo(460, newTableStartY).lineTo(460, newTableStartY + newFixedTableHeight).stroke('#000');
+            doc.moveTo(500, newTableStartY).lineTo(500, newTableStartY + newFixedTableHeight).stroke('#000');
+            // Réinitialiser la position Y pour les lignes
+            currentRowY = newTableStartY;
+            // Mettre à jour tableStartYCurrent pour les vérifications suivantes
+            tableStartYCurrent = newTableStartY;
           }
 
           // === RENDU DE LA LIGNE ===
-          const validY = isNaN(y) || y < 0 ? 0 : y;
-          const centerY = validY + (rowHeight / 2) - 3;
+          const validY = currentRowY;
+          const centerY = validY + (validRowHeight / 2) - 3;
 
-          // Rectangle de la ligne - COMME LIVRAISON
-          doc.roundedRect(tableStartX, validY, tableWidth, rowHeight, tableBorderRadius).stroke('#000');
-
-          // Lignes verticales de séparation des colonnes - COMME LIVRAISON
-          doc.moveTo(90, validY).lineTo(90, validY + rowHeight).stroke('#000'); // Après Réf (40 + 50)
-          doc.moveTo(370, validY).lineTo(370, validY + rowHeight).stroke('#000'); // Après Désignation (90 + 280)
-          doc.moveTo(415, validY).lineTo(415, validY + rowHeight).stroke('#000'); // Après Qté (370 + 45)
-          doc.moveTo(460, validY).lineTo(460, validY + rowHeight).stroke('#000'); // Après P.U. (415 + 45)
-          doc.moveTo(500, validY).lineTo(500, validY + rowHeight).stroke('#000'); // Après R. (460 + 35)
+          // Les lignes verticales sont déjà dessinées dans le contour du tableau fixe
+          // Pas besoin de redessiner les lignes verticales pour chaque ligne
 
           // Contenu de la ligne
           doc.font('Helvetica').fontSize(9).fillColor('#000');
@@ -626,7 +678,7 @@ class FacturationPdfService {
           doc.text(ref, colRefX, centerY, { width: colRefWidth, align: 'center' });
 
           // Désignation (gauche avec padding)
-          renderInlineHtml(doc, line.article_nom || line.article || line.designation || '', colDesignationX + colDesignationPadding, validY + colDesignationPadding, effectiveDesignationWidth, rowHeight - colDesignationPadding * 2);
+          renderInlineHtml(doc, line.article_nom || line.article || line.designation || '', colDesignationX + colDesignationPadding, validY + colDesignationPadding, effectiveDesignationWidth, validRowHeight - colDesignationPadding * 2);
 
           // Qté (centré)
           doc.text(qte.toFixed(2).replace('.', ','), colQteX, centerY, { width: colQteWidth, align: 'center' });
@@ -641,16 +693,19 @@ class FacturationPdfService {
           // HT (centré)
           doc.text(ht.toFixed(2).replace('.', ','), colHTX, centerY, { width: colHTWidth, align: 'center' });
 
-          // Mettre à jour y
-          y = validY + rowHeight;
+          // Mettre à jour currentRowY pour la ligne suivante
+          currentRowY = validY + validRowHeight;
           });
+          
+          // Mettre à jour y pour être à la fin du tableau fixe
+          y = tableStartY + fixedTableHeight;
         } else {
-          doc.text('Aucune ligne de facture disponible.', 60, y + 10);
-          y += 30;
+          // Si aucune ligne, le tableau fixe est déjà dessiné, juste mettre y à la fin
+          y = tableStartY + fixedTableHeight;
         }
 
         // === VÉRIFICATION SAUT DE PAGE AVANT BLOC RÉCAPITULATIF ===
-        const maxYBeforeFooter = 550;
+        // Note: y devrait déjà être à maxYBeforeFooter grâce au tableau fixe
         if (y > maxYBeforeFooter) {
           drawPageFooter();
           doc.addPage();
@@ -721,8 +776,40 @@ class FacturationPdfService {
           y = doc.y + 10;
         }
 
-        // === PIED DE PAGE - Dessiner sur la dernière page ===
-        drawPageFooter();
+        // === PIED DE PAGE - Mettre à jour la numérotation sur toutes les pages ===
+        // Utiliser le compteur de pages comme total (il a été incrémenté à chaque addPage)
+        totalPagesNumber = currentPageNumber;
+        
+        // Mettre à jour le total avec bufferedPageRange si disponible (plus fiable)
+        try {
+          const finalPageRange = doc.bufferedPageRange();
+          if (finalPageRange && typeof finalPageRange.count === 'number' && finalPageRange.count > 0) {
+            totalPagesNumber = finalPageRange.count;
+          }
+        } catch (e) {
+          // Utiliser currentPageNumber comme fallback
+          totalPagesNumber = currentPageNumber;
+        }
+        
+        // Redessiner le footer sur toutes les pages avec la numérotation correcte
+        // Les pages sont indexées à partir de 1 dans PDFKit
+        for (let i = 1; i <= totalPagesNumber; i++) {
+          try {
+            doc.switchToPage(i);
+            drawPageFooter(i);
+          } catch (e) {
+            console.error(`[PDF Facturation] Erreur lors du dessin du footer sur la page ${i}:`, e.message);
+          }
+        }
+        
+        // Retourner à la dernière page
+        if (totalPagesNumber > 0) {
+          try {
+            doc.switchToPage(totalPagesNumber);
+          } catch (e) {
+            // Ignorer l'erreur
+          }
+        }
 
         // Cachet optionnel en bas du PDF (bas-droit)
         const withStamp = !!options.withStamp;
@@ -834,52 +921,76 @@ class FacturationPdfService {
 
         // === FONCTION: Dessiner l'en-tête du document ===
         const drawDocumentHeader = (isFirstPage = false) => {
+          // Charger documentSociete depuis pdfConfigService si non fourni
+          let documentSociete = options.documentSociete;
+          if (!documentSociete) {
+            documentSociete = pdfConfigService.getDocumentSociete();
+          }
+
           // Récupérer la taille du logo depuis la configuration
-          const logoSize = options.documentSociete?.logoSize || { width: 100, height: null };
+          const logoSize = documentSociete?.logoSize || pdfConfigService.getLogoSize() || { width: 100, height: null };
           const imageOptions = { width: logoSize.width };
           if (logoSize.height) {
             imageOptions.height = logoSize.height;
           }
           
-          // Logo - Charger depuis la configuration centralisée
+          // Logo - Charger depuis la configuration centralisée (pdf-config.json)
+          // Priorité : 1) documentSociete.logo (base64), 2) pdfConfigService.getLogoPath(), 3) rien
           let logoDrawn = false;
-          if (options.documentSociete && options.documentSociete.logo) {
+          
+          // Essayer d'abord avec le logo en base64 depuis documentSociete
+          if (documentSociete && documentSociete.logo) {
             try {
-              // Essayer d'abord avec le logo en base64
-              const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
+              const logoBuffer = Buffer.from(documentSociete.logo, 'base64');
               doc.image(logoBuffer, 50, 20, imageOptions);
               logoDrawn = true;
+              console.log('[genererPDFContrat] ✅ Logo chargé depuis documentSociete (base64)');
             } catch (error) {
-              console.warn('[genererPDFContrat] Erreur chargement logo base64, tentative avec chemin:', error.message);
+              console.warn('[genererPDFContrat] ⚠️ Erreur chargement logo base64, tentative avec chemin:', error.message);
             }
+          } else {
+            console.log('[genererPDFContrat] ℹ️ documentSociete.logo est null ou vide, tentative avec chemin');
           }
           
           // Si le logo n'a pas pu être chargé depuis base64, essayer depuis le chemin de configuration
           if (!logoDrawn) {
             try {
               const logoPath = pdfConfigService.getLogoPath();
+              console.log('[genererPDFContrat] 🔍 Chemin logo depuis pdf-config.json:', logoPath);
+              
               if (logoPath && fs.existsSync(logoPath)) {
                 doc.image(logoPath, 50, 20, imageOptions);
                 logoDrawn = true;
+                console.log('[genererPDFContrat] ✅ Logo chargé depuis pdf-config.json:', logoPath);
+              } else {
+                if (logoPath) {
+                  console.warn('[genererPDFContrat] ⚠️ Logo configuré mais fichier introuvable:', logoPath);
+                } else {
+                  console.warn('[genererPDFContrat] ⚠️ Aucun logo configuré dans pdf-config.json');
+                }
               }
             } catch (error) {
-              console.warn('[genererPDFContrat] Erreur chargement logo depuis chemin:', error.message);
+              console.error('[genererPDFContrat] ❌ Erreur chargement logo depuis chemin:', error.message);
             }
           }
           
-          // Fallback : logo par défaut
+          // Ne pas afficher de logo par défaut - si aucun logo n'est configuré, ne rien afficher
           if (!logoDrawn) {
-            const defaultLogoPath = path.join(__dirname, '..', 'public', 'Cactus.png');
-            if (fs.existsSync(defaultLogoPath)) {
-              doc.image(defaultLogoPath, 50, 20, { width: 100 });
-            }
+            console.warn('[genererPDFContrat] ⚠️ Aucun logo disponible, aucun logo ne sera affiché');
           }
 
           // En-tête entreprise - à côté du logo
-          if (options.documentSociete && options.documentSociete.entete) {
-            const entete = options.documentSociete.entete;
-            // Vérifier si c'est un objet JSON ou du texte brut
-            if (typeof entete === 'object' || (typeof entete === 'string' && entete.trim())) {
+          // Ne pas afficher d'en-tête par défaut, uniquement si configuré dans pdf-config.json
+          const entete = documentSociete?.entete || pdfConfigService.getEntete();
+          
+          // Vérifier que l'en-tête existe et n'est pas vide
+          if (entete && entete !== null && entete !== undefined) {
+            // Vérifier si c'est un objet JSON avec du contenu ou du texte brut non vide
+            const hasContent = 
+              (typeof entete === 'object' && Object.keys(entete).length > 0 && (entete.lines || entete.text)) ||
+              (typeof entete === 'string' && entete.trim().length > 0);
+            
+            if (hasContent) {
               renderFormattedText(doc, entete, {
                 startX: 160,
                 startY: 30,
@@ -891,14 +1002,8 @@ class FacturationPdfService {
                 width: 435
               });
             }
-          } else {
-            doc.fontSize(11).fillColor('#bccbaa').font('Helvetica-Bold').text('CACTUS INFORMATIQUE', 160, 30);
-            doc.font('Helvetica').fontSize(10).fillColor('#000')
-              .text('LOTISSEMENT HLIWA RUE 8 N°69', 160, 45)
-              .text('AIN SEBAA 20250 CASABLANCA', 160, 58)
-              .text('TEL : 05 22 34 35 45', 160, 71)
-              .text('FAX : 05 22 67 38 09', 160, 84)
           }
+          // Si pas d'en-tête configuré, ne rien afficher (pas d'en-tête par défaut)
 
           // Ligne de séparation
           doc.rect(40, 100, 520, 1).fill('#000');
@@ -1030,8 +1135,14 @@ class FacturationPdfService {
           doc.rect(0, footerY, 595, footerHeight).fill(footerBgColor);
           doc.restore();
 
-          if (options.documentSociete && options.documentSociete.pied_page) {
-            const piedPage = options.documentSociete.pied_page;
+          // Charger documentSociete depuis pdfConfigService si non fourni
+          let documentSociete = options.documentSociete;
+          if (!documentSociete) {
+            documentSociete = pdfConfigService.getDocumentSociete();
+          }
+
+          const piedPage = documentSociete?.pied_page || pdfConfigService.getPiedPage();
+          if (piedPage) {
             // Vérifier si c'est un objet JSON ou du texte brut
             if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
               renderFormattedText(doc, piedPage, {
@@ -1125,8 +1236,8 @@ class FacturationPdfService {
             const estimatedNextY = y + rowHeight;
 
             if (estimatedNextY > pageLimit && !isNaN(estimatedNextY)) {
-              drawPageFooter();
               doc.addPage();
+              currentPageNumber++;
               y = drawDocumentHeader(false);
               y = drawTableHeader(y);
             }
@@ -1180,8 +1291,8 @@ class FacturationPdfService {
         // === VÉRIFICATION SAUT DE PAGE AVANT BLOC RÉCAPITULATIF ===
         const maxYBeforeFooter = 550;
         if (y > maxYBeforeFooter) {
-          drawPageFooter();
           doc.addPage();
+          currentPageNumber++;
           y = drawDocumentHeader(false);
         }
 
@@ -1233,8 +1344,40 @@ class FacturationPdfService {
           y = doc.y + 10;
         }
 
-        // === PIED DE PAGE ===
-        drawPageFooter();
+        // === PIED DE PAGE - Mettre à jour la numérotation sur toutes les pages ===
+        // Utiliser le compteur de pages comme total (il a été incrémenté à chaque addPage)
+        totalPagesNumber = currentPageNumber;
+        
+        // Mettre à jour le total avec bufferedPageRange si disponible (plus fiable)
+        try {
+          const finalPageRange = doc.bufferedPageRange();
+          if (finalPageRange && typeof finalPageRange.count === 'number' && finalPageRange.count > 0) {
+            totalPagesNumber = finalPageRange.count;
+          }
+        } catch (e) {
+          // Utiliser currentPageNumber comme fallback
+          totalPagesNumber = currentPageNumber;
+        }
+        
+        // Redessiner le footer sur toutes les pages avec la numérotation correcte
+        // Les pages sont indexées à partir de 1 dans PDFKit
+        for (let i = 1; i <= totalPagesNumber; i++) {
+          try {
+            doc.switchToPage(i);
+            drawPageFooter(i);
+          } catch (e) {
+            console.error(`[PDF Facturation] Erreur lors du dessin du footer sur la page ${i}:`, e.message);
+          }
+        }
+        
+        // Retourner à la dernière page
+        if (totalPagesNumber > 0) {
+          try {
+            doc.switchToPage(totalPagesNumber);
+          } catch (e) {
+            // Ignorer l'erreur
+          }
+        }
 
         const withStamp = !!options.withStamp;
         if (withStamp) {

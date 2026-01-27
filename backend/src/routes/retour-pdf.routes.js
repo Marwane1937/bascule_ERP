@@ -13,14 +13,82 @@ const fs = require('fs');
  * Ce service est séparé pour éviter toute confusion
  */
 
-// Toutes les routes nécessitent une authentification
-// Les routes sont déjà protégées par authenticateToken dans app.js
-
 // Middleware pour injecter la connexion appropriée
 router.use(databaseInjector.injectConnection.bind(databaseInjector));
 
-// Générer un PDF de retour
-router.post('/generate', async (req, res) => {
+// Route GET publique pour servir les PDFs depuis le cache mémoire ou le disque
+// Cette route est publique car elle est appelée via window.open() qui n'envoie pas les headers d'authentification
+router.get('/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    
+    console.log(`[RetourPDF] 🔍 Requête GET pour: ${filename}`);
+    
+    // Valider le nom de fichier (sécurité)
+    if (!filename || !filename.endsWith('.pdf') || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      console.log(`[RetourPDF] ❌ Nom de fichier invalide: ${filename}`);
+      return res.status(400).json({ success: false, message: 'Nom de fichier invalide' });
+    }
+    
+    const cacheKey = `retours/${filename}`;
+    
+    // Vérifier le cache mémoire
+    if (global.pdfCache && global.pdfCache.has(cacheKey)) {
+      const cached = global.pdfCache.get(cacheKey);
+      // Vérifier que le cache n'est pas trop vieux (1 heure)
+      if (Date.now() - cached.timestamp < 60 * 60 * 1000) {
+        console.log(`[RetourPDF] ✅ PDF trouvé dans le cache: ${cacheKey}`);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+        res.setHeader('Content-Length', cached.buffer.length);
+        return res.send(cached.buffer);
+      } else {
+        console.log(`[RetourPDF] ⏰ Cache expiré pour: ${cacheKey}`);
+        // Supprimer du cache si trop vieux
+        global.pdfCache.delete(cacheKey);
+      }
+    }
+    
+    // Si pas dans le cache, vérifier si le fichier existe sur disque
+    const publicPath = path.join(__dirname, '..', 'public', 'retours', filename);
+    console.log(`[RetourPDF] 🔍 Vérification fichier sur disque: ${publicPath}`);
+    
+    if (fs.existsSync(publicPath)) {
+      // Vérifier l'âge du fichier (ne pas servir les fichiers de plus de 1 heure)
+      const stats = fs.statSync(publicPath);
+      const fileAge = Date.now() - stats.mtime.getTime();
+      
+      if (fileAge < 60 * 60 * 1000) {
+        console.log(`[RetourPDF] ✅ Envoi du PDF depuis le disque: ${publicPath}`);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+        return res.sendFile(publicPath);
+      } else {
+        console.log(`[RetourPDF] ⏰ Fichier trop vieux, suppression: ${publicPath}`);
+        // Supprimer le fichier s'il est trop vieux
+        try {
+          fs.unlinkSync(publicPath);
+          console.log(`🗑️ Fichier PDF supprimé (trop vieux): ${publicPath}`);
+        } catch (unlinkError) {
+          console.error('Erreur suppression fichier PDF:', unlinkError);
+        }
+      }
+    } else {
+      console.log(`[RetourPDF] ❌ Fichier non trouvé: ${publicPath}`);
+    }
+    
+    // Si le fichier n'existe pas, retourner 404
+    console.log(`[RetourPDF] ❌ PDF introuvable: ${cacheKey}`);
+    return res.status(404).json({ success: false, message: 'PDF introuvable' });
+  } catch (error) {
+    console.error('[RetourPDF] ❌ Erreur service PDF :', error);
+    console.error('[RetourPDF] ❌ Stack:', error.stack);
+    return res.status(500).json({ success: false, message: 'Erreur service PDF', error: error.message });
+  }
+});
+
+// Générer un PDF de retour (route protégée)
+router.post('/generate', authenticateToken, async (req, res) => {
   try {
     const { document_id, withStamp } = req.body;
     console.log(`[RetourPDF] 📥 Requête génération PDF pour document_id: ${document_id}`);
@@ -90,8 +158,8 @@ router.post('/generate', async (req, res) => {
   }
 });
 
-// Envoi du PDF de retour en pièce jointe via WhatsApp Cloud API
-router.post('/send-whatsapp', async (req, res) => {
+// Envoi du PDF de retour en pièce jointe via WhatsApp Cloud API (route protégée)
+router.post('/send-whatsapp', authenticateToken, async (req, res) => {
   try {
     const { document_id, phone, message } = req.body;
 

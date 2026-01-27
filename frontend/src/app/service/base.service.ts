@@ -343,4 +343,51 @@ export class BaseService {
     return this.http.delete(url);
   }
 
+  // === Conditions de paiement ===
+  getConditionsPaiement(): Observable<any> {
+    const url = `${this.apiUrl}/clients/conditions-paiement`;
+    return this.http.get(url);
+  }
+
+  getPartenaireConditions(part_id: string | number): Observable<any> {
+    const url = `${this.apiUrl}/clients/${part_id}/conditions`;
+    return this.http.get(url);
+  }
+
+  createPartenaireCondition(part_id: string | number, condition_id: number): Observable<any> {
+    const url = `${this.apiUrl}/clients/${part_id}/conditions`;
+    return this.http.post(url, { condition_id }, { headers: this.httpHeaders });
+  }
+
+  updatePartenaireCondition(part_id: string | number, condition_id_pk: number, condition_id: number): Observable<any> {
+    const url = `${this.apiUrl}/clients/${part_id}/conditions/${condition_id_pk}`;
+    return this.http.put(url, { condition_id }, { headers: this.httpHeaders });
+  }
+
+  deletePartenaireConditions(ids: number[]): Observable<any> {
+    const url = `${this.apiUrl}/clients/conditions/delete`;
+    return this.http.post(url, { ids }, { headers: this.httpHeaders });
+  }
+
+  /**
+   * Récupère l'URL du logo depuis pdf-config.json
+   * @returns Observable<Blob> Le logo en tant que blob
+   */
+  getLogo(): Observable<Blob> {
+    // Pour les images, ne pas utiliser httpHeaders qui contient Content-Type: application/json
+    // L'interceptor ajoutera automatiquement le token d'authentification
+    return this.http.get(`${this.apiUrl}/pdf/logo`, {
+      responseType: 'blob'
+    });
+  }
+
+  /**
+   * Récupère l'URL du logo depuis pdf-config.json (méthode obsolète, utiliser getLogo())
+   * @returns string URL du logo
+   * @deprecated Utiliser getLogo() à la place
+   */
+  getLogoUrl(): string {
+    return `${this.apiUrl}/pdf/logo`;
+  }
+
 }  

@@ -23,7 +23,6 @@ export class ChequeListComponent implements OnInit {
         this.loading = false;
       },
       error: (err: any) => {
-        console.error('Error loading reglements', err);
         this.loading = false;
       }
     });

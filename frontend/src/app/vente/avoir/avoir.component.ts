@@ -42,9 +42,42 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
   filterDateFromAvoirs: string = '';
   filterDateToAvoirs: string = '';
   filterClientAvoirs: string = '';
-
+  
+  // Affichage de la ligne de filtres
+  showFilterRow: boolean = false;
+  
   // Liste des clients pour le filtre
   clientsListAvoirs: string[] = [];
+
+  // Filtres par colonne (style Excel) pour les avoirs
+  columnFilters: any = {
+    facture_num: '',
+    facture_dat: '',
+    nom: '',
+    type: '',
+    facture_ht: '',
+    facture_tva: '',
+    facture_ttc: ''
+  };
+
+  allAvoirs: any[] = []; // Stocker tous les avoirs pour le filtrage
+
+  // Gestion des colonnes (affichage/masquage, épinglage, etc.)
+  columnVisibility: any = {
+    facture_num: true,
+    facture_dat: true,
+    nom: true,
+    type: true,
+    facture_ht: true,
+    facture_tva: true,
+    facture_ttc: true
+  };
+
+  pinnedColumns: string[] = [];
+  columnWidths: any = {};
+  showColumnMenu: boolean = false;
+  activeColumnMenu: string = '';
+  menuPosition: any = { x: 0, y: 0 };
 
   // Pour avoir financier
   facturesDisponibles: any[] = [];
@@ -111,6 +144,16 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
+    // Ajouter un listener pour fermer le menu contextuel quand on clique ailleurs
+    document.addEventListener('click', (event) => {
+      if (this.showColumnMenu) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.column-context-menu') && !target.closest('.column-menu-btn')) {
+          this.hideColumnContextMenu();
+        }
+      }
+    });
+
     this.cdr.detectChanges();
   }
 
@@ -152,23 +195,26 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
         const pagination = response.pagination || {};
 
         // Les données sont déjà filtrées et paginées par le serveur
-        this.avoirs = Array.isArray(result) ? result : [];
+        const avoirsData = Array.isArray(result) ? result : [];
+        this.avoirs = avoirsData;
+        this.allAvoirs = [...avoirsData]; // Stocker une copie pour les filtres locaux
         this.totalRecordsAvoirs = pagination.total || 0;
         this.totalPagesAvoirs = pagination.totalPages || 1;
 
-        console.log(`[AvoirComponent] Page ${page}/${this.totalPagesAvoirs}, ${this.avoirs.length} avoirs chargés sur ${this.totalRecordsAvoirs} total`);
-
         // Extraire la liste des clients uniques pour le filtre (depuis la page actuelle uniquement)
         this.extractClientsListAvoirs(this.avoirs);
+
+        // Appliquer les filtres de colonne s'ils existent
+        this.applyColumnFilters();
 
         this.loadingAvoirs = false;
         this.cdr.detectChanges();
       },
       error: (err) => {
-        console.error('[AvoirComponent] ❌ Erreur lors du chargement des avoirs:', err);
         this.showError("❌ Une erreur s'est produite lors du chargement des avoirs.");
         this.loadingAvoirs = false;
         this.avoirs = [];
+        this.allAvoirs = [];
         this.cdr.detectChanges();
       }
     });
@@ -235,7 +281,6 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
         this.nextAvoirNumero = response.numero || 'AV25-0001';
       },
       error: (err) => {
-        console.error('Erreur chargement numéro avoir:', err);
       }
     });
   }
@@ -269,7 +314,6 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
         this.facturesDisponibles = response.data || (Array.isArray(response) ? response : []);
       },
       error: (err) => {
-        console.error('Erreur chargement factures:', err);
         this.facturesDisponibles = [];
       }
     });
@@ -282,7 +326,6 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
         this.retoursDisponibles = response.data || (Array.isArray(response) ? response : []);
       },
       error: (err) => {
-        console.error('Erreur chargement retours:', err);
         this.retoursDisponibles = [];
       }
     });
@@ -305,7 +348,6 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
           this.selectedClientId = clientId;
 
           if (!clientId) {
-            console.warn('[selectFacture] ⚠️ part_id non trouvé pour la facture:', facture.facture_id);
           }
 
           // Récupérer les montants depuis v_facture_montant
@@ -324,7 +366,6 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
 
             },
             error: (err) => {
-              console.error('Erreur récupération montants facture:', err);
               // Fallback sur les données de la facture si v_facture_montant échoue
               this.AvoirForm.patchValue({
                 facture_id: facture.facture_id,
@@ -335,13 +376,11 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
               });
 
               if (!clientId) {
-                console.warn('[selectFacture] ⚠️ part_id toujours non défini après fallback');
               }
             }
           });
         },
         error: (err) => {
-          console.error('Erreur récupération détails facture:', err);
           // Essayer de récupérer le part_id depuis la liste des factures disponibles
           const clientIdFromList = facture.part_id || null;
 
@@ -362,11 +401,9 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
               if (clientIdFromList) {
                 this.selectedClientId = clientIdFromList;
               } else {
-                console.warn('[selectFacture] ⚠️ part_id non disponible dans la liste des factures');
               }
             },
             error: (err2) => {
-              console.error('Erreur récupération montants facture:', err2);
               // Utiliser les données de la facture si disponibles
               this.AvoirForm.patchValue({
                 facture_id: facture.facture_id,
@@ -379,7 +416,6 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
               if (clientIdFromList) {
                 this.selectedClientId = clientIdFromList;
               } else {
-                console.error('[selectFacture] ❌ Impossible de récupérer le part_id');
               }
             }
           });
@@ -454,7 +490,6 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
           this.loadNextAvoirNumero();
         },
         error: (err) => {
-          console.error('Erreur création avoir:', err);
           this.showError(`❌ Une erreur s'est produite lors de la création de l'avoir: ${err.error?.message || err.message || 'Erreur inconnue'}`);
         }
       });
@@ -496,7 +531,6 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
             });
           },
           error: (err: any) => {
-            console.error('Erreur suppression avoir:', err);
             Swal.fire({
               icon: 'error',
               title: 'Erreur',
@@ -527,7 +561,6 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
       },
       error: (err) => {
         this.loadingAvoirs = false;
-        console.error('Erreur impression avoir:', err);
         this.showError("❌ Une erreur s'est produite lors de la génération du PDF.");
       }
     });
@@ -657,6 +690,147 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
     setTimeout(() => {
       this.successMessage = null;
     }, 5000);
+  }
+
+  // ===== FILTRES PAR COLONNE (STYLE EXCEL) =====
+  onColumnFilterChange(column: string, value: string): void {
+    this.columnFilters[column] = value;
+    this.applyColumnFilters();
+  }
+
+  applyColumnFilters(): void {
+    this.avoirs = this.allAvoirs.filter(item => {
+      return Object.keys(this.columnFilters).every(key => {
+        const filterValue = this.columnFilters[key];
+        if (!filterValue) return true;
+        
+        const itemValue = item[key];
+        if (itemValue === null || itemValue === undefined) return false;
+        
+        return itemValue.toString().toLowerCase().includes(filterValue.toLowerCase());
+      });
+    });
+    
+    this.totalRecordsAvoirs = this.avoirs.length;
+    this.cdr.detectChanges();
+  }
+
+  clearColumnFilters(): void {
+    this.columnFilters = {
+      facture_num: '',
+      facture_dat: '',
+      nom: '',
+      type: '',
+      facture_ht: '',
+      facture_tva: '',
+      facture_ttc: ''
+    };
+    this.applyColumnFilters();
+  }
+
+  // ===== GESTION DU MENU CONTEXTUEL DES COLONNES =====
+  showColumnContextMenu(event: MouseEvent, column: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.activeColumnMenu = column;
+    this.menuPosition = {
+      x: event.clientX,
+      y: event.clientY
+    };
+    this.showColumnMenu = true;
+    this.cdr.detectChanges();
+  }
+
+  hideColumnContextMenu(): void {
+    this.showColumnMenu = false;
+    this.activeColumnMenu = '';
+    this.cdr.detectChanges();
+  }
+
+  toggleColumnVisibility(column: string): void {
+    this.columnVisibility[column] = !this.columnVisibility[column];
+    this.hideColumnContextMenu();
+  }
+
+  togglePinColumn(column: string): void {
+    const index = this.pinnedColumns.indexOf(column);
+    if (index > -1) {
+      this.pinnedColumns.splice(index, 1);
+    } else {
+      this.pinnedColumns.push(column);
+    }
+    this.hideColumnContextMenu();
+  }
+
+  isColumnPinned(column: string): boolean {
+    return this.pinnedColumns.includes(column);
+  }
+
+  autoSizeColumn(column: string): void {
+    this.columnWidths[column] = 'auto';
+    this.hideColumnContextMenu();
+  }
+
+  autoSizeAllColumns(): void {
+    Object.keys(this.columnVisibility).forEach(column => {
+      this.columnWidths[column] = 'auto';
+    });
+    this.hideColumnContextMenu();
+  }
+
+  resetColumns(): void {
+    this.columnVisibility = {
+      facture_num: true,
+      facture_dat: true,
+      nom: true,
+      type: true,
+      facture_ht: true,
+      facture_tva: true,
+      facture_ttc: true
+    };
+    this.pinnedColumns = [];
+    this.columnWidths = {};
+    this.hideColumnContextMenu();
+  }
+
+  getColumnIndex(column: string): number {
+    const columns = Object.keys(this.columnVisibility);
+    return columns.indexOf(column);
+  }
+
+  getColumnDisplayName(column: string): string {
+    const names: any = {
+      facture_num: 'Numéro',
+      facture_dat: 'Date',
+      nom: 'Client',
+      type: 'Type',
+      facture_ht: 'Total HT',
+      facture_tva: 'Total TVA',
+      facture_ttc: 'Total TTC'
+    };
+    return names[column] || column;
+  }
+
+  getAllColumns(): string[] {
+    return Object.keys(this.columnVisibility);
+  }
+
+  showAllColumns(): void {
+    Object.keys(this.columnVisibility).forEach(key => {
+      this.columnVisibility[key] = true;
+    });
+    this.hideColumnContextMenu();
+  }
+
+  // Helper pour compter les colonnes visibles
+  getVisibleColumnsCount(): number {
+    return Object.keys(this.columnVisibility).filter(key => this.columnVisibility[key]).length;
+  }
+
+  // Helper pour afficher le menu contextuel avec stopPropagation
+  openColumnMenu(event: MouseEvent, column: string): void {
+    event.stopPropagation();
+    this.showColumnContextMenu(event, column);
   }
 }
 

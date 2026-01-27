@@ -76,8 +76,6 @@ export class EditEntreeStockComponent implements OnInit {
     transporteur: 'Inconnu'
   };
 
-
-
   conditions: string[] = [
     '30 jours',
     '60 jours',
@@ -97,7 +95,6 @@ export class EditEntreeStockComponent implements OnInit {
     'DHL', 'FedEx', 'GLS', 'Jumia Logistics', 'La Voie Express', 'Maroc Express',
     'Mondial Relay', 'TNT', 'UPS', 'Yamato Transport'
   ].sort();
-
 
   fraisPort = 0;
   sousTotal = 0;
@@ -520,11 +517,6 @@ export class EditEntreeStockComponent implements OnInit {
     });
   }
 
-
-
-
-
-
   toggleEdit(): void {
     const document_id = +this.route.snapshot.paramMap.get('document_id')!;
     this.editInfos = !this.editInfos;
@@ -545,9 +537,6 @@ export class EditEntreeStockComponent implements OnInit {
       });
     }
   }
-
-
-
 
   AllProduits(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -574,7 +563,6 @@ export class EditEntreeStockComponent implements OnInit {
       });
     });
   }
-
 
   configureQuillModules() {
     this.modules = {
@@ -669,7 +657,6 @@ export class EditEntreeStockComponent implements OnInit {
     this.calculerTotaux();
   }
 
-
   calculerTotaux() {
     this.sousTotal = this.produits.reduce((acc, p) => acc + p.pu * p.qte, 0);
 
@@ -694,7 +681,6 @@ export class EditEntreeStockComponent implements OnInit {
       const tva = taux * baseApresReduc;
       return acc + tva;
     }, 0);
-
 
     this.totalGeneral = baseApresReduc + this.taxeTotal + this.fraisPort;
   }
@@ -727,14 +713,10 @@ export class EditEntreeStockComponent implements OnInit {
     });
   }
 
-
-
-
   toggleReducMode() {
     this.reducMode = this.reducMode === 'pourcentage' ? 'montant' : 'pourcentage';
     this.produits.forEach((_, i) => this.recalculateTotal(i));
   }
-
 
   addProduit() {
     this.produits.push({
@@ -777,7 +759,6 @@ export class EditEntreeStockComponent implements OnInit {
     // Recalculer les totaux
     this.calculerTotaux();
   }
-
 
   onProduitSelected(index: number) {
     const articleId = this.produits[index].article_id;
@@ -1000,9 +981,6 @@ export class EditEntreeStockComponent implements OnInit {
     });
   }
 
-
-
-
   showNotification(message: string, isError: boolean = false) {
     this.successMessage = message;
     this.isError = isError;
@@ -1026,7 +1004,6 @@ export class EditEntreeStockComponent implements OnInit {
       ...this.emailForm.value,
       document_id: +this.route.snapshot.paramMap.get('document_id')!
     };
-
 
     // Affiche le spinner
     Swal.fire({

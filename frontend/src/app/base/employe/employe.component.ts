@@ -120,10 +120,6 @@ export class EmployeComponent implements OnInit, AfterViewInit {
           });
         },
         error: (error) => {
-          console.error('[EmployeComponent] Erreur complète:', error);
-          console.error('[EmployeComponent] Status:', error.status);
-          console.error('[EmployeComponent] StatusText:', error.statusText);
-          console.error('[EmployeComponent] Error body:', error.error);
           const errorMessage = error.error?.message || error.message || 'Erreur lors de l\'ajout de l\'employé';
           Swal.fire('Erreur', errorMessage, 'error');
         }
@@ -211,7 +207,6 @@ export class EmployeComponent implements OnInit, AfterViewInit {
           });
         },
         error: (error) => {
-          console.error('[EmployeComponent] Erreur complète:', error);
           const errorMessage = error.error?.message || error.message || 'Erreur lors de la modification de l\'employé';
           Swal.fire('Erreur', errorMessage, 'error');
         }
@@ -280,7 +275,6 @@ export class EmployeComponent implements OnInit, AfterViewInit {
             });
           },
           error: (error) => {
-            console.error('[EmployeComponent] Erreur lors de l\'archivage:', error);
             const errorMessage = error.error?.message || error.message || 'Erreur lors de l\'archivage de l\'employé';
             Swal.fire('Erreur', errorMessage, 'error');
           }

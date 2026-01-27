@@ -52,7 +52,6 @@ export class EditFournisseurComponent implements OnInit, AfterViewInit {
         this.cdr.detectChanges();
       },
       error: (err: any) => {
-        console.error('[EditFournisseurComponent] ❌ Erreur chargement fournisseur:', err);
         this.showError('❌ Erreur lors du chargement du fournisseur.');
       }
     });
@@ -80,7 +79,6 @@ export class EditFournisseurComponent implements OnInit, AfterViewInit {
         this.showSuccess('Fournisseur mis à jour avec succès.');
       },
       error: (err: any) => {
-        console.error('[EditFournisseurComponent] ❌ Erreur update fournisseur:', err);
         this.showError(err?.error?.message || 'Erreur lors de la mise à jour du fournisseur.');
       }
     });
@@ -92,7 +90,6 @@ export class EditFournisseurComponent implements OnInit, AfterViewInit {
     this.baseService.getVille().subscribe((response: any) => {
       this.villes = response?.data || (Array.isArray(response) ? response : []);
     }, err => {
-      console.error('[EditFournisseurComponent] Erreur chargement villes:', err);
       this.villes = [];
     });
   }
@@ -101,7 +98,6 @@ export class EditFournisseurComponent implements OnInit, AfterViewInit {
     this.baseService.getCommercial().subscribe((response: any) => {
       this.comerciaux = response?.data || (Array.isArray(response) ? response : []);
     }, err => {
-      console.error('[EditFournisseurComponent] Erreur chargement commerciaux:', err);
       this.comerciaux = [];
     });
   }
@@ -110,7 +106,6 @@ export class EditFournisseurComponent implements OnInit, AfterViewInit {
     this.baseService.getIdentifiants().subscribe((response: any) => {
       this.identifs = response?.data || (Array.isArray(response) ? response : []);
     }, err => {
-      console.error('[EditFournisseurComponent] Erreur chargement identifiants:', err);
       this.identifs = [];
     });
   }
@@ -131,7 +126,6 @@ export class EditFournisseurComponent implements OnInit, AfterViewInit {
         }, 100);
       },
       error: (err: any) => {
-        console.error('[EditFournisseurComponent] ❌ Erreur chargement complément fournisseur:', err);
         this.adresses = [];
         this.contacts = [];
         this.identifiants = [];
@@ -240,12 +234,10 @@ onSaveAdresse(): void {
       };
     },
     error: (err) => {
-      console.error('❌ Erreur:', err);
       this.showError(isEdit ? 'Erreur lors de la modification' : 'Erreur lors de l\'ajout de l\'adresse');
     }
   });
 }
-
 
   // ✅ CONTACT
 onAddContact() {
@@ -333,12 +325,10 @@ onSaveContact(): void {
       };
     },
     error: (err) => {
-      console.error('❌ Erreur:', err);
       this.showError(isEdit ? 'Erreur lors de la modification' : 'Erreur lors de l\'ajout du contact');
     }
   });
 }
-
 
 getNextLigne(): number {
   if (!this.contacts || this.contacts.length === 0) return 1;
@@ -390,12 +380,10 @@ onSaveIdentifiant(): void {
       this.selectedIdentifiant = { identifiant: '', identifiant_type: null };
     },
     error: (err) => {
-      console.error('❌ Erreur:', err);
       this.showError(isEdit ? 'Erreur lors de la modification de l\'identifiant' : 'Erreur lors de l\'ajout de l\'identifiant');
     }
   });
 }
-
 
   // ✅ Alertes
   showSuccess(message: string) {
@@ -423,7 +411,6 @@ onSaveIdentifiant(): void {
       buttonsStyling: false
     });
   }
-
 
 onCheckboxChange(row: any): void {
   if (row.checked) {
@@ -458,7 +445,6 @@ onDeleteIdentifiants(): void {
       this.getClientDetails(this.part_id);
     },
     error: err => {
-      console.error('❌ Erreur suppression', err);
       this.showError(err?.error?.message || '❌ Erreur suppression identifiants');
     }
   });
@@ -497,7 +483,6 @@ onDeleteAdresses(): void {
       this.showSuccess('Les adresses sélectionnées ont été supprimées avec succès ');
     },
     error: err => {
-      console.error('❌ Erreur suppression adresses', err);
     }
   });
 }
@@ -536,7 +521,6 @@ onDeleteContacts(): void {
       this.showSuccess('Les contacts sélectionnés ont été supprimés avec succès');
     },
     error: err => {
-      console.error('❌ Erreur suppression contacts', err);
     }
   });
 }
@@ -621,7 +605,6 @@ onEditIdentifiant(identifiant: any): void {
       // @ts-ignore
       $el.DataTable(options);
     } catch (e) {
-      console.warn('[EditFournisseurComponent] DataTable init skipped/error for', selector, e);
     }
   }
 }

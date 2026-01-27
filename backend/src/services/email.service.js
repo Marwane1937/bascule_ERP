@@ -366,6 +366,9 @@ class EmailService {
         }
 
         // Détecter le type de document
+        // Si forceDocumentType est fourni dans les options, l'utiliser (pour forcer DEVIS depuis l'interface des devis)
+        const forceDocumentType = options.forceDocumentType ? options.forceDocumentType.toString().toUpperCase().trim() : null;
+        
         const documentType = devisData[0]?.type;
         const documentKind = devisData[0]?.document_kind;
 
@@ -374,9 +377,51 @@ class EmailService {
         let headerLabel = 'Devis N°';
 
         // 1. Vérifier si c'est un RETOUR CLIENT
-        const isRetour = documentKind === 'RETOUR CLIENT' || documentType === 5;
-        const isLivraison = documentKind === 'LIVRAISON' || documentType === 2;
-        const isDevis = !isRetour && !isLivraison;
+        // IMPORTANT: Si forceDocumentType est fourni, l'utiliser en priorité
+        // Sinon, vérifier d'abord documentKind (string) puis documentType (number) comme fallback
+        // documentType peut être 1=DEVIS, 2=LIVRAISON, 3=COMMANDE, 4=FACTURE, 5=RETOUR
+        // Mais documentKind est plus fiable car il vient directement de la base de données
+        // Définir documentKindUpper avant le bloc conditionnel pour le log
+        const documentKindUpper = documentKind ? documentKind.toString().toUpperCase().trim() : '';
+        
+        let isRetour = false;
+        let isLivraison = false;
+        let isDevis = true;
+        
+        if (forceDocumentType) {
+          // Forcer le type de document selon l'option fournie
+          if (forceDocumentType === 'DEVIS') {
+            isDevis = true;
+            isRetour = false;
+            isLivraison = false;
+          } else if (forceDocumentType === 'LIVRAISON' || forceDocumentType === 'BON DE LIVRAISON') {
+            isLivraison = true;
+            isDevis = false;
+            isRetour = false;
+          } else if (forceDocumentType === 'RETOUR' || forceDocumentType === 'RETOUR CLIENT' || forceDocumentType === 'BON DE RETOUR') {
+            isRetour = true;
+            isDevis = false;
+            isLivraison = false;
+          }
+        } else {
+          // Détection automatique (comportement par défaut)
+          isRetour = documentKindUpper === 'RETOUR CLIENT' || (!documentKind && documentType === 5);
+          isLivraison = documentKindUpper === 'LIVRAISON' || (!documentKind && documentType === 2);
+          isDevis = !isRetour && !isLivraison;
+        }
+        
+        // Log pour diagnostiquer le problème de détection (après initialisation de documentTitle)
+        console.log(`[PDF] Détection type document:`, {
+          documentType,
+          documentKind,
+          documentKindUpper,
+          forceDocumentType,
+          type: typeof documentType,
+          kind: typeof documentKind,
+          isRetour,
+          isLivraison,
+          isDevis
+        });
 
         if (isRetour) {
           saveDir = path.join(__dirname, '..', 'public', 'retours');
@@ -440,6 +485,10 @@ class EmailService {
         const articlesTableHeaderHeight = 20;
         const maxYBeforeNewPage = 700; // Position Y maximale avant de passer à une nouvelle page
         const pageHeight = 842; // Hauteur A4 en points
+        
+        // Compteur de pages pour la numérotation
+        let currentPageNumber = 1;
+        let totalPagesNumber = 1;
 
         // === FONCTION: Dessiner l'en-tête du document (logo, titre, client) ===
         const drawDocumentHeader = (isFirstPage = false) => {
@@ -496,8 +545,8 @@ class EmailService {
 
           doc.roundedRect(clientBoxX, clientTop, clientBoxWidth, clientBoxHeight, tableBorderRadius).stroke('#000');
           doc.fontSize(10).font('Helvetica').fillColor('#000');
-          doc.text(`Client : ${devisData[0].client}`, clientBoxX + 10, clientTop + 10);
-          doc.text(`Adresse : ${devisData[0].adresse || ''}`, clientBoxX + 10, clientTop + 28);
+          doc.text(`Client : ${devisData[0].client}`, clientBoxX + 10, clientTop + 10 ,{width: clientBoxWidth - 50, lineBreak: false , ellipsis: true});
+          doc.text(`Adresse : ${devisData[0].adresse || ''}`, clientBoxX + 10, clientTop + 35);
           doc.text(`${devisData[0].ville || ''}`, clientBoxX + 10, clientTop + 46);
 
           // Tableau d'info (Numéro, Date, Réf) - uniquement sur la première page
@@ -541,10 +590,10 @@ class EmailService {
 
           // Colonnes EXACTEMENT COMME FACTURE CONTRAT
           const colRefX = 40;
-          const colRefWidth = 50;
-          const colDesignationX = 90; // 40 + 50
-          const colDesignationWidth = 280; // Colonne Désignation considérablement élargie
-          const colQteX = 370; // 90 + 280
+          const colRefWidth = 70; // Agrandi de 50 à 70
+          const colDesignationX = 110; // 40 + 70
+          const colDesignationWidth = 260; // Réduit de 280 à 260 pour compenser l'agrandissement de Réf
+          const colQteX = 370; // 110 + 260
           const colQteWidth = 45; // Légèrement réduit
           const colPUX = 415; // 370 + 45
           const colPUWidth = 45; // Légèrement réduit
@@ -564,7 +613,7 @@ class EmailService {
         };
 
         // === FONCTION: Dessiner le pied de page (appelée sur CHAQUE page) ===
-        const drawPageFooter = () => {
+        const drawPageFooter = (pageNum = null) => {
           const footerBgColor = '#E8F4F8';
           const footerPageHeight = 842;
           const bottomMargin = 40;
@@ -595,6 +644,22 @@ class EmailService {
               });
             }
           }
+
+          // Numérotation des pages (au centre, directement en haut du pied de page)
+          // On utilise le numéro de page passé en paramètre et le total pré-calculé
+          const pageNumToDisplay =
+            pageNum !== null && pageNum !== undefined ? pageNum : currentPageNumber;
+          const totalPagesToDisplay =
+            totalPagesNumber && totalPagesNumber > 0 ? totalPagesNumber : currentPageNumber;
+
+          doc.font('Helvetica').fontSize(8).fillColor('#000000');
+          // Positionner au centre, directement en haut du pied de page (5px au-dessus de la bande bleue)
+          doc.text(
+            `Page ${pageNumToDisplay} / ${totalPagesToDisplay}`,
+            50,
+            footerY - 5,
+            { width: 495, align: 'center' }
+          );
         };
 
         // === DESSINER L'EN-TÊTE DE LA PREMIÈRE PAGE ===
@@ -602,21 +667,34 @@ class EmailService {
         y = drawTableHeader(y);
         const tableStartY = y; // Position de départ du tableau (après l'en-tête)
         
+        // Dessiner le footer sur la première page (le total sera mis à jour à la fin)
+        drawPageFooter(1);
+        
         // === DÉFINIR LA HAUTEUR FIXE DU TABLEAU ===
-        // Le tableau doit occuper une hauteur fixe jusqu'à la limite avant le bloc récapitulatif
-        const maxYBeforeFooter = 550; // Position Y maximale avant le bloc récapitulatif
-        const fixedTableHeight = maxYBeforeFooter - tableStartY; // Hauteur fixe du tableau
+        // Le tableau principal doit occuper TOUT l'espace disponible sur chaque page
+        // Il n'y a pas de réserve d'espace pour le tableau de vérification (qui sera affiché après le montant en lettres)
+        // pageHeight est déjà défini plus haut (ligne 442)
+        const bottomMargin = 40;
+        const footerHeight = 32;
+        const footerY = pageHeight - bottomMargin - footerHeight;
+        
+        // Le tableau principal peut s'étendre jusqu'au pied de page avec un espace de sécurité
+        // Garder un espace entre le tableau et le pied de page
+        const spaceBeforeFooter = 15; // Espace entre le tableau et le pied de page
+        const maxYBeforeFooter = footerY - spaceBeforeFooter;
+        const maxTableHeight = maxYBeforeFooter - tableStartY; // Hauteur maximale disponible pour le tableau principal
+        // La hauteur fixe sera calculée dynamiquement selon le contenu
 
         // Positions des colonnes (utilisées dans la boucle de rendu des lignes)
         // EXACTEMENT COMME FACTURE CONTRAT
         const tableStartX = 40; // Tableau commence à X=40 (marge gauche)
         const tableWidth = 525; // Largeur totale du tableau (595 - 40 marge gauche)
         const colRefX = 40;
-        const colRefWidth = 50;
-        const colDesignationX = 90; // 40 + 50
-        const colDesignationWidth = 280; // Colonne Désignation considérablement élargie
-        const colDesignationPadding = 8; // Padding réduit pour un rendu plus compact et professionnel
-        const colQteX = 370; // 90 + 280
+        const colRefWidth = 70; // Agrandi de 50 à 70
+        const colDesignationX = 110; // 40 + 70
+        const colDesignationWidth = 260; // Réduit de 280 à 260 pour compenser l'agrandissement de Réf
+        const colDesignationPadding = 20; // Padding réduit pour un rendu plus compact et professionnel
+        const colQteX = 370; // 110 + 260
         const colQteWidth = 45; // Légèrement réduit
         const colPUX = 415; // 370 + 45
         const colPUWidth = 45; // Légèrement réduit
@@ -652,7 +730,7 @@ class EmailService {
         }
 
         function renderInlineHtml(doc, html, x, y, width, maxHeight, align = 'left') {
-          if (!html) return;
+          if (!html) return 0;
 
           // Structure pour stocker les lignes avec leurs segments de texte stylisés
           const lines = [];
@@ -874,13 +952,15 @@ class EmailService {
           // Rendre dans le PDF
           doc.save();
 
-          const padding = 8;
+          const padding = 2; // Réduit encore plus pour un espacement très compact comme livraison
           const drawX = x + padding;
           const drawY = y + padding;
           const drawWidth = width - (padding * 2);
-          const baseLineHeight = 12; // Hauteur de base pour une ligne
+          const baseLineHeight = 9; // Réduit encore plus pour un espacement très compact comme livraison
 
-          if (maxHeight) doc.rect(x, y, width, maxHeight).clip();
+          // Ne pas utiliser de clipping pour permettre au texte de s'afficher en entier
+          // Le clipping sera géré par la pagination au niveau supérieur
+          // if (maxHeight) doc.rect(x, y, width, maxHeight).clip();
 
           let currentY = drawY;
 
@@ -1083,45 +1163,110 @@ class EmailService {
             }
           });
 
+          // Calculer la hauteur réelle utilisée
+          const actualHeight = currentY - drawY + padding;
+          
           doc.restore();
+          
+          // Retourner la hauteur réelle utilisée pour ajuster la ligne
+          return actualHeight;
         }
 
-        // === DESSINER D'ABORD LE CONTOUR DU TABLEAU AVEC HAUTEUR FIXE ===
-        // Dessiner le rectangle extérieur du tableau avec la hauteur fixe
-        doc.roundedRect(tableStartX, tableStartY, tableWidth, fixedTableHeight, tableBorderRadius).stroke('#000');
-        // Dessiner les lignes verticales de séparation des colonnes sur toute la hauteur
-        doc.moveTo(90, tableStartY).lineTo(90, tableStartY + fixedTableHeight).stroke('#000');
-        doc.moveTo(370, tableStartY).lineTo(370, tableStartY + fixedTableHeight).stroke('#000');
-        doc.moveTo(415, tableStartY).lineTo(415, tableStartY + fixedTableHeight).stroke('#000');
-        doc.moveTo(460, tableStartY).lineTo(460, tableStartY + fixedTableHeight).stroke('#000');
-        doc.moveTo(495, tableStartY).lineTo(495, tableStartY + fixedTableHeight).stroke('#000');
+        // === LE CONTOUR SERA DESSINÉ APRÈS LE RENDU DES LIGNES ===
+        // On ne connaît pas encore la hauteur réelle nécessaire
+        // Le contour sera dessiné après le rendu avec la hauteur réelle
         
-        // === CALCULER LA HAUTEUR DISPONIBLE POUR LES LIGNES DE DÉTAIL ===
-        // Hauteur minimale par ligne (quand il y a peu de lignes) - Réduite pour éviter les grands espaces
-        const minRowHeight = 20; // Hauteur minimale compacte pour une ligne
-        // Hauteur maximale par ligne (pour éviter que les lignes soient trop grandes)
-        const maxRowHeight = 80; // Réduite pour éviter les grands espaces
-        
-        // Calculer la hauteur totale disponible pour les lignes (dans le tableau fixe)
-        const availableHeightForRows = fixedTableHeight;
-        
-        // Calculer le nombre de lignes
-        const numberOfRows = devisData && devisData.length > 0 ? devisData.length : 0;
-        
-        // Calculer la hauteur par ligne en fonction du nombre de lignes
-        let rowHeight;
-        if (numberOfRows === 0) {
-          rowHeight = minRowHeight; // Pas de lignes, utiliser la hauteur minimale
-        } else {
-          // Répartir l'espace disponible entre toutes les lignes
-          const calculatedRowHeight = availableHeightForRows / numberOfRows;
-          // S'assurer que la hauteur est entre minRowHeight et maxRowHeight
-          rowHeight = Math.max(minRowHeight, Math.min(maxRowHeight, calculatedRowHeight));
+        // === CALCULER TOUTES LES HAUTEURS NÉCESSAIRES D'ABORD (comme demande-achat) ===
+        const baseRowHeight = 16; // Réduit encore plus pour un espacement très compact comme livraison
+        const maxRowHeight = 1000; // Augmenté pour permettre plus de contenu
+        const rowHeights = [];
+        let totalNeededHeight = 0;
+        // availableHeight sera calculé dynamiquement selon le contenu
+        let adjustedRowHeights = []; // Déclarer avant les blocs if pour qu'il soit accessible partout
+
+        if (devisData && devisData.length > 0) {
+          // Calculer d'abord toutes les hauteurs nécessaires
+          devisData.forEach((line) => {
+            const designationHtml = line.article || '';
+            // La largeur effective pour le calcul de hauteur doit tenir compte du padding interne de renderInlineHtml (16px)
+            const effectiveDesignationWidth = Math.max(0, colDesignationWidth - 16);
+
+            // Améliorer le calcul de hauteur en tenant compte des structures HTML
+            // Compter les lignes supplémentaires pour les titres, listes, paragraphes
+            let lineCount = 1; // Au moins une ligne
+            const htmlContent = designationHtml || '';
+            
+            // Compter les sauts de ligne explicites
+            const brCount = (htmlContent.match(/<br\s*\/?>/gi) || []).length;
+            lineCount += brCount;
+            
+            // Compter les titres (h1-h6) - chaque titre = 1 ligne supplémentaire
+            const headingCount = (htmlContent.match(/<h[1-6][^>]*>/gi) || []).length;
+            lineCount += headingCount;
+            
+            // Compter les éléments de liste (li) - chaque élément = 1 ligne supplémentaire
+            const liCount = (htmlContent.match(/<li[^>]*>/gi) || []).length;
+            lineCount += liCount;
+            
+            // Compter les paragraphes (p) - chaque paragraphe = 1 ligne supplémentaire
+            const pCount = (htmlContent.match(/<p[^>]*>/gi) || []).length;
+            lineCount += pCount;
+
+            // Extraire le texte brut pour calculer la hauteur
+            const designationPlain = (designationHtml || '')
+              .replace(/<h[1-6][^>]*>/gi, '\n').replace(/<\/h[1-6]>/gi, '\n')
+              .replace(/<ul[^>]*>/gi, '\n').replace(/<\/ul>/gi, '\n')
+              .replace(/<li[^>]*>/gi, '\n• ').replace(/<\/li>/gi, '')
+              .replace(/<br\s*\/?>/gi, '\n')
+              .replace(/<p[^>]*>/gi, '\n').replace(/<\/p>/gi, '\n')
+              .replace(/<[^>]*>/g, '')
+              .replace(/[ \t]+/g, ' ')
+              .trim();
+
+            let textHeight = baseRowHeight;
+            if (effectiveDesignationWidth > 0 && designationPlain.length > 0) {
+              try {
+                const safeWidth = Math.max(1, Math.min(Math.floor(effectiveDesignationWidth), 10000));
+                doc.fontSize(9).font('Helvetica');
+                const calculatedHeight = doc.heightOfString(designationPlain, { width: safeWidth, align: 'left' });
+                if (typeof calculatedHeight === 'number' && !isNaN(calculatedHeight) && calculatedHeight > 0) {
+                  textHeight = calculatedHeight;
+                }
+              } catch (error) {
+                textHeight = baseRowHeight;
+              }
+            }
+
+            // Utiliser le maximum entre la hauteur calculée et le nombre de lignes estimé
+            // Chaque ligne structurelle (titre, liste, etc.) ajoute environ 12px (réduit de 14px)
+            const structuralHeight = lineCount * 12;
+            const estimatedHeight = Math.max(textHeight, structuralHeight);
+
+            const validTextHeight = isNaN(estimatedHeight) || estimatedHeight <= 0 ? baseRowHeight : estimatedHeight;
+            // Espacement vertical minimal - seulement ce qui est nécessaire pour le texte
+            // Réduire le padding à 4px (2px en haut + 2px en bas) pour un espacement très compact comme livraison
+            const naturalHeight = Math.max(baseRowHeight, Math.ceil(validTextHeight) + 4);
+            const rowHeight = Math.min(maxRowHeight, naturalHeight);
+            const validRowHeight = isNaN(rowHeight) || rowHeight <= 0 ? baseRowHeight : rowHeight;
+            
+            rowHeights.push(validRowHeight);
+            totalNeededHeight += validRowHeight;
+          });
+
+          // Utiliser les hauteurs naturelles calculées - ne pas forcer à remplir tout l'espace
+          // Le tableau s'agrandit automatiquement uniquement s'il y a plusieurs détails
+          adjustedRowHeights = [...rowHeights];
+          // totalNeededHeight contient déjà la somme des hauteurs naturelles
         }
         
         // === RENDU DES LIGNES DU TABLEAU DANS L'ESPACE FIXE ===
         let currentRowY = tableStartY; // Position Y courante pour les lignes
         let tableStartYCurrent = tableStartY; // Position Y actuelle du début du tableau (peut changer avec pagination)
+        let actualTableHeight = 0; // Hauteur réelle utilisée par les lignes sur la première page
+        let isFirstPage = true; // Indicateur pour savoir si on est sur la première page
+        const firstPageTableStartY = tableStartY; // Sauvegarder la position de la première page pour la vérification
+        
+        console.log(`[PDF ${documentTitle}] Initialisation: tableStartY=${tableStartY}, tableStartYCurrent=${tableStartYCurrent}, firstPageTableStartY=${firstPageTableStartY}`);
         
         if (devisData && devisData.length > 0) {
           devisData.forEach((line, index) => {
@@ -1146,138 +1291,31 @@ class EmailService {
             totalTVA += tva;
             totalTTC += ttc;
 
-            // Calculate dynamic row height based on plaintext designation wrapping
-            // CRITIQUE : Calculer la hauteur AVANT de dessiner quoi que ce soit
-            // Utiliser la largeur effective pour calculer la hauteur correcte
-            // Vérifier que toutes les valeurs sont valides pour éviter NaN
-            const validColDesignationWidth = isNaN(colDesignationWidth) || colDesignationWidth <= 0 ? 250 : Number(colDesignationWidth);
-            const validColDesignationPadding = isNaN(colDesignationPadding) || colDesignationPadding < 0 ? 8 : Number(colDesignationPadding);
-            const effectiveDesignationWidth = Math.max(0, validColDesignationWidth - (validColDesignationPadding * 2));
-
-            const designationPlain = (designationHtml || '')
-              .replace(/<h[1-6][^>]*>/gi, '\n').replace(/<\/h[1-6]>/gi, '\n')
-              .replace(/<ul[^>]*>/gi, '\n').replace(/<\/ul>/gi, '\n')
-              .replace(/<li[^>]*>/gi, '\n• ').replace(/<\/li>/gi, '')
-              .replace(/<br\s*\/?>/gi, '\n')
-              .replace(/<p[^>]*>/gi, '\n').replace(/<\/p>/gi, '\n')
-              .replace(/<[^>]*>/g, '')
-              .replace(/[ \t]+/g, ' ')
-              .trim();
-
-            const baseRowHeight = 20; // one line
-            // Limite de hauteur par page - le contenu sera paginé si nécessaire
-            const maxRowHeight = 500;
-
-            // Calculer la hauteur du texte en utilisant une méthode plus robuste
-            let textHeight = baseRowHeight;
-
-            // Vérifier que toutes les valeurs sont valides avant de calculer
-            if (effectiveDesignationWidth > 0 &&
-              !isNaN(effectiveDesignationWidth) &&
-              effectiveDesignationWidth < 10000 &&
-              typeof designationPlain === 'string' &&
-              designationPlain.length > 0) {
-              try {
-                // S'assurer que designationPlain est une chaîne valide et limitée
-                const safeDesignationPlain = designationPlain.toString().substring(0, 10000);
-                const safeWidth = Math.max(1, Math.min(Math.floor(effectiveDesignationWidth), 10000));
-
-                // Vérifier que safeWidth est un nombre valide
-                if (!isNaN(safeWidth) && safeWidth > 0 && safeWidth < 10000) {
-                  // Utiliser une méthode alternative si heightOfString retourne NaN
-                  // Estimer la hauteur basée sur le nombre de caractères et la largeur
-                  const fontSize = 9; // Taille de police utilisée
-                  const lineHeight = fontSize * 1.2; // Hauteur de ligne standard
-                  const charsPerLine = Math.floor(safeWidth / (fontSize * 0.6)); // Estimation caractères par ligne
-                  const estimatedLines = Math.ceil(safeDesignationPlain.length / Math.max(1, charsPerLine));
-                  const estimatedHeight = estimatedLines * lineHeight;
-
-                  // Essayer d'abord avec heightOfString
-                  let calculatedHeight;
-                  try {
-                    doc.fontSize(9).font('Helvetica'); // S'assurer que la police est correcte pour le calcul
-                    calculatedHeight = doc.heightOfString(safeDesignationPlain, {
-                      width: safeWidth,
-                      align: 'left'
-                    });
-                  } catch (heightError) {
-                    // Si heightOfString échoue, utiliser l'estimation
-                    calculatedHeight = estimatedHeight;
-                  }
-
-                  // Vérifier que le résultat est un nombre valide
-                  if (typeof calculatedHeight === 'number' &&
-                    !isNaN(calculatedHeight) &&
-                    isFinite(calculatedHeight) &&
-                    calculatedHeight > 0 &&
-                    calculatedHeight < 10000) {
-                    textHeight = calculatedHeight;
-                  } else {
-                    // Utiliser l'estimation si heightOfString retourne NaN
-                    if (!isNaN(estimatedHeight) && estimatedHeight > 0) {
-                      textHeight = estimatedHeight;
-                    } else {
-                      textHeight = baseRowHeight;
-                    }
-                  }
-                } else {
-                  console.warn('❌ [PDF] safeWidth invalide:', { safeWidth, effectiveDesignationWidth });
-                  textHeight = baseRowHeight;
-                }
-              } catch (error) {
-                console.warn('❌ [PDF] Erreur calcul textHeight:', error.message, {
-                  effectiveDesignationWidth,
-                  designationPlainLength: designationPlain?.length,
-                  designationPlainPreview: designationPlain?.substring(0, 50)
-                });
-                textHeight = baseRowHeight;
-              }
-            } else {
-              // Si effectiveDesignationWidth n'est pas valide, utiliser la hauteur de base
-              textHeight = baseRowHeight;
-            }
-
-            // Calculer la hauteur réelle nécessaire pour cette ligne en fonction de son contenu
-            // Utiliser la hauteur calculée du texte, mais avec des limites min/max réduites
-            // baseRowHeight est déjà défini plus haut
-            const minRowHeightForContent = 20; // Hauteur minimale compacte pour une ligne avec contenu
-            const maxRowHeightForContent = 80; // Hauteur maximale réduite pour éviter les grands espaces
-            // Réduire le padding pour un rendu plus compact
-            const calculatedContentHeight = Math.max(minRowHeightForContent, Math.min(maxRowHeightForContent, Math.ceil(textHeight) + (colDesignationPadding * 2) + 5));
-            
-            // Utiliser la hauteur calculée pour cette ligne spécifique
-            const validRowHeight = calculatedContentHeight;
-
-            if (isNaN(validRowHeight) || validRowHeight <= 0) {
-              console.error('❌ [PDF] Erreur calcul validRowHeight:', { textHeight, validRowHeight });
-            }
+            // Utiliser la hauteur précalculée et ajustée
+            const validRowHeight = adjustedRowHeights[index] || baseRowHeight;
 
             // CRITIQUE : Vérifier AVANT de rendre la ligne si elle rentre dans l'espace restant du tableau
             // Si non, créer une nouvelle page AVANT de rendre la ligne
             const currentY = currentRowY;
             const estimatedNextY = currentY + validRowHeight;
-            const tableEndY = tableStartYCurrent + fixedTableHeight; // Fin du tableau fixe sur la page actuelle
+            const tableEndY = tableStartYCurrent + maxTableHeight; // Fin du tableau max sur la page actuelle
             
             // Vérifier si la ligne dépasse la hauteur fixe du tableau
             // Si oui, créer une nouvelle page AVANT de rendre cette ligne
             if (estimatedNextY > tableEndY && !isNaN(estimatedNextY)) {
               // La ligne va dépasser, créer une nouvelle page AVANT de la rendre
-              drawPageFooter();
               doc.addPage();
+              currentPageNumber++;
               y = drawDocumentHeader(false);
               y = drawTableHeader(y);
-              // Redessiner le contour du tableau avec hauteur fixe sur la nouvelle page
+              // Le contour sera dessiné après le rendu des lignes sur cette page
               const newTableStartY = y;
-              doc.roundedRect(tableStartX, newTableStartY, tableWidth, fixedTableHeight, tableBorderRadius).stroke('#000');
-              doc.moveTo(90, newTableStartY).lineTo(90, newTableStartY + fixedTableHeight).stroke('#000');
-              doc.moveTo(370, newTableStartY).lineTo(370, newTableStartY + fixedTableHeight).stroke('#000');
-              doc.moveTo(415, newTableStartY).lineTo(415, newTableStartY + fixedTableHeight).stroke('#000');
-              doc.moveTo(460, newTableStartY).lineTo(460, newTableStartY + fixedTableHeight).stroke('#000');
-              doc.moveTo(495, newTableStartY).lineTo(495, newTableStartY + fixedTableHeight).stroke('#000');
               // Réinitialiser la position Y pour les lignes
               currentRowY = newTableStartY;
               // Mettre à jour tableStartYCurrent pour les vérifications suivantes
               tableStartYCurrent = newTableStartY;
+              // On n'est plus sur la première page
+              isFirstPage = false;
             }
 
             // === MODE NOMENCLATURE : Pagination spéciale pour afficher TOUS les composants ===
@@ -1495,8 +1533,8 @@ class EmailService {
                 // Si pas assez d'espace pour au moins une ligne, nouvelle page
                 if (availableHeight < minLineHeight + padding * 2) {
                   console.log('[PDF Nomenclature] Espace insuffisant, nouvelle page');
-                  drawPageFooter();
                   doc.addPage();
+                  currentPageNumber++;
                   pageNum++;
                   currentY = drawDocumentHeader(false);
                   currentY = drawTableHeader(currentY);
@@ -1539,7 +1577,7 @@ class EmailService {
                 if (isFirstBlock) {
                   doc.save();
                   doc.font('Helvetica').fontSize(9).fillColor('#000');
-                  doc.text(ref || '', 55, blockY + padding, { width: 45, align: 'left' });
+                  doc.text(ref || '', colRefX + 8, blockY + padding, { width: colRefWidth - 16, align: 'left' });
                   doc.restore();
                 }
                 
@@ -1670,7 +1708,7 @@ class EmailService {
                 }
                 
                 // Lignes verticales
-                [100, colQteX, colPUX, colRX, colHTX].forEach(xPos => {
+                [colDesignationX, colQteX, colPUX, colRX, colHTX].forEach(xPos => {
                   doc.moveTo(xPos, blockY).lineTo(xPos, blockY + rowHeight).stroke('#000');
                 });
                 
@@ -1683,8 +1721,8 @@ class EmailService {
                 
                 // Si il reste des lignes, passer à une nouvelle page
                 if (currentLineIdx < lineHeights.length) {
-                  drawPageFooter();
                   doc.addPage();
+                  currentPageNumber++;
                   pageNum++;
                   currentY = drawDocumentHeader(false);
                   currentY = drawTableHeader(currentY);
@@ -1702,105 +1740,111 @@ class EmailService {
               return;
             }
             
-            // Utiliser currentRowY pour positionner la ligne dans le tableau fixe
-            // S'assurer que la ligne ne dépasse jamais les limites du tableau
+            // Tous les éléments sur la même ligne horizontale (comme demande-achat)
             const validY = currentRowY;
-            const topY = validY + 5; // Position en haut de la cellule
-            
-            // CRITIQUE : Vérifier une dernière fois que la ligne ne dépasse pas le tableau
-            // Si elle dépasse, ne pas la rendre (elle sera sur la page suivante)
-            const finalTableEndY = tableStartYCurrent + fixedTableHeight;
-            if (validY + validRowHeight > finalTableEndY) {
-              // Cette ligne dépasse, elle sera rendue sur la page suivante
-              // Ne pas incrémenter currentRowY ici, la pagination sera gérée au début de la prochaine itération
-              return; // Sortir de cette itération, la ligne sera rendue sur la page suivante
-            }
-            
-            // S'assurer que la ligne ne dépasse pas même après le rendu
-            // Limiter la hauteur réelle de la ligne si nécessaire
-            const maxAllowedHeight = finalTableEndY - validY;
-            const actualRowHeight = Math.min(validRowHeight, maxAllowedHeight);
 
-            // GARANTIR que la désignation ne dépasse jamais la position de Qté (320)
-            // La désignation doit s'arrêter à : colDesignationX (105) + effectiveDesignationWidth (175) = 280 max
-            // Qté commence à 320, donc il y a 40 points de marge de sécurité
-
-            // Dessiner uniquement les séparations horizontales entre les lignes
-            // Le contour du tableau est déjà dessiné avec la hauteur fixe
-            const rectY = validY;
-            const rectHeight = actualRowHeight; // Utiliser la hauteur limitée
-
-            // Vérifier que toutes les valeurs sont valides avant de dessiner
-            if (!isNaN(rectY) && !isNaN(rectHeight) && rectHeight > 0 && rectY >= 0) {
-              // Dessiner la ligne horizontale de séparation entre les lignes (sauf pour la première ligne)
-              if (index > 0) {
-                doc.moveTo(tableStartX, rectY).lineTo(tableStartX + tableWidth, rectY).stroke('#000');
-              }
-              // Les lignes verticales sont déjà dessinées dans le contour du tableau, pas besoin de les redessiner
-            } else {
-              console.error('❌ [PDF] Erreur valeurs pour ligne:', { rectY, rectHeight, validY, validRowHeight });
-            }
-
-            // EXACTEMENT COMME FACTURE CONTRAT : rendu du contenu
-            doc.font('Helvetica').fontSize(10).fillColor('#000'); // Taille de police augmentée pour mieux remplir - COMME FACTURE CONTRAT
+            doc.font('Helvetica').fontSize(9).fillColor('#000000');
             
-            // Réf (centré horizontalement, aligné en haut)
-            doc.text(ref || '', colRefX, topY, { width: colRefWidth, align: 'center' });
+            // Désignation (avec HTML support) - même ligne
+            // La fonction renderInlineHtml ajoute un padding de 8px de chaque côté (total 16px)
+            // Ne pas limiter la hauteur pour permettre au texte de s'afficher en entier
+            // Le texte passera automatiquement à la ligne et ajustera la hauteur de la ligne
+            const actualDesignationHeight = renderInlineHtml(doc, designationHtml, colDesignationX, validY - 4, colDesignationWidth, null) || validRowHeight;
             
-            // Désignation (aligné en haut, à gauche) - EXACTEMENT COMME FACTURE CONTRAT
-            // CRITIQUE : Utiliser actualRowHeight pour s'assurer que le contenu ne dépasse pas la cellule
-            const maxDesignationHeight = actualRowHeight - colDesignationPadding * 2;
-            if (designationHtml && designationHtml.trim()) {
-              if (designationHtml.includes('<') || designationHtml.includes('&')) {
-                // Contient du HTML, utiliser renderInlineHtml - EXACTEMENT COMME FACTURE CONTRAT
-                // Limiter la hauteur pour qu'elle ne dépasse pas la cellule
-                renderInlineHtml(doc, designationHtml, colDesignationX + colDesignationPadding, validY + colDesignationPadding, colDesignationWidth - colDesignationPadding * 2, Math.max(10, maxDesignationHeight));
-              } else {
-                // Texte simple, utiliser doc.text directement avec alignement à gauche - EXACTEMENT COMME FACTURE CONTRAT
-                doc.text(designationPlain, colDesignationX + colDesignationPadding, topY, { 
-                  width: colDesignationWidth - colDesignationPadding * 2, 
-                  align: 'left',
-                  ellipsis: true
-                });
-              }
-            } else {
-              // Désignation vide, afficher un tiret - EXACTEMENT COMME FACTURE CONTRAT
-              doc.text('-', colDesignationX + colDesignationPadding, topY, { width: colDesignationWidth - colDesignationPadding * 2, align: 'left' });
-            }
+            // Utiliser la hauteur réelle retournée par renderInlineHtml, avec un minimum de validRowHeight
+            // Réduire le padding supplémentaire à 2px pour un espacement très compact comme livraison
+            const actualRowHeight = Math.max(validRowHeight, actualDesignationHeight + 2); // +2 pour le padding minimal
+
+            // Centrer verticalement dans la ligne après avoir obtenu la hauteur réelle
+            const centerY = validY + (actualRowHeight / 2) - 3; // Centrer verticalement dans la ligne
             
-            // Qté, P.U., R., H.T. (centrés horizontalement, alignés en haut)
-            doc.text(qte.toFixed(2).replace('.', ','), colQteX, topY, { width: colQteWidth, align: 'center' });
-            doc.text(pu.toFixed(2).replace('.', ','), colPUX, topY, { width: colPUWidth, align: 'center' });
+            // Réf aligné à gauche, sur la même ligne que les autres colonnes
+            doc.text(ref || '', colRefX + 8, centerY, { width: colRefWidth - 16, align: 'left' });
+
+            // Qté, P.U., R., H.T. alignés à droite - centrer verticalement dans la ligne
+            doc.text(qte.toFixed(2).replace('.', ','), colQteX, centerY, { width: colQteWidth, align: 'right' });
+            doc.text(pu.toFixed(2).replace('.', ','), colPUX, centerY, { width: colPUWidth, align: 'right' });
             const remiseText = (montantRemise > 0 ? montantRemise.toFixed(2).replace('.', ',') : '0,00');
-            doc.text(remiseText, colRX, topY, { width: colRWidth, align: 'center' });
-            doc.text(ht.toFixed(2).replace('.', ','), colHTX, topY, { width: colHTWidth, align: 'center' });
+            doc.text(remiseText, colRX, centerY, { width: colRWidth, align: 'right' });
+            doc.text(ht.toFixed(2).replace('.', ','), colHTX, centerY, { width: colHTWidth, align: 'right' });
 
-            // Mettre à jour currentRowY pour la ligne suivante
+            // Mettre à jour currentRowY pour la ligne suivante avec la hauteur réelle
             currentRowY = validY + actualRowHeight;
+            
+            // Mettre à jour la hauteur dans adjustedRowHeights pour le calcul du tableau
+            adjustedRowHeights[index] = actualRowHeight;
+            
+            // Mettre à jour la hauteur réelle utilisée (seulement pour la première page)
+            // Calculer après la mise à jour de currentRowY pour avoir la hauteur correcte
+            if (isFirstPage) {
+              // La hauteur réelle est la position actuelle moins le début du tableau de la première page
+              const newHeight = currentRowY - firstPageTableStartY;
+              actualTableHeight = Math.max(actualTableHeight, newHeight);
+              console.log(`[PDF Livraison] Ligne ${index + 1}: currentRowY=${currentRowY.toFixed(2)}, actualTableHeight=${actualTableHeight.toFixed(2)}, maxTableHeight=${maxTableHeight.toFixed(2)}, isFirstPage=${isFirstPage}, firstPageTableStartY=${firstPageTableStartY}`);
+            }
           });
           
-          // Mettre à jour y pour être à la fin du tableau fixe
-          y = tableStartY + fixedTableHeight;
+          // Utiliser la hauteur réelle utilisée - tableau dynamique selon le contenu
+          // Le tableau s'agrandit automatiquement uniquement s'il y a plusieurs détails
+          let targetHeight;
+          if (isFirstPage && actualTableHeight > 0 && !isNaN(actualTableHeight)) {
+            // Sur la première page, utiliser la hauteur réelle calculée
+            targetHeight = actualTableHeight;
+          } else {
+            // Si on a paginé, utiliser la hauteur jusqu'à currentRowY
+            targetHeight = currentRowY - tableStartY;
+          }
+          
+          // S'assurer que targetHeight est au moins égal à la hauteur minimale
+          const minTableHeight = articlesTableHeaderHeight + 16; // Réduit encore plus pour un espacement très compact
+          targetHeight = Math.max(targetHeight, minTableHeight);
+          
+          // Ne pas dépasser maxTableHeight pour éviter les débordements
+          // Mais permettre au tableau de s'étendre pour occuper l'espace disponible
+          targetHeight = Math.min(targetHeight, maxTableHeight);
+          
+          if (targetHeight > 0 && !isNaN(targetHeight)) {
+            // Dessiner le contour avec la hauteur réelle
+            doc.roundedRect(tableStartX, tableStartY, tableWidth, targetHeight, tableBorderRadius).stroke('#000');
+            // Dessiner les lignes verticales avec la hauteur réelle (positions mises à jour)
+            doc.moveTo(colDesignationX, tableStartY).lineTo(colDesignationX, tableStartY + targetHeight).stroke('#000');
+            doc.moveTo(colQteX, tableStartY).lineTo(colQteX, tableStartY + targetHeight).stroke('#000');
+            doc.moveTo(colPUX, tableStartY).lineTo(colPUX, tableStartY + targetHeight).stroke('#000');
+            doc.moveTo(colRX, tableStartY).lineTo(colRX, tableStartY + targetHeight).stroke('#000');
+            doc.moveTo(colHTX, tableStartY).lineTo(colHTX, tableStartY + targetHeight).stroke('#000');
+          }
+          
+          // Mettre à jour y pour être à la fin du tableau
+          y = tableStartY + targetHeight;
         } else {
-          // Si aucune ligne, le tableau fixe est déjà dessiné, juste mettre y à la fin
-          y = tableStartY + fixedTableHeight;
+          // Si aucune ligne, utiliser une hauteur minimale
+          const minTableHeight = articlesTableHeaderHeight + 16; // Réduit encore plus pour un espacement très compact
+          // Redessiner avec hauteur minimale
+          doc.roundedRect(tableStartX, tableStartY, tableWidth, minTableHeight, tableBorderRadius).stroke('#000');
+          doc.moveTo(colDesignationX, tableStartY).lineTo(colDesignationX, tableStartY + minTableHeight).stroke('#000');
+          doc.moveTo(colQteX, tableStartY).lineTo(colQteX, tableStartY + minTableHeight).stroke('#000');
+          doc.moveTo(colPUX, tableStartY).lineTo(colPUX, tableStartY + minTableHeight).stroke('#000');
+          doc.moveTo(colRX, tableStartY).lineTo(colRX, tableStartY + minTableHeight).stroke('#000');
+          doc.moveTo(colHTX, tableStartY).lineTo(colHTX, tableStartY + minTableHeight).stroke('#000');
+          y = tableStartY + minTableHeight;
         }
 
         // === BLOC RÉCAPITULATIF HORIZONTAL (ne dépasse pas la moitié de la page, positionné à droite) ===
-        // EXACTEMENT COMME FACTURE CONTRAT : vérification saut de page avant bloc récapitulatif
-        // Note: y devrait déjà être à maxYBeforeFooter grâce au tableau fixe
-        if (y > maxYBeforeFooter) {
-          drawPageFooter();
-          doc.addPage();
-          y = drawDocumentHeader(false);
-        }
-        // S'assurer que y est positionné correctement pour le bloc récapitulatif
-        y = Math.max(y, maxYBeforeFooter);
-        y += 10;
-        const recapTableY = y;
+        // Vérifier s'il y a assez d'espace pour le bloc récapitulatif sur la page actuelle
         const recapTableHeight = 25;
         const recapTableRowHeight = 20;
         const recapTableTotalHeight = recapTableHeight + recapTableRowHeight;
+        const spaceNeededForRecap = recapTableTotalHeight + 10; // 10px d'espace avant
+        
+        // Si pas assez d'espace, passer à la page suivante
+        if (y + spaceNeededForRecap > footerY) {
+          doc.addPage();
+          currentPageNumber++;
+          y = drawDocumentHeader(false);
+        }
+        
+        y += 10; // Espace avant le bloc récapitulatif
+        const recapTableY = y;
         const recapTableWidth = 255; // Moitié de la page (510 / 2)
         const recapTableX = 305; // Position à droite (50 + 510 - 255 = 305)
 
@@ -1867,6 +1911,18 @@ class EmailService {
           y += 15;
         }
 
+        // Mettre à jour le total de pages avant de finaliser
+        try {
+          const finalPageRange = doc.bufferedPageRange();
+          if (finalPageRange && typeof finalPageRange.count === 'number' && finalPageRange.count > 0) {
+            totalPagesNumber = finalPageRange.count;
+          } else {
+            totalPagesNumber = currentPageNumber;
+          }
+        } catch (e) {
+          totalPagesNumber = currentPageNumber;
+        }
+
         // === TABLEAU CONDITION / EXPÉDITION / TRANSPORTEUR avec bordures arrondies ===
         const condition = devisData[0]?.condition || '';
         const expedition = devisData[0]?.expedition || '';
@@ -1875,8 +1931,8 @@ class EmailService {
         // Afficher le tableau seulement si au moins une donnée existe
         if (condition || expedition || transporteur) {
           const conditionTableY = y;
-          const conditionTableHeight = 25;
-          const conditionTableRowHeight = 20;
+          const conditionTableHeight = 18; // Réduit de 25 à 18
+          const conditionTableRowHeight = 15; // Réduit de 20 à 15
           const conditionTableTotalHeight = conditionTableHeight + conditionTableRowHeight;
 
           // Tableau complet avec bordures arrondies (un seul rectangle)
@@ -1890,41 +1946,135 @@ class EmailService {
           doc.moveTo(390, conditionTableY).lineTo(390, conditionTableY + conditionTableTotalHeight).stroke('#000');
 
           // En-tête (ligne 1)
-          doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
-          doc.text('Condition de règlement', 55, conditionTableY + 8, { width: 170, align: 'center' });
-          doc.text('Expédition', 225, conditionTableY + 8, { width: 170, align: 'center' });
-          doc.text('Transporteur', 395, conditionTableY + 8, { width: 165, align: 'center' });
+          doc.font('Helvetica-Bold').fontSize(8).fillColor('#000'); // Réduit de 9 à 8
+          doc.text('Condition de règlement', 55, conditionTableY + 5, { width: 170, align: 'center' }); // Réduit de 8 à 5
+          doc.text('Expédition', 225, conditionTableY + 5, { width: 170, align: 'center' });
+          doc.text('Transporteur', 395, conditionTableY + 5, { width: 165, align: 'center' });
 
           // Valeurs (ligne 2)
-          doc.font('Helvetica').fontSize(9);
-          doc.text(condition, 55, conditionTableY + conditionTableHeight + 6, { width: 170, align: 'center' });
-          doc.text(expedition, 225, conditionTableY + conditionTableHeight + 6, { width: 170, align: 'center' });
-          doc.text(transporteur, 395, conditionTableY + conditionTableHeight + 6, { width: 165, align: 'center' });
+          doc.font('Helvetica').fontSize(8); // Réduit de 9 à 8
+          doc.text(condition, 55, conditionTableY + conditionTableHeight + 4, { width: 170, align: 'center' }); // Réduit de 6 à 4
+          doc.text(expedition, 225, conditionTableY + conditionTableHeight + 4, { width: 170, align: 'center' });
+          doc.text(transporteur, 395, conditionTableY + conditionTableHeight + 4, { width: 165, align: 'center' });
 
-          y = conditionTableY + conditionTableTotalHeight + 20;
+          y = conditionTableY + conditionTableTotalHeight + 10; // Réduit de 20 à 10 pour réduire l'espace
         }
 
-        // === SIGNATURES avec bordures arrondies (comme l'image) ===
-        const signatureBoxHeight = 60;
-        const signatureBoxWidth = 250;
-        const signatureBoxY = y;
-        const signatureBoxGap = 10; // Espace entre les deux boîtes
-        const signatureBox1X = 50;
-        const signatureBox2X = signatureBox1X + signatureBoxWidth + signatureBoxGap; // Position de la deuxième boîte avec espace
+        // === TABLEAU DE VÉRIFICATION (remplace les cadres Direction et Bon pour accord) ===
+        // Ce tableau est affiché UNIQUEMENT dans les PDFs de livraison, APRÈS le montant en lettres
+        // Il ne doit pas impacter l'affichage du tableau des détails
+        if (isLivraison) {
+          y += 10; // Espace avant le tableau de vérification
+          
+          // Calculer l'espace disponible avant le pied de page
+          const verificationBottomMargin = 40;
+          const verificationFooterHeight = 32;
+          const footerYForVerification = pageHeight - verificationBottomMargin - verificationFooterHeight;
+          const minSpaceBeforeFooter = 10;
+          const maxYForVerificationTable = footerYForVerification - minSpaceBeforeFooter;
+          
+          // Dimensions du tableau de vérification
+          const verificationTableWidth = 510;
+          const verificationTableX = 50;
+          const verificationHeaderHeight = 25;
+          const verificationNumberOfRows = 6; // Quantité, Numéro de lot/série, Date de péremption, Indicateur, Nom et prénom du vérificateur, Signature
+          const verificationRowHeight = 25; // Hauteur fixe par ligne (pas de compression)
+          const verificationTableHeight = verificationHeaderHeight + (verificationRowHeight * verificationNumberOfRows);
+          
+          // Vérifier si on a assez d'espace pour le tableau de vérification sur la page actuelle
+          const availableSpace = maxYForVerificationTable - y;
+          
+          // Si pas assez d'espace, passer à la page suivante
+          if (availableSpace < verificationTableHeight) {
+            doc.addPage();
+            currentPageNumber++;
+            y = drawDocumentHeader(false);
+            y += 10; // Espace avant le tableau
+          }
+          
+          const verificationTableY = y;
+          
+          // Définir les colonnes du tableau
+          const colCriteresWidth = 220; // Colonne "Critères"
+          const colConformeWidth = 90;  // Colonne "Conforme"
+          const colNonConformeWidth = 100; // Colonne "Non Conforme"
+          const colRemarquesWidth = 100; // Colonne "Remarques"
+          
+          const colCriteresX = verificationTableX;
+          const colConformeX = colCriteresX + colCriteresWidth;
+          const colNonConformeX = colConformeX + colConformeWidth;
+          const colRemarquesX = colNonConformeX + colNonConformeWidth;
+          
+          // Dessiner le contour du tableau
+          doc.roundedRect(verificationTableX, verificationTableY, verificationTableWidth, verificationTableHeight, tableBorderRadius).stroke('#000');
+          
+          // Ligne horizontale de l'en-tête
+          doc.moveTo(verificationTableX, verificationTableY + verificationHeaderHeight).lineTo(verificationTableX + verificationTableWidth, verificationTableY + verificationHeaderHeight).stroke('#000');
+          
+          // Lignes verticales de séparation
+          doc.moveTo(colConformeX, verificationTableY).lineTo(colConformeX, verificationTableY + verificationTableHeight).stroke('#000');
+          doc.moveTo(colNonConformeX, verificationTableY).lineTo(colNonConformeX, verificationTableY + verificationTableHeight).stroke('#000');
+          doc.moveTo(colRemarquesX, verificationTableY).lineTo(colRemarquesX, verificationTableY + verificationTableHeight).stroke('#000');
+          
+          // En-tête du tableau
+          doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
+          doc.text('Critères', colCriteresX + 5, verificationTableY + 8, { width: colCriteresWidth - 10, align: 'left' });
+          doc.text('Conforme', colConformeX + 5, verificationTableY + 8, { width: colConformeWidth - 10, align: 'center' });
+          doc.text('Non Conforme', colNonConformeX + 5, verificationTableY + 8, { width: colNonConformeWidth - 10, align: 'center' });
+          doc.text('Remarques', colRemarquesX + 5, verificationTableY + 8, { width: colRemarquesWidth - 10, align: 'left' });
+          
+          // Lignes horizontales entre les lignes
+          for (let i = 1; i <= verificationNumberOfRows; i++) {
+            const lineY = verificationTableY + verificationHeaderHeight + (verificationRowHeight * i);
+            doc.moveTo(verificationTableX, lineY).lineTo(verificationTableX + verificationTableWidth, lineY).stroke('#000');
+          }
+          
+          // Contenu des lignes
+          const criteria = [
+            'Quantité',
+            'Numéro de lot/série',
+            '!date de péremption',
+            'Indicateur',
+            'Nom et prénom du vérificateur :',
+            'Signature :'
+          ];
+          
+          doc.font('Helvetica').fontSize(9).fillColor('#000');
+          criteria.forEach((criterion, index) => {
+            const rowY = verificationTableY + verificationHeaderHeight + (verificationRowHeight * index) + 6;
+            doc.text(criterion, colCriteresX + 5, rowY, { width: colCriteresWidth - 10, align: 'left' });
+            // Les colonnes Conforme, Non Conforme et Remarques restent vides pour être remplies manuellement
+          });
+          
+          y = verificationTableY + verificationTableHeight + 10;
+        }
 
-        // Deux boîtes séparées avec bordures arrondies
-        doc.roundedRect(signatureBox1X, signatureBoxY, signatureBoxWidth, signatureBoxHeight, tableBorderRadius).stroke('#000');
-        doc.roundedRect(signatureBox2X, signatureBoxY, signatureBoxWidth, signatureBoxHeight, tableBorderRadius).stroke('#000');
+        // === PIED DE PAGE - Mettre à jour la numérotation sur TOUTES les pages ===
+        // Utiliser simplement le compteur de pages comme total (il est incrémenté à chaque addPage)
+        totalPagesNumber = currentPageNumber;
 
-        // Headers dans les boîtes
-        doc.font('Helvetica-Bold').fontSize(10).fillColor('#000');
-        doc.text('Direction', signatureBox1X, signatureBoxY + 10, { width: signatureBoxWidth, align: 'center' });
-        doc.text('Bon Pour Accord', signatureBox2X, signatureBoxY + 10, { width: signatureBoxWidth, align: 'center' });
-
-        // Les zones de signature restent vides (comme sur l'image)
-
-        // === PIED DE PAGE - Dessiner sur la dernière page ===
-        drawPageFooter();
+        // Redessiner le footer sur toutes les pages avec la numérotation correcte
+        // Les pages sont indexées à partir de 1 dans PDFKit
+        for (let i = 1; i <= totalPagesNumber; i++) {
+          try {
+            doc.switchToPage(i);
+            drawPageFooter(i);
+          } catch (e) {
+            console.error(
+              `[PDF] Erreur lors du dessin du footer sur la page ${i}:`,
+              e.message
+            );
+          }
+        }
+        
+        // Retourner à la dernière page
+        if (totalPagesNumber > 0) {
+          try {
+            doc.switchToPage(totalPagesNumber);
+          } catch (e) {
+            // Ignorer l'erreur
+          }
+        }
 
         // Cachet optionnel en bas du PDF (bas-droit)
         const withStamp = !!options.withStamp;
@@ -2074,11 +2224,37 @@ class EmailService {
         }
 
         // Détecter le type de document
+        // Si forceDocumentType est fourni dans les options, l'utiliser (pour forcer DEVIS depuis l'interface des devis)
+        const forceDocumentType = options.forceDocumentType ? options.forceDocumentType.toString().toUpperCase().trim() : null;
+        
         const documentType = devisData[0]?.type;
         const documentKind = devisData[0]?.document_kind;
-        const isRetour = documentKind === 'RETOUR CLIENT' || documentType === 5;
-        const isLivraison = documentKind === 'LIVRAISON' || documentType === 2;
-        const isDevis = !isRetour && !isLivraison;
+        
+        let isRetour = false;
+        let isLivraison = false;
+        let isDevis = true;
+        
+        if (forceDocumentType) {
+          // Forcer le type de document selon l'option fournie
+          if (forceDocumentType === 'DEVIS') {
+            isDevis = true;
+            isRetour = false;
+            isLivraison = false;
+          } else if (forceDocumentType === 'LIVRAISON' || forceDocumentType === 'BON DE LIVRAISON') {
+            isLivraison = true;
+            isDevis = false;
+            isRetour = false;
+          } else if (forceDocumentType === 'RETOUR' || forceDocumentType === 'RETOUR CLIENT' || forceDocumentType === 'BON DE RETOUR') {
+            isRetour = true;
+            isDevis = false;
+            isLivraison = false;
+          }
+        } else {
+          // Détection automatique (comportement par défaut)
+          isRetour = documentKind === 'RETOUR CLIENT' || documentType === 5;
+          isLivraison = documentKind === 'LIVRAISON' || documentType === 2;
+          isDevis = !isRetour && !isLivraison;
+        }
 
         let documentTitle = 'DEVIS';
         let headerLabel = 'Devis N°';

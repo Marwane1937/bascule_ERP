@@ -72,26 +72,48 @@
               *ngFor="let notification of filteredNotifications; let i = index"
               [ngClass]="getRowClass(notification)"
               [class.notification-read]="notification.lire === 3"
+              [class.notification-error]="notification.type === 3"
+              [class.notification-calculated]="notification.isCalculated"
+              [class.notification-clickable]="notification.redirectRoute"
+              [style.cursor]="notification.redirectRoute ? 'pointer' : 'default'"
+              (click)="onNotificationClick(notification)"
               class="notification-row">
               <td class="text-center">
                 <i 
-                  *ngIf="isUrgent(notification)"
+                  *ngIf="isUrgent(notification) || notification.type === 3"
                   class="fas fa-exclamation-triangle blink text-danger"
-                  title="Urgent: moins de 5 jours restants"></i>
-                <span *ngIf="!isUrgent(notification)" class="text-muted">-</span>
+                  title="Urgent: moins de 10 jours restants"></i>
+                <span *ngIf="!isUrgent(notification) && notification.type !== 3" class="text-muted">-</span>
               </td>
               <td>
                 <div class="d-flex align-items-center notification-description">
                   <span 
-                    (click)="viewNotification(notification)" 
                     class="notification-text"
+                    [class.text-danger]="notification.type === 3"
+                    [class.fw-bold]="notification.isCalculated"
                     [title]="notification.description || 'Sans description'">
                     {{ notification.description || 'Sans description' }}
                   </span>
+                  <span *ngIf="notification.isCalculated" class="badge bg-info ms-2" title="Notification calculée automatiquement">
+                    <i class="fas fa-calculator"></i>
+                  </span>
                 </div>
+                <small *ngIf="notification.jours_restants !== undefined" class="text-muted d-block mt-1">
+                  <strong>Jours restants:</strong> {{ notification.jours_restants }}
+                </small>
+                <small *ngIf="notification.redirectRoute" class="text-primary d-block mt-1">
+                  <i class="fas fa-arrow-right"></i> Cliquez pour voir les détails
+                </small>
               </td>
               <td>
                 <span 
+                  *ngIf="notification.jours_restants !== undefined"
+                  class="badge time-badge"
+                  [ngClass]="notification.jours_restants < 10 ? 'bg-danger' : 'bg-warning'">
+                  {{ notification.jours_restants }} jour(s)
+                </span>
+                <span 
+                  *ngIf="notification.jours_restants === undefined"
                   class="badge time-badge"
                   [ngClass]="getTimeRemainingBadgeClass(notification.date_alarme)">
                   {{ getTimeRemainingText(notification.date_alarme) }}
@@ -111,31 +133,34 @@
               </td>
               <td>
                 <div class="d-flex gap-2 justify-content-center action-buttons">
+                  <span *ngIf="notification.isCalculated" class="text-muted">
+                    <i class="fas fa-info-circle" title="Notification calculée automatiquement"></i>
+                  </span>
                   <button 
-                    *ngIf="notification.etat === 0 && hasPermission('notification_archive')"
+                    *ngIf="!notification.isCalculated && notification.etat === 0 && hasPermission('notification_archive')"
                     class="btn btn-sm btn-warning action-btn"
-                    (click)="archive(notification.id)"
+                    (click)="archive(notification.id); $event.stopPropagation()"
                     title="Archiver">
                     <i class="fas fa-archive"></i>
                   </button>
                   <button 
-                    *ngIf="notification.etat === 0 && hasPermission('notification_mark_read')"
+                    *ngIf="!notification.isCalculated && notification.etat === 0 && hasPermission('notification_mark_read') && isNumericId(notification.id)"
                     class="btn btn-sm btn-outline-primary action-btn"
-                    (click)="markAsRead(notification.id)"
+                    (click)="markAsRead(notification.id); $event.stopPropagation()"
                     title="Marquer comme lue">
                     <i class="fas fa-check"></i>
                   </button>
                   <button 
-                    *ngIf="notification.etat === 1 && hasPermission('notification_restore')"
+                    *ngIf="!notification.isCalculated && notification.etat === 1 && hasPermission('notification_restore') && isNumericId(notification.id)"
                     class="btn btn-sm btn-outline-success action-btn"
-                    (click)="restore(notification.id)"
+                    (click)="restore(notification.id); $event.stopPropagation()"
                     title="Restaurer">
                     <i class="fas fa-undo"></i>
                   </button>
                   <button 
-                    *ngIf="hasPermission('notification_delete')"
+                    *ngIf="!notification.isCalculated && hasPermission('notification_delete') && isNumericId(notification.id)"
                     class="btn btn-sm btn-outline-danger action-btn"
-                    (click)="delete(notification.id)"
+                    (click)="delete(notification.id); $event.stopPropagation()"
                     title="Supprimer">
                     <i class="fas fa-trash"></i>
                   </button>
@@ -176,44 +201,68 @@
           </div>
           <div class="mb-3">
             <strong>Description:</strong>
-            <p class="mt-2">{{ selectedNotification.description || 'Aucune description' }}</p>
+            <p class="mt-2" [class.text-danger]="selectedNotification.type === 3" [class.fw-bold]="selectedNotification.isCalculated">
+              {{ selectedNotification.description || 'Aucune description' }}
+            </p>
           </div>
-          <div class="mb-3">
+          <div class="mb-3" *ngIf="selectedNotification.isCalculated && selectedNotification.client">
+            <strong>Client:</strong> {{ selectedNotification.client }}
+          </div>
+          <div class="mb-3" *ngIf="selectedNotification.isCalculated && selectedNotification.jours_restants !== undefined">
+            <strong>Jours restants:</strong>
+            <span class="badge ms-2" [ngClass]="selectedNotification.jours_restants < 10 ? 'bg-danger' : 'bg-warning'">
+              {{ selectedNotification.jours_restants }} jour(s)
+            </span>
+          </div>
+          <div class="mb-3" *ngIf="!selectedNotification.isCalculated">
             <strong>Date:</strong> {{ formatDate(selectedNotification.date_alarme || selectedNotification.date) }}
           </div>
-          <div class="mb-3">
+          <div class="mb-3" *ngIf="!selectedNotification.isCalculated">
             <strong>État:</strong>
             <span class="badge bg-secondary ms-2">{{ selectedNotification.etat }}</span>
+          </div>
+          <div class="mb-3" *ngIf="selectedNotification.isCalculated">
+            <div class="alert alert-info">
+              <i class="fas fa-info-circle me-2"></i>
+              Cette notification est calculée automatiquement et ne peut pas être modifiée.
+            </div>
           </div>
         </div>
         <div class="modal-footer">
           <button 
-            *ngIf="selectedNotification.etat === 0 && hasPermission('notification_mark_read')"
+            *ngIf="!selectedNotification.isCalculated && selectedNotification.etat === 0 && hasPermission('notification_mark_read') && isNumericId(selectedNotification.id)"
             class="btn btn-primary"
             (click)="markAsReadAndClose(selectedNotification.id)"
             title="Marquer comme lue">
             <i class="fas fa-check"></i>
           </button>
           <button 
-            *ngIf="selectedNotification.etat === 0 && hasPermission('notification_archive')"
+            *ngIf="!selectedNotification.isCalculated && selectedNotification.etat === 0 && hasPermission('notification_archive') && isNumericId(selectedNotification.id)"
             class="btn btn-warning"
             (click)="archive(selectedNotification.id)"
             title="Archiver">
             <i class="fas fa-archive"></i>
           </button>
           <button 
-            *ngIf="selectedNotification.etat === 1 && hasPermission('notification_restore')"
+            *ngIf="!selectedNotification.isCalculated && selectedNotification.etat === 1 && hasPermission('notification_restore') && isNumericId(selectedNotification.id)"
             class="btn btn-info"
             (click)="restoreAndClose(selectedNotification.id)"
             title="Restaurer">
             <i class="fas fa-undo"></i>
           </button>
           <button 
-            *ngIf="hasPermission('notification_delete')"
+            *ngIf="!selectedNotification.isCalculated && hasPermission('notification_delete') && isNumericId(selectedNotification.id)"
             class="btn btn-danger"
             (click)="delete(selectedNotification.id)"
             title="Supprimer">
             <i class="fas fa-trash"></i>
+          </button>
+          <button 
+            *ngIf="selectedNotification.isCalculated && selectedNotification.redirectRoute"
+            class="btn btn-primary"
+            (click)="onNotificationClick(selectedNotification); closeDetails()"
+            title="Aller aux contrats">
+            <i class="fas fa-arrow-right me-1"></i>Voir les contrats
           </button>
           <button type="button" class="btn btn-secondary" (click)="closeDetails()" title="Fermer">
             <i class="fas fa-times"></i>

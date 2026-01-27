@@ -60,7 +60,6 @@ export class VilleComponent implements OnInit {
         this.loading = false;
       },
       error: (error) => {
-        console.error('Erreur chargement villes:', error);
         Swal.fire('Erreur', 'Erreur lors du chargement des villes', 'error');
         this.loading = false;
       }
@@ -174,7 +173,6 @@ export class VilleComponent implements OnInit {
         this.getVilles();
       },
       error: (error) => {
-        console.error('Erreur sauvegarde ville:', error);
         const message = error.error?.message || 'Erreur lors de la sauvegarde';
         Swal.fire('Erreur', message, 'error');
       }
@@ -197,7 +195,6 @@ export class VilleComponent implements OnInit {
             this.getVilles();
           },
           error: (error) => {
-            console.error('Erreur suppression ville:', error);
             const message = error.error?.message || 'Erreur lors de la suppression';
             Swal.fire('Erreur', message, 'error');
           }

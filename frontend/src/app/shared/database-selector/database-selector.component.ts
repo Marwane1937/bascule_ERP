@@ -46,14 +46,44 @@ export class DatabaseSelectorComponent implements OnInit {
         // Restaurer la sélection précédente
         if (this.databases.length > 0) {
           const savedId = localStorage.getItem('currentDatabaseId');
-          if (savedId) {
-            const saved = this.databases.find(db => db.id === parseInt(savedId));
+          const savedDbName = localStorage.getItem('currentDatabaseName');
+          
+          // PRIORITÉ 1: Essayer de trouver par dbname (nom technique) - c'est la source de vérité
+          // car il est toujours mis à jour lors du switch et conservé après logout
+          if (savedDbName) {
+            const saved = this.databases.find(db => db.dbname === savedDbName);
             if (saved) {
               this.currentDatabase = saved;
+              // Mettre à jour aussi l'ID et le label pour cohérence
+              localStorage.setItem('currentDatabaseId', saved.id.toString());
+              localStorage.setItem('currentDatabaseLabel', saved.name);
+              this.isLoading = false;
+              return; // Sortir immédiatement après avoir trouvé la bonne base
             }
           }
           
-          // Si aucune sélection sauvegardée, prendre la première
+          // PRIORITÉ 2: Si pas trouvé par dbname, essayer par ID (fallback)
+          if (!this.currentDatabase && savedId) {
+            const saved = this.databases.find(db => db.id === parseInt(savedId));
+            if (saved) {
+              this.currentDatabase = saved;
+              // Vérifier si le dbname correspond, sinon mettre à jour
+              if (savedDbName && saved.dbname !== savedDbName) {
+                // Incohérence détectée, mettre à jour avec la bonne base si trouvée
+                const correctDb = this.databases.find(db => db.dbname === savedDbName);
+                if (correctDb) {
+                  this.currentDatabase = correctDb;
+                  localStorage.setItem('currentDatabaseId', correctDb.id.toString());
+                  localStorage.setItem('currentDatabaseLabel', correctDb.name);
+                }
+              } else {
+                // Mettre à jour le label pour cohérence
+                localStorage.setItem('currentDatabaseLabel', saved.name);
+              }
+            }
+          }
+          
+          // PRIORITÉ 3: Si aucune sélection sauvegardée, prendre la première
           if (!this.currentDatabase && this.databases.length > 0) {
             this.currentDatabase = this.databases[0];
           }
@@ -61,7 +91,6 @@ export class DatabaseSelectorComponent implements OnInit {
         this.isLoading = false;
       },
       error: (error) => {
-        console.error('[DatabaseSelector] ❌ Erreur chargement bases de données:', error);
         this.isLoading = false;
       }
     });

@@ -1,5 +1,7 @@
 const reglementModel = require('../../models/finance/reglement.model');
 const { getCompteurFormate, getCompteurFormatePreview } = require('../compteur.service');
+const reglementPdfService = require('./reglement-pdf.service');
+const pdfConfigService = require('../pdf-config.service');
 
 // Obtenir tous les règlements avec pagination
 const getReglements = async (options = {}, sequelizeConnection = null) => {
@@ -114,6 +116,32 @@ const saveLettrageFactures = async (regle_id, lettrages) => {
   }
 };
 
+// Générer le PDF d'un règlement
+const genererPDF = async (regle_id, options = {}) => {
+  try {
+    // Récupérer les données du règlement
+    const reglementData = await reglementModel.getReglementForPDF(regle_id);
+    
+    if (!reglementData || reglementData.length === 0) {
+      throw new Error('Règlement non trouvé ou sans données');
+    }
+    
+    // Récupérer les informations depuis le fichier JSON de configuration
+    const documentSociete = pdfConfigService.getDocumentSociete();
+    
+    // Générer le PDF
+    const pdfPath = await reglementPdfService.genererPDF(reglementData, {
+      ...options,
+      documentSociete
+    });
+    
+    return pdfPath;
+  } catch (error) {
+    console.error('[genererPDF Service] ❌ Erreur:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   getReglements,
   getReglementById,
@@ -123,6 +151,7 @@ module.exports = {
   deleteReglement,
   getModeReglements,
   getFacturesForLettrage,
-  saveLettrageFactures
+  saveLettrageFactures,
+  genererPDF
 };
 

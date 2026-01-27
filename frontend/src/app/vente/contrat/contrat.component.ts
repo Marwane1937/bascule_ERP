@@ -59,7 +59,6 @@ export class ContratComponent implements OnInit {
         this.conditionsPaiement = Array.isArray(result) ? result : [];
       },
       error: (err: any) => {
-        console.error('[ContratComponent] Erreur chargement conditions:', err);
         this.conditionsPaiement = [];
       }
     });
@@ -86,7 +85,6 @@ export class ContratComponent implements OnInit {
         this.filteredClients = [...this.clients];
       },
       error: (err: any) => {
-        console.error('[ContratComponent] Erreur chargement clients:', err);
         this.clients = [];
         this.filteredClients = [];
       }
@@ -140,7 +138,6 @@ export class ContratComponent implements OnInit {
         this.loading = false;
       },
       error: (err) => {
-        console.error('[ContratComponent] ❌ Erreur chargement contrats:', err);
         this.contrats = [];
         this.totalRecords = 0;
         this.totalPages = 1;
@@ -180,7 +177,6 @@ export class ContratComponent implements OnInit {
           this.loadContrats(this.currentPage);
         },
         error: (err) => {
-          console.error('[ContratComponent] ❌ Erreur modification contrat:', err);
           this.showError(`❌ Erreur lors de la modification: ${err.error?.message || err.message || 'Erreur inconnue'}`);
         }
       });
@@ -194,7 +190,6 @@ export class ContratComponent implements OnInit {
           this.loadContrats(1);
         },
         error: (err) => {
-          console.error('[ContratComponent] ❌ Erreur création contrat:', err);
           this.showError(`❌ Erreur lors de la création: ${err.error?.message || err.message || 'Erreur inconnue'}`);
         }
       });
@@ -234,7 +229,6 @@ export class ContratComponent implements OnInit {
           this.loadContrats(this.currentPage);
         },
         error: (err) => {
-          console.error('[ContratComponent] ❌ Erreur suppression contrat:', err);
           this.showError(`❌ Erreur lors de la suppression: ${err.error?.message || err.message || 'Erreur inconnue'}`);
         }
       });

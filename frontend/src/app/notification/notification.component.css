@@ -160,6 +160,41 @@
   font-size: 0.8rem;
 }
 
+/* Style pour les notifications d'erreur (rouge, très important) */
+.notification-error {
+  background-color: #fee !important;
+  border-left: 4px solid #dc3545 !important;
+}
+
+.notification-error:hover {
+  background-color: #fdd !important;
+}
+
+.notification-error .notification-text {
+  color: #dc3545 !important;
+  font-weight: 600;
+}
+
+/* Style pour les notifications calculées */
+.notification-calculated {
+  font-weight: 600;
+}
+
+.notification-calculated:hover {
+  transform: translateX(3px);
+  transition: all 0.2s ease;
+}
+
+/* Style pour les notifications cliquables */
+.notification-clickable {
+  cursor: pointer;
+}
+
+.notification-clickable:hover {
+  background-color: #f0f0f0 !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
 /* Responsive */
 @media (max-width: 1200px) {
   .notification-description {

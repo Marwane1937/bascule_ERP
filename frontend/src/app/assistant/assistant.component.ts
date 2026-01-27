@@ -84,7 +84,6 @@ Réponds toujours sous forme de liste claire et étape par étape. Ne parle que 
       err => {
         this.messages.push({ sender: 'bot', text: '❌ Erreur Together AI.' });
         this.loading = false;
-        console.error('Erreur Together:', err);
       }
     );
   }
