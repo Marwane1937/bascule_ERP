@@ -376,13 +376,88 @@ class FacturationPdfService {
           const clientBoxWidth = 260;
           const clientBoxHeight = 80; // Augmenté pour accommoder ICE
           const clientBoxX = 300;
+          const clientPadding = 10;
+          const clientTextWidth = clientBoxWidth - (clientPadding * 2); // Largeur disponible pour le texte
+          const lineSpacing = 20; // Espacement augmenté entre les lignes pour meilleure lisibilité
 
           doc.roundedRect(clientBoxX, clientTop, clientBoxWidth, clientBoxHeight, tableBorderRadius).stroke('#000');
           doc.fontSize(10).font('Helvetica').fillColor('#000');
-          doc.text(`Client : ${firstLine.client || firstLine.nom_client || ''}`, clientBoxX + 10, clientTop + 10);
-          doc.text(`Adresse : ${firstLine.adresse || ''}`, clientBoxX + 10, clientTop + 28);
-          doc.text(`${firstLine.ville || ''}`, clientBoxX + 10, clientTop + 46);
-          doc.text(`ICE : ${firstLine.ice || ''}`, clientBoxX + 10, clientTop + 64);
+          
+          // Client avec gestion du retour à la ligne intelligent
+          let currentY = clientTop + 10;
+          const clientName = firstLine.client || firstLine.nom_client || '';
+          if (clientName) {
+            const clientText = `Client : ${clientName}`;
+            // Vérifier si le texte tient sur une ligne
+            const textWidth = doc.widthOfString(clientText);
+            if (textWidth <= clientTextWidth) {
+              // Le texte tient sur une ligne, ne pas utiliser width pour éviter les retours à la ligne inutiles
+              doc.text(clientText, clientBoxX + clientPadding, currentY);
+              currentY += lineSpacing;
+            } else {
+              // Le texte dépasse, utiliser width pour permettre le retour à la ligne
+              doc.text(clientText, clientBoxX + clientPadding, currentY, { 
+                width: clientTextWidth, 
+                align: 'left' 
+              });
+              const clientTextHeight = doc.heightOfString(clientText, { width: clientTextWidth });
+              currentY += Math.max(lineSpacing, Math.ceil(clientTextHeight) + 4);
+            }
+          } else {
+            currentY += lineSpacing;
+          }
+          
+          // Adresse avec gestion du retour à la ligne intelligent
+          const clientAdresse = firstLine.adresse || '';
+          if (clientAdresse) {
+            const adresseText = `Adresse : ${clientAdresse}`;
+            const textWidth = doc.widthOfString(adresseText);
+            if (textWidth <= clientTextWidth) {
+              // Le texte tient sur une ligne
+              doc.text(adresseText, clientBoxX + clientPadding, currentY);
+              currentY += lineSpacing;
+            } else {
+              // Le texte dépasse, utiliser width pour permettre le retour à la ligne
+              doc.text(adresseText, clientBoxX + clientPadding, currentY, { 
+                width: clientTextWidth, 
+                align: 'left' 
+              });
+              const adresseTextHeight = doc.heightOfString(adresseText, { width: clientTextWidth });
+              currentY += Math.max(lineSpacing, Math.ceil(adresseTextHeight) + 4);
+            }
+          } else {
+            currentY += lineSpacing;
+          }
+          
+          // Ville
+          const clientVille = firstLine.ville || '';
+          if (clientVille) {
+            const textWidth = doc.widthOfString(clientVille);
+            if (textWidth <= clientTextWidth) {
+              doc.text(clientVille, clientBoxX + clientPadding, currentY);
+            } else {
+              doc.text(clientVille, clientBoxX + clientPadding, currentY, { 
+                width: clientTextWidth, 
+                align: 'left' 
+              });
+            }
+            currentY += lineSpacing;
+          }
+          
+          // ICE
+          const clientICE = firstLine.ice || '';
+          if (clientICE) {
+            const iceText = `ICE : ${clientICE}`;
+            const textWidth = doc.widthOfString(iceText);
+            if (textWidth <= clientTextWidth) {
+              doc.text(iceText, clientBoxX + clientPadding, currentY);
+            } else {
+              doc.text(iceText, clientBoxX + clientPadding, currentY, { 
+                width: clientTextWidth, 
+                align: 'left' 
+              });
+            }
+          }
 
           // Tableau d'info (Numéro, Date, BL) - uniquement sur la première page
           if (isFirstPage) {

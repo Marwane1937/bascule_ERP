@@ -671,19 +671,15 @@ class EmailService {
         drawPageFooter(1);
         
         // === DÉFINIR LA HAUTEUR FIXE DU TABLEAU ===
-        // Le tableau principal doit occuper TOUT l'espace disponible sur chaque page
-        // Il n'y a pas de réserve d'espace pour le tableau de vérification (qui sera affiché après le montant en lettres)
+        // Le tableau principal a une hauteur fixe raisonnable qui ne dépasse pas la page
         // pageHeight est déjà défini plus haut (ligne 442)
         const bottomMargin = 40;
         const footerHeight = 32;
         const footerY = pageHeight - bottomMargin - footerHeight;
         
-        // Le tableau principal peut s'étendre jusqu'au pied de page avec un espace de sécurité
-        // Garder un espace entre le tableau et le pied de page
-        const spaceBeforeFooter = 15; // Espace entre le tableau et le pied de page
-        const maxYBeforeFooter = footerY - spaceBeforeFooter;
-        const maxTableHeight = maxYBeforeFooter - tableStartY; // Hauteur maximale disponible pour le tableau principal
-        // La hauteur fixe sera calculée dynamiquement selon le contenu
+        // Hauteur fixe du tableau (environ 250px pour une taille raisonnable)
+        const fixedTableHeight = 250; // Hauteur fixe du tableau des détails
+        const maxTableHeight = fixedTableHeight; // Utiliser la hauteur fixe
 
         // Positions des colonnes (utilisées dans la boucle de rendu des lignes)
         // EXACTEMENT COMME FACTURE CONTRAT
@@ -730,7 +726,10 @@ class EmailService {
         }
 
         function renderInlineHtml(doc, html, x, y, width, maxHeight, align = 'left') {
-          if (!html) return 0;
+          if (!html || !String(html).trim()) {
+            // Retourner une hauteur minimale même si le HTML est vide
+            return 9; // Hauteur minimale d'une ligne
+          }
 
           // Structure pour stocker les lignes avec leurs segments de texte stylisés
           const lines = [];
@@ -949,6 +948,19 @@ class EmailService {
             }
           });
 
+          // Si aucune ligne à rendre, retourner une hauteur minimale
+          if (lines.length === 0) {
+            // Extraire le texte brut pour le rendre même s'il n'y a pas de structure HTML
+            const plainText = String(html || '').replace(/<[^>]+>/g, '').trim();
+            if (plainText) {
+              // Ajouter une ligne simple avec le texte brut
+              lines.push({ text: plainText, bold: false, italic: false, color: '#000000' });
+            } else {
+              // Même si vide, retourner une hauteur minimale pour que la ligne s'affiche
+              return 9; // Hauteur minimale d'une ligne
+            }
+          }
+
           // Rendre dans le PDF
           doc.save();
 
@@ -988,43 +1000,32 @@ class EmailService {
             try {
               if (line.type === 'listitem' && line.segments) {
                 // Rendre une liste avec segments stylisés
-                // Construire le texte complet pour calculer la hauteur
-                let fullLineText = '';
-                line.segments.forEach((segment) => {
-                  if (segment.text !== '\n' && segment.text && segment.text.trim()) {
-                    fullLineText += segment.text + ' ';
-                  }
-                });
-
                 const prefixText = line.prefix || '';
                 const prefixWidth = doc.widthOfString(prefixText, { fontSize: 9 });
                 const contentWidth = drawWidth - prefixWidth;
-                
-                // Calculer la hauteur totale de cette ligne (préfixe + contenu)
-                const prefixHeight = calculateTextHeight(prefixText, drawWidth);
-                const contentHeight = calculateTextHeight(fullLineText.trim(), contentWidth);
-                const lineHeight = Math.max(prefixHeight, contentHeight);
+                const yBefore = currentY;
 
                 // Rendre le préfixe
                 setFont(doc, false, false);
                 doc.fontSize(9);
                 doc.fillColor('#000000');
-                doc.text(prefixText, drawX, currentY, { width: drawWidth, align: 'left' });
+                doc.text(prefixText, drawX, currentY, { width: drawWidth, align: 'left', continued: true });
 
-                // Rendre chaque segment avec son style
-                let segmentX = drawX + prefixWidth;
-                let segmentY = currentY;
-                let currentLineY = currentY;
-                let currentLineHeight = lineHeight;
-
-                line.segments.forEach((segment) => {
+                // Rendre chaque segment avec son style en mode continued
+                let isFirstContentSegment = true;
+                line.segments.forEach((segment, segIdx) => {
                   if (segment.text === '\n') {
-                    // Saut de ligne explicite: passer à la ligne suivante
-                    currentY += currentLineHeight;
-                    segmentX = drawX + prefixWidth;
-                    segmentY = currentY;
-                    currentLineY = currentY;
-                    currentLineHeight = baseLineHeight;
+                    // Saut de ligne explicite: terminer le texte actuel et passer à la ligne suivante
+                    if (!isFirstContentSegment) {
+                      doc.text('', { width: contentWidth, continued: false });
+                    }
+                    currentY += baseLineHeight;
+                    // Redessiner le préfixe sur la nouvelle ligne
+                    setFont(doc, false, false);
+                    doc.fontSize(9);
+                    doc.fillColor('#000000');
+                    doc.text(prefixText, drawX, currentY, { width: drawWidth, align: 'left', continued: true });
+                    isFirstContentSegment = true;
                     return;
                   }
 
@@ -1034,63 +1035,51 @@ class EmailService {
                   doc.fontSize(9);
                   doc.fillColor(segment.color);
 
-                  // Utiliser la largeur totale disponible pour le contenu (drawWidth moins le préfixe)
-                  // Le texte reviendra automatiquement à la ligne dans cette largeur
-                  const totalContentWidth = drawWidth - prefixWidth;
+                  // Rendre le segment en mode continued pour un rendu continu
+                  const isLastSegment = (segIdx === line.segments.length - 1);
                   
-                  // Vérifier si on est au début d'une nouvelle ligne
-                  const relativeX = segmentX - (drawX + prefixWidth);
-                  if (relativeX <= 0 || relativeX >= totalContentWidth) {
-                    // Nouvelle ligne si on dépasse ou si on est au début
-                    currentY += currentLineHeight;
-                    segmentX = drawX + prefixWidth;
-                    segmentY = currentY;
-                    currentLineY = currentY;
-                    currentLineHeight = baseLineHeight;
-                  }
-
-                  // Rendre le segment avec la largeur totale disponible (le texte reviendra automatiquement à la ligne)
-                  const yBefore = segmentY;
-                  doc.text(segment.text, segmentX, segmentY, { width: totalContentWidth, align: 'left' });
-                  
-                  // Vérifier la position Y réelle après le rendu (pour détecter les retours à la ligne automatiques)
-                  const yAfter = getActualY();
-                  const actualHeight = yAfter - yBefore;
-                  
-                  if (actualHeight > 0) {
-                    // Le texte est revenu à la ligne automatiquement
-                    currentLineHeight = Math.max(currentLineHeight, actualHeight);
-                    segmentY = yAfter;
-                    segmentX = drawX + prefixWidth; // Réinitialiser X pour la nouvelle ligne
+                  if (isFirstContentSegment) {
+                    // Premier segment de contenu: continuer après le préfixe
+                    doc.text(segment.text, { 
+                      width: contentWidth, 
+                      align: 'left',
+                      continued: !isLastSegment 
+                    });
+                    isFirstContentSegment = false;
                   } else {
-                    // Le texte tient sur une seule ligne
-                    const segmentWidth = doc.widthOfString(segment.text, { fontSize: 9 });
-                    const renderedHeight = calculateTextHeight(segment.text, totalContentWidth);
-                    currentLineHeight = Math.max(currentLineHeight, renderedHeight);
-                    
-                    // Mettre à jour la position X (mais ne pas dépasser la largeur disponible)
-                    const newSegmentX = segmentX + Math.min(segmentWidth, totalContentWidth);
-                    segmentX = Math.min(newSegmentX, drawX + prefixWidth + totalContentWidth);
+                    // Segments suivants: continuer le texte précédent
+                    doc.text(segment.text, { 
+                      width: contentWidth, 
+                      align: 'left',
+                      continued: !isLastSegment 
+                    });
                   }
                 });
 
-                // Passer à la ligne suivante après avoir rendu tous les segments
-                currentY += currentLineHeight;
+                // Terminer le texte si nécessaire
+                if (!isFirstContentSegment) {
+                  doc.text('', { width: contentWidth, continued: false });
+                }
+
+                // Calculer la hauteur réelle utilisée
+                const yAfter = getActualY();
+                const actualHeight = Math.max(baseLineHeight, yAfter - yBefore);
+                currentY += actualHeight;
               } else if (line.type === 'text' && line.segments) {
                 // Rendre du texte avec segments stylisés
-                let segmentX = drawX;
-                let segmentY = currentY;
-                let currentLineY = currentY;
-                let currentLineHeight = baseLineHeight;
+                // Utiliser le mode continued pour éviter les retours à la ligne incorrects
+                let isFirstSegment = true;
+                const yBefore = currentY;
 
-                line.segments.forEach((segment) => {
+                line.segments.forEach((segment, segIdx) => {
                   if (segment.text === '\n') {
-                    // Saut de ligne explicite
-                    currentY += currentLineHeight;
-                    segmentX = drawX;
-                    segmentY = currentY;
-                    currentLineY = currentY;
-                    currentLineHeight = baseLineHeight;
+                    // Saut de ligne explicite: terminer le texte actuel et passer à la ligne suivante
+                    if (!isFirstSegment) {
+                      // Terminer le texte en cours
+                      doc.text('', { width: drawWidth, continued: false });
+                    }
+                    currentY += baseLineHeight;
+                    isFirstSegment = true;
                     return;
                   }
 
@@ -1100,48 +1089,31 @@ class EmailService {
                   doc.fontSize(9);
                   doc.fillColor(segment.color);
 
-                  // Utiliser la largeur totale disponible (drawWidth)
-                  // Le texte reviendra automatiquement à la ligne dans cette largeur
-                  const totalContentWidth = drawWidth;
+                  // Rendre le segment en mode continued pour un rendu continu
+                  const isLastSegment = (segIdx === line.segments.length - 1);
                   
-                  // Vérifier si on est au début d'une nouvelle ligne
-                  const relativeX = segmentX - drawX;
-                  if (relativeX <= 0 || relativeX >= totalContentWidth) {
-                    // Nouvelle ligne si on dépasse ou si on est au début
-                    currentY += currentLineHeight;
-                    segmentX = drawX;
-                    segmentY = currentY;
-                    currentLineY = currentY;
-                    currentLineHeight = baseLineHeight;
-                  }
-
-                  // Rendre le segment avec la largeur totale disponible (le texte reviendra automatiquement à la ligne)
-                  const yBefore = segmentY;
-                  doc.text(segment.text, segmentX, segmentY, { width: totalContentWidth, align: align });
-                  
-                  // Vérifier la position Y réelle après le rendu (pour détecter les retours à la ligne automatiques)
-                  const yAfter = getActualY();
-                  const actualHeight = yAfter - yBefore;
-                  
-                  if (actualHeight > 0) {
-                    // Le texte est revenu à la ligne automatiquement
-                    currentLineHeight = Math.max(currentLineHeight, actualHeight);
-                    segmentY = yAfter;
-                    segmentX = drawX; // Réinitialiser X pour la nouvelle ligne
+                  if (isFirstSegment) {
+                    // Premier segment: positionner à la position initiale
+                    doc.text(segment.text, drawX, currentY, { 
+                      width: drawWidth, 
+                      align: align,
+                      continued: !isLastSegment 
+                    });
+                    isFirstSegment = false;
                   } else {
-                    // Le texte tient sur une seule ligne
-                    const segmentWidth = doc.widthOfString(segment.text, { fontSize: 9 });
-                    const renderedHeight = calculateTextHeight(segment.text, totalContentWidth);
-                    currentLineHeight = Math.max(currentLineHeight, renderedHeight);
-                    
-                    // Mettre à jour la position X (mais ne pas dépasser la largeur disponible)
-                    const newSegmentX = segmentX + Math.min(segmentWidth, totalContentWidth);
-                    segmentX = Math.min(newSegmentX, drawX + totalContentWidth);
+                    // Segments suivants: continuer le texte précédent
+                    doc.text(segment.text, { 
+                      width: drawWidth, 
+                      align: align,
+                      continued: !isLastSegment 
+                    });
                   }
                 });
 
-                // Passer à la ligne suivante après avoir rendu tous les segments
-                currentY += currentLineHeight;
+                // Calculer la hauteur réelle utilisée
+                const yAfter = getActualY();
+                const actualHeight = Math.max(baseLineHeight, yAfter - yBefore);
+                currentY += actualHeight;
               } else {
                 // Ligne simple avec texte uniforme
                 setFont(doc, line.bold || false, line.italic || false);
@@ -1644,9 +1616,8 @@ class EmailService {
                       });
                     } else {
                       // Plusieurs segments avec styles différents
-                      // Rendre chaque segment sur la même ligne Y
-                      let segmentX = currentX;
-                      let segmentY = textY;
+                      // Utiliser le mode continued pour éviter les retours à la ligne incorrects
+                      let isFirstSegment = true;
                       
                       lineData.segments.forEach((segment, segIdx) => {
                         // Appliquer la police
@@ -1663,29 +1634,30 @@ class EmailService {
                         doc.fontSize(9);
                         doc.fillColor(segment.color || '#000');
                         
-                        // Calculer la largeur du segment
-                        const segmentWidth = doc.widthOfString(segment.text);
-                        const remainingWidth = textStartX + textMaxWidth - segmentX;
+                        const isLastSegment = (segIdx === lineData.segments.length - 1);
                         
-                        if (segmentWidth <= remainingWidth) {
-                          // Le segment tient sur la ligne courante
-                          doc.text(segment.text, segmentX, segmentY, { 
-                            lineBreak: false,
-                            continued: false
-                          });
-                          segmentX += segmentWidth;
-                        } else {
-                          // Le segment doit être wrappé
-                          doc.text(segment.text, segmentX, segmentY, { 
-                            width: remainingWidth,
+                        if (isFirstSegment) {
+                          // Premier segment: positionner à la position initiale
+                          doc.text(segment.text, currentX, textY, { 
+                            width: availableWidth,
                             align: 'left',
-                            lineBreak: true
+                            continued: !isLastSegment
                           });
-                          // Après wrapping, le prochain texte sera sur la nouvelle ligne
-                          segmentY = doc.y;
-                          segmentX = currentX;
+                          isFirstSegment = false;
+                        } else {
+                          // Segments suivants: continuer le texte précédent
+                          doc.text(segment.text, { 
+                            width: availableWidth,
+                            align: 'left',
+                            continued: !isLastSegment
+                          });
                         }
                       });
+                      
+                      // Terminer le texte si nécessaire
+                      if (!isFirstSegment) {
+                        doc.text('', { width: availableWidth, continued: false });
+                      }
                     }
                   }
                   
@@ -1746,27 +1718,59 @@ class EmailService {
             doc.font('Helvetica').fontSize(9).fillColor('#000000');
             
             // Désignation (avec HTML support) - même ligne
-            // La fonction renderInlineHtml ajoute un padding de 8px de chaque côté (total 16px)
-            // Ne pas limiter la hauteur pour permettre au texte de s'afficher en entier
-            // Le texte passera automatiquement à la ligne et ajustera la hauteur de la ligne
-            const actualDesignationHeight = renderInlineHtml(doc, designationHtml, colDesignationX, validY - 4, colDesignationWidth, null) || validRowHeight;
+            // La fonction renderInlineHtml ajoute un padding de 2px de chaque côté
+            // Estimer la hauteur pour déterminer l'alignement vertical
+            const effectiveDesignationWidth = Math.max(0, colDesignationWidth - 4); // Largeur moins padding
+            const designationPlain = (designationHtml || '')
+              .replace(/<h[1-6][^>]*>/gi, '\n').replace(/<\/h[1-6]>/gi, '\n')
+              .replace(/<ul[^>]*>/gi, '\n').replace(/<\/ul>/gi, '\n')
+              .replace(/<li[^>]*>/gi, '\n• ').replace(/<\/li>/gi, '')
+              .replace(/<br\s*\/?>/gi, '\n')
+              .replace(/<p[^>]*>/gi, '\n').replace(/<\/p>/gi, '\n')
+              .replace(/<[^>]*>/g, '')
+              .replace(/[ \t]+/g, ' ')
+              .trim();
+            
+            // Estimer la hauteur du texte
+            let estimatedHeight = baseRowHeight;
+            if (effectiveDesignationWidth > 0 && designationPlain.length > 0) {
+              try {
+                const textHeight = doc.heightOfString(designationPlain || ' ', { width: effectiveDesignationWidth, align: 'left' });
+                estimatedHeight = Math.max(baseRowHeight, Math.ceil(textHeight) + 4); // +4 pour le padding
+              } catch (e) {
+                estimatedHeight = baseRowHeight;
+              }
+            }
+            
+            const estimatedRowHeight = Math.max(validRowHeight, estimatedHeight);
+            const centerY = validY + (estimatedRowHeight / 2) - 3;
+            
+            // Pour les lignes courtes (une seule ligne), aligner la désignation avec les autres colonnes
+            // renderInlineHtml ajoute un padding de 2px, donc on ajuste le Y de départ pour aligner avec centerY
+            const designationStartY = estimatedRowHeight <= validRowHeight + 5 
+              ? centerY - 4.5  // Aligner avec centerY pour les lignes courtes (taille police 9 / 2 = 4.5)
+              : validY;  // Commencer en haut pour les lignes longues
+            
+            // Rendre la désignation avec le bon alignement vertical
+            // S'assurer qu'on a toujours quelque chose à rendre même si designationHtml est vide
+            const designationToRender = designationHtml && String(designationHtml).trim() ? designationHtml : ' ';
+            const actualDesignationHeight = renderInlineHtml(doc, designationToRender, colDesignationX, designationStartY, colDesignationWidth, null) || validRowHeight;
             
             // Utiliser la hauteur réelle retournée par renderInlineHtml, avec un minimum de validRowHeight
-            // Réduire le padding supplémentaire à 2px pour un espacement très compact comme livraison
             const actualRowHeight = Math.max(validRowHeight, actualDesignationHeight + 2); // +2 pour le padding minimal
-
-            // Centrer verticalement dans la ligne après avoir obtenu la hauteur réelle
-            const centerY = validY + (actualRowHeight / 2) - 3; // Centrer verticalement dans la ligne
+            
+            // Recalculer centerY avec la hauteur réelle pour les autres colonnes
+            const finalCenterY = validY + (actualRowHeight / 2) - 3;
             
             // Réf aligné à gauche, sur la même ligne que les autres colonnes
-            doc.text(ref || '', colRefX + 8, centerY, { width: colRefWidth - 16, align: 'left' });
+            doc.text(ref || '', colRefX + 8, finalCenterY, { width: colRefWidth - 16, align: 'left' });
 
             // Qté, P.U., R., H.T. alignés à droite - centrer verticalement dans la ligne
-            doc.text(qte.toFixed(2).replace('.', ','), colQteX, centerY, { width: colQteWidth, align: 'right' });
-            doc.text(pu.toFixed(2).replace('.', ','), colPUX, centerY, { width: colPUWidth, align: 'right' });
+            doc.text(qte.toFixed(2).replace('.', ','), colQteX, finalCenterY, { width: colQteWidth, align: 'right' });
+            doc.text(pu.toFixed(2).replace('.', ','), colPUX, finalCenterY, { width: colPUWidth, align: 'right' });
             const remiseText = (montantRemise > 0 ? montantRemise.toFixed(2).replace('.', ',') : '0,00');
-            doc.text(remiseText, colRX, centerY, { width: colRWidth, align: 'right' });
-            doc.text(ht.toFixed(2).replace('.', ','), colHTX, centerY, { width: colHTWidth, align: 'right' });
+            doc.text(remiseText, colRX, finalCenterY, { width: colRWidth, align: 'right' });
+            doc.text(ht.toFixed(2).replace('.', ','), colHTX, finalCenterY, { width: colHTWidth, align: 'right' });
 
             // Mettre à jour currentRowY pour la ligne suivante avec la hauteur réelle
             currentRowY = validY + actualRowHeight;
@@ -1784,24 +1788,9 @@ class EmailService {
             }
           });
           
-          // Utiliser la hauteur réelle utilisée - tableau dynamique selon le contenu
-          // Le tableau s'agrandit automatiquement uniquement s'il y a plusieurs détails
-          let targetHeight;
-          if (isFirstPage && actualTableHeight > 0 && !isNaN(actualTableHeight)) {
-            // Sur la première page, utiliser la hauteur réelle calculée
-            targetHeight = actualTableHeight;
-          } else {
-            // Si on a paginé, utiliser la hauteur jusqu'à currentRowY
-            targetHeight = currentRowY - tableStartY;
-          }
-          
-          // S'assurer que targetHeight est au moins égal à la hauteur minimale
-          const minTableHeight = articlesTableHeaderHeight + 16; // Réduit encore plus pour un espacement très compact
-          targetHeight = Math.max(targetHeight, minTableHeight);
-          
-          // Ne pas dépasser maxTableHeight pour éviter les débordements
-          // Mais permettre au tableau de s'étendre pour occuper l'espace disponible
-          targetHeight = Math.min(targetHeight, maxTableHeight);
+          // Utiliser la hauteur fixe maxTableHeight pour que le tableau occupe toujours l'espace jusqu'en bas
+          // Le tableau a une taille fixe même s'il n'y a pas de détails
+          let targetHeight = maxTableHeight; // Hauteur fixe pour occuper tout l'espace disponible
           
           if (targetHeight > 0 && !isNaN(targetHeight)) {
             // Dessiner le contour avec la hauteur réelle
@@ -1817,16 +1806,15 @@ class EmailService {
           // Mettre à jour y pour être à la fin du tableau
           y = tableStartY + targetHeight;
         } else {
-          // Si aucune ligne, utiliser une hauteur minimale
-          const minTableHeight = articlesTableHeaderHeight + 16; // Réduit encore plus pour un espacement très compact
-          // Redessiner avec hauteur minimale
-          doc.roundedRect(tableStartX, tableStartY, tableWidth, minTableHeight, tableBorderRadius).stroke('#000');
-          doc.moveTo(colDesignationX, tableStartY).lineTo(colDesignationX, tableStartY + minTableHeight).stroke('#000');
-          doc.moveTo(colQteX, tableStartY).lineTo(colQteX, tableStartY + minTableHeight).stroke('#000');
-          doc.moveTo(colPUX, tableStartY).lineTo(colPUX, tableStartY + minTableHeight).stroke('#000');
-          doc.moveTo(colRX, tableStartY).lineTo(colRX, tableStartY + minTableHeight).stroke('#000');
-          doc.moveTo(colHTX, tableStartY).lineTo(colHTX, tableStartY + minTableHeight).stroke('#000');
-          y = tableStartY + minTableHeight;
+          // Si aucune ligne, utiliser la hauteur fixe maxTableHeight pour occuper tout l'espace
+          // Redessiner avec hauteur fixe
+          doc.roundedRect(tableStartX, tableStartY, tableWidth, maxTableHeight, tableBorderRadius).stroke('#000');
+          doc.moveTo(colDesignationX, tableStartY).lineTo(colDesignationX, tableStartY + maxTableHeight).stroke('#000');
+          doc.moveTo(colQteX, tableStartY).lineTo(colQteX, tableStartY + maxTableHeight).stroke('#000');
+          doc.moveTo(colPUX, tableStartY).lineTo(colPUX, tableStartY + maxTableHeight).stroke('#000');
+          doc.moveTo(colRX, tableStartY).lineTo(colRX, tableStartY + maxTableHeight).stroke('#000');
+          doc.moveTo(colHTX, tableStartY).lineTo(colHTX, tableStartY + maxTableHeight).stroke('#000');
+          y = tableStartY + maxTableHeight;
         }
 
         // === BLOC RÉCAPITULATIF HORIZONTAL (ne dépasse pas la moitié de la page, positionné à droite) ===

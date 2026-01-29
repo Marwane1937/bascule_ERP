@@ -408,15 +408,17 @@
                     <td *ngIf="columnVisibility.commercial">{{ d.commercial || '-' }}</td>
                     <td *ngIf="columnVisibility.description">{{ d.description || '-' }}</td>
                     <td class="text-center">
-                      <button class="btn btn-sm btn-outline-info me-1" (click)="OnEditCommande(d.document_id)" title="Modifier">
-                        <i class="fas fa-edit"></i>
-                      </button>
-                      <button class="btn btn-sm btn-outline-danger me-1" (click)="removeCommande(d, i)" title="Supprimer">
-                        <i class="fas fa-trash-alt"></i>
-                      </button>
-                      <button class="btn btn-sm btn-outline-purple me-1" (click)="OnPrintCommande(d.document_id)" title="Imprimer">
-                        <i class="fas fa-print"></i>
-                      </button>
+                      <div class="d-flex align-items-center justify-content-center gap-1">
+                        <button class="btn btn-sm btn-outline-info" (click)="OnEditCommande(d.document_id)" title="Modifier">
+                          <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-purple" (click)="OnPrintCommande(d.document_id)" title="Imprimer PDF">
+                          <i class="fas fa-file-pdf"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" (click)="removeCommande(d, i)" title="Supprimer">
+                          <i class="fas fa-trash-alt"></i>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
