@@ -26,6 +26,8 @@ import { EditContratComponent } from './vente/edit/edit-contrat/edit-contrat.com
 import { FacturationComponent } from './vente/facturation/facturation.component';
 import { ReglementComponent } from './vente/reglement/reglement.component';
 import { EditReglementComponent } from './vente/edit/edit-reglement/edit-reglement.component';
+import { BordereauRemiseComponent } from './finance/bordereau-remise/bordereau-remise.component';
+import { EditBordereauRemiseComponent } from './finance/edit/edit-bordereau-remise/edit-bordereau-remise.component';
 import { RetourComponent } from './vente/retour/retour.component';
 import { EditRetourComponent } from './vente/edit/edit-retour/edit-retour.component';
 import { AvoirComponent } from './vente/avoir/avoir.component';
@@ -271,6 +273,14 @@ const routes: Routes = [
   {
     path: 'Finance/Reporting',
     component: FinanceReportingComponent
+  },
+  {
+    path: 'Finance/Bordereau-Remise',
+    component: BordereauRemiseComponent
+  },
+  {
+    path: 'Finance/Bordereau-Remise/Edit/:id',
+    component: EditBordereauRemiseComponent
   },
   {
     path: 'Interventions',

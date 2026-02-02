@@ -22,15 +22,236 @@
     
     <!-- Boutons d'action -->
     <div class="row mb-4">
-      <div class="col-12 d-flex justify-content-end gap-2 align-items-center" style="flex-wrap: nowrap !important; overflow-x: visible;">
-        <button type="button" class="btn btn-gradient px-4 py-2 shadow-sm" data-bs-toggle="modal"
-          data-bs-target="#addLivraisonModal">
-          <i class="fas fa-plus me-2"></i> Ajouter un Bon de Livraison
+      <div class="col-12 d-flex justify-content-between gap-2 align-items-center" style="flex-wrap: nowrap !important; overflow-x: visible;">
+        <button type="button" class="btn btn-info px-4 py-2 shadow-sm" (click)="toggleDashboard()">
+          <i class="fas fa-chart-line me-2"></i> {{ showDashboard ? 'Masquer Dashboard' : 'Afficher Dashboard' }}
         </button>
-        <button type="button" class="btn btn1-gradient px-4 py-2 shadow-sm" data-bs-toggle="modal"
-          data-bs-target="#modalCommandeLivraisonXL">
-          <i class="fas fa-exchange-alt me-2"></i> Commande vers Livraison
-        </button>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-gradient px-4 py-2 shadow-sm" data-bs-toggle="modal"
+            data-bs-target="#addLivraisonModal">
+            <i class="fas fa-plus me-2"></i> Ajouter un Bon de Livraison
+          </button>
+          <button type="button" class="btn btn1-gradient px-4 py-2 shadow-sm" data-bs-toggle="modal"
+            data-bs-target="#modalCommandeLivraisonXL">
+            <i class="fas fa-exchange-alt me-2"></i> Commande vers Livraison
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dashboard Section -->
+    <div *ngIf="showDashboard" class="dashboard-section mb-4">
+      <div class="card shadow-sm">
+        <div class="card-header bg-gradient-primary text-white">
+          <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Dashboard Livraisons</h5>
+        </div>
+        <div class="card-body">
+          <div *ngIf="dashboardLoading" class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Chargement...</span>
+            </div>
+          </div>
+          <div *ngIf="!dashboardLoading">
+            <!-- Cards Statistiques -->
+            <div class="row mb-4">
+              <div class="col-md-2 mb-3">
+                <div class="card border-left-primary shadow h-100">
+                  <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                      <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                          Total Livraisons
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                          {{ dashboardStats.totalLivraisons | number }}
+                        </div>
+                      </div>
+                      <div class="col-auto">
+                        <i class="fas fa-truck fa-2x text-gray-300"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-2 mb-3">
+                <div class="card border-left-success shadow h-100">
+                  <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                      <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                          Total HT
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                          {{ dashboardStats.totalMontantHT | number:'1.2-2' }} DH
+                        </div>
+                      </div>
+                      <div class="col-auto">
+                        <i class="fas fa-money-bill-wave fa-2x text-gray-300"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-2 mb-3">
+                <div class="card border-left-info shadow h-100">
+                  <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                      <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                          Total TVA
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                          {{ dashboardStats.totalTVA | number:'1.2-2' }} DH
+                        </div>
+                      </div>
+                      <div class="col-auto">
+                        <i class="fas fa-percent fa-2x text-gray-300"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-2 mb-3">
+                <div class="card border-left-warning shadow h-100">
+                  <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                      <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                          Total TTC
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                          {{ dashboardStats.totalMontantTTC | number:'1.2-2' }} DH
+                        </div>
+                      </div>
+                      <div class="col-auto">
+                        <i class="fas fa-wallet fa-2x text-gray-300"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-2 mb-3">
+                <div class="card border-left-danger shadow h-100">
+                  <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                      <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                          Prix Moyen Vente
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                          {{ dashboardStats.prixMoyenVente | number:'1.2-2' }} DH
+                        </div>
+                      </div>
+                      <div class="col-auto">
+                        <i class="fas fa-chart-line fa-2x text-gray-300"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-2 mb-3">
+                <div class="card border-left-secondary shadow h-100">
+                  <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                      <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-secondary text-uppercase mb-1">
+                          Total Clients
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                          {{ dashboardStats.chiffreAffaireParClient.length | number }}
+                        </div>
+                      </div>
+                      <div class="col-auto">
+                        <i class="fas fa-users fa-2x text-gray-300"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Graphiques -->
+            <div class="row mb-4">
+              <!-- Graphique d'évolution des livraisons -->
+              <div class="col-md-6 mb-3">
+                <div class="card shadow-sm h-100">
+                  <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-chart-line me-2"></i>Évolution des Livraisons</h6>
+                  </div>
+                  <div class="card-body">
+                    <canvas id="evolutionChartLivraison" style="max-height: 300px;"></canvas>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Graphique de répartition par client -->
+              <div class="col-md-6 mb-3">
+                <div class="card shadow-sm h-100">
+                  <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Répartition par Client</h6>
+                  </div>
+                  <div class="card-body">
+                    <canvas id="clientChartLivraison" style="max-height: 300px;"></canvas>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Graphique Top Clients -->
+            <div class="row mb-4">
+              <div class="col-md-6">
+                <div class="card shadow-sm">
+                  <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Top 10 Clients par Chiffre d'Affaire</h6>
+                  </div>
+                  <div class="card-body">
+                    <canvas id="topClientsChartLivraison" style="max-height: 400px;"></canvas>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="card shadow-sm">
+                  <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-box me-2"></i>Top 10 Articles par Chiffre d'Affaire</h6>
+                  </div>
+                  <div class="card-body">
+                    <canvas id="articleChartLivraison" style="max-height: 400px;"></canvas>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tableau Chiffre d'affaire par client -->
+            <div class="card shadow-sm">
+              <div class="card-header bg-light">
+                <h6 class="mb-0"><i class="fas fa-users me-2"></i>Chiffre d'affaire par Client</h6>
+              </div>
+              <div class="card-body">
+                <div class="table-responsive">
+                  <table class="table table-hover">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Client</th>
+                        <th class="text-end">Chiffre d'affaire (DH)</th>
+                        <th class="text-end">Nombre de Livraisons</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let client of dashboardStats.chiffreAffaireParClient">
+                        <td><strong>{{ client.client }}</strong></td>
+                        <td class="text-end">{{ client.chiffreAffaire | number:'1.2-2' }}</td>
+                        <td class="text-end">{{ client.totalLivraisons }}</td>
+                      </tr>
+                      <tr *ngIf="dashboardStats.chiffreAffaireParClient.length === 0">
+                        <td colspan="3" class="text-center text-muted">Aucune donnée disponible</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -402,21 +623,45 @@
                       <span *ngIf="!isFacturee(l)" class="badge bg-danger">NON FACTURÉ</span>
                     </td>
                     <td class="text-center">
-                      <button class="btn btn-sm btn-outline-info me-1" (click)="OnEditLivraison(l.document_id)" title="Modifier">
-                        <i class="fas fa-edit"></i>
-                      </button>
-                      <button class="btn btn-sm btn-outline-danger me-1" (click)="removeLivraison(l, i)" title="Supprimer">
-                        <i class="fas fa-trash-alt"></i>
-                      </button>
-                      <button class="btn btn-sm btn-outline-purple me-1" (click)="OnPrintLivraison(l.document_id)" title="Imprimer">
-                        <i class="fas fa-print"></i>
-                      </button>
-                      <button *ngIf="!isFacturee(l)" 
-                              class="btn btn-sm btn-outline-success me-1" 
-                              (click)="transfererLivraisonVersFacturation(l.document_id)" 
-                              title="Transférer vers Facturation">
-                        <i class="fas fa-file-invoice"></i>
-                      </button>
+                      <div class="btn-group">
+                        <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Actions">
+                          <i class="fas fa-cog me-1"></i> Actions
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                          <li>
+                            <button class="dropdown-item" type="button" (click)="OnEditLivraison(l.document_id)">
+                              <i class="fas fa-edit me-2"></i> Modifier
+                            </button>
+                          </li>
+                          <li>
+                            <button class="dropdown-item text-danger" type="button" (click)="removeLivraison(l, i)">
+                              <i class="fas fa-trash-alt me-2"></i> Supprimer
+                            </button>
+                          </li>
+                          <li><hr class="dropdown-divider"></li>
+                          <li *ngIf="pdfPermissionsService.hasAnyPdfAccess('livraison')">
+                            <button *ngIf="pdfPermissionsService.canAccessPdf('livraison', 'normal')" class="dropdown-item" type="button" (click)="OnPrintLivraison(l.document_id, 'normal')">
+                              <i class="fas fa-file-pdf me-2"></i> BL normal
+                            </button>
+                          </li>
+                          <li *ngIf="pdfPermissionsService.hasAnyPdfAccess('livraison')">
+                            <button *ngIf="pdfPermissionsService.canAccessPdf('livraison', 'non_valorise')" class="dropdown-item" type="button" (click)="OnPrintLivraison(l.document_id, 'non_valorise')">
+                              <i class="fas fa-file-pdf me-2"></i> BL non valorisé
+                            </button>
+                          </li>
+                          <li *ngIf="pdfPermissionsService.hasAnyPdfAccess('livraison')"><hr class="dropdown-divider"></li>
+                          <li>
+                            <button class="dropdown-item" type="button" (click)="openEmailModal(l)">
+                              <i class="fas fa-envelope me-2"></i> Envoyer par e-mail
+                            </button>
+                          </li>
+                          <li *ngIf="!isFacturee(l)">
+                            <button class="dropdown-item text-success" type="button" (click)="transfererLivraisonVersFacturation(l.document_id)">
+                              <i class="fas fa-file-invoice me-2"></i> Transférer vers Facturation
+                            </button>
+                          </li>
+                        </ul>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
@@ -541,6 +786,47 @@
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal pour l'envoi d'email -->
+<div class="modal fade" id="emailModalLivraison" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content p-3">
+      <div class="modal-header">
+        <h5 class="modal-title">📧 Envoyer la livraison par e-mail</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form [formGroup]="emailForm">
+          <div class="mb-2">
+            <label>À :</label>
+            <input formControlName="to" type="email" class="form-control" placeholder="exemple@gmail.com">
+          </div>
+          <div class="mb-2">
+            <label>CC :</label>
+            <input formControlName="cc" type="email" class="form-control">
+          </div>
+          <div class="mb-2">
+            <label>Objet :</label>
+            <input formControlName="subject" type="text" class="form-control" placeholder="Objet de l'e-mail">
+          </div>
+          <div class="mb-2">
+            <label>Message :</label>
+            <textarea formControlName="body" class="form-control" rows="5" placeholder="Rédigez votre message ici..."></textarea>
+          </div>
+          <div class="mb-2">
+            <strong>📎 Pièce jointe : </strong> livraison.pdf
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button (click)="envoyerEmail()" class="btn btn-success" [disabled]="emailForm.invalid || isSending">
+          <i class="bi bi-send"></i> Envoyer
+        </button>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
       </div>
     </div>
   </div>

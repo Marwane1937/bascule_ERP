@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { AchatsService } from 'src/app/service/achats.service';
 import Swal from 'sweetalert2';
@@ -8,7 +8,7 @@ import Swal from 'sweetalert2';
   templateUrl: './reception.component.html',
   styleUrls: ['./reception.component.css']
 })
-export class ReceptionComponent implements OnInit {
+export class ReceptionComponent implements OnInit, OnDestroy {
   // Liste réceptions (stock.type = 1)
   receptions: any[] = [];
   loadingReceptions = true;
@@ -37,6 +37,26 @@ export class ReceptionComponent implements OnInit {
   selectedCommande: any | null = null;
   commandeDetails: any[] = [];
   loadingDetails = false;
+
+  // Dashboard
+  showDashboard: boolean = false;
+  dashboardLoading: boolean = false;
+  dashboardStats: any = {
+    totalReceptions: 0,
+    totalFournisseurs: 0,
+    totalMontantHT: 0,
+    totalMontantTTC: 0,
+    totalTVA: 0,
+    prixMoyenAchat: 0,
+    chiffreAffaireParFournisseur: [],
+    chiffreAffaireParArticle: []
+  };
+  
+  // Charts
+  evolutionChart: any = null;
+  fournisseurChart: any = null;
+  topFournisseursChart: any = null;
+  articleChart: any = null;
 
   constructor(
     private achatsService: AchatsService,
@@ -385,13 +405,451 @@ export class ReceptionComponent implements OnInit {
       },
       error: (err) => {
         Swal.close();
-        Swal.fire({
-          icon: 'error',
-          title: 'Erreur',
-          text: err.error?.message || "Erreur lors de la génération du PDF."
-        });
+        console.error('Erreur génération PDF réception:', err);
+        const errorMessage = err.error?.message || err.message || "Erreur lors de la génération du PDF.";
+        
+        // Si c'est une erreur d'authentification, suggérer de se reconnecter
+        if (errorMessage.includes('Token') || errorMessage.includes('accès') || err.status === 401) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Erreur d\'authentification',
+            text: 'Votre session a peut-être expiré. Veuillez vous reconnecter.',
+            confirmButtonText: 'OK'
+          });
+        } else {
+          Swal.fire({
+            icon: 'error',
+            title: 'Erreur',
+            text: errorMessage
+          });
+        }
       }
     });
+  }
+
+  // Dashboard Methods
+  toggleDashboard(): void {
+    this.showDashboard = !this.showDashboard;
+    if (this.showDashboard) {
+      this.loadDashboardStats();
+    }
+  }
+
+  loadDashboardStats(): void {
+    this.dashboardLoading = true;
+    
+    // Charger toutes les réceptions pour calculer les statistiques
+    this.achatsService.getReceptions({
+      page: 1,
+      pageSize: 10000, // Charger toutes les réceptions
+      orderBy: 'date',
+      orderDirection: 'DESC',
+      search: ''
+    }).subscribe({
+      next: (response: any) => {
+        // Gérer différents formats de réponse
+        let allReceptions = [];
+        if (response && response.data && Array.isArray(response.data)) {
+          allReceptions = response.data;
+        } else if (response && response.success && Array.isArray(response.data)) {
+          allReceptions = response.data;
+        } else if (Array.isArray(response)) {
+          allReceptions = response;
+        }
+        
+        // Charger les détails de chaque réception pour les statistiques par article
+        this.loadReceptionsDetails(allReceptions);
+      },
+      error: (err: any) => {
+        console.error('Erreur lors du chargement des statistiques:', err);
+        this.dashboardLoading = false;
+        Swal.fire('Erreur', 'Impossible de charger les statistiques du dashboard.', 'error');
+      }
+    });
+  }
+
+  loadReceptionsDetails(receptions: any[]): void {
+    // Charger les détails de chaque réception
+    const detailPromises = receptions.map((reception: any) => {
+      const receptionId = reception.document_id || reception.id;
+      if (!receptionId) {
+        return Promise.resolve({ ...reception, details: [] });
+      }
+      
+      return this.achatsService.getReceptionById(receptionId).toPromise().then(
+        (response: any) => {
+          const details = response?.details || response?.data?.details || [];
+          return { ...reception, details: Array.isArray(details) ? details : [] };
+        },
+        () => ({ ...reception, details: [] })
+      );
+    });
+
+    Promise.all(detailPromises).then((receptionsWithDetails: any[]) => {
+      this.calculateDashboardStats(receptionsWithDetails);
+      this.dashboardLoading = false;
+    }).catch((err: any) => {
+      console.error('Erreur lors du chargement des détails:', err);
+      // Calculer les stats même sans détails
+      this.calculateDashboardStats(receptions);
+      this.dashboardLoading = false;
+    });
+  }
+
+  calculateDashboardStats(receptions: any[]): void {
+    // Calculer le total des réceptions
+    this.dashboardStats.totalReceptions = receptions.length;
+
+    // Calculer les totaux
+    this.dashboardStats.totalMontantHT = receptions.reduce((sum, r) => {
+      return sum + (parseFloat(r.total_ht) || 0);
+    }, 0);
+
+    this.dashboardStats.totalMontantTTC = receptions.reduce((sum, r) => {
+      return sum + (parseFloat(r.total_ttc) || 0);
+    }, 0);
+
+    this.dashboardStats.totalTVA = receptions.reduce((sum, r) => {
+      return sum + (parseFloat(r.total_tva) || 0);
+    }, 0);
+
+    // Calculer le prix moyen des achats
+    const totalTTC = this.dashboardStats.totalMontantTTC;
+    this.dashboardStats.prixMoyenAchat = receptions.length > 0 ? totalTTC / receptions.length : 0;
+
+    // Calculer le chiffre d'affaire par fournisseur
+    const fournisseurStats: { [key: string]: { fournisseur: string; chiffreAffaire: number; totalReceptions: number } } = {};
+    
+    receptions.forEach(r => {
+      const fournisseurName = r.fournisseur || 'Non spécifié';
+      if (!fournisseurStats[fournisseurName]) {
+        fournisseurStats[fournisseurName] = {
+          fournisseur: fournisseurName,
+          chiffreAffaire: 0,
+          totalReceptions: 0
+        };
+      }
+      fournisseurStats[fournisseurName].chiffreAffaire += parseFloat(r.total_ttc) || 0;
+      fournisseurStats[fournisseurName].totalReceptions += 1;
+    });
+
+    // Convertir en tableau et trier par chiffre d'affaire décroissant
+    this.dashboardStats.chiffreAffaireParFournisseur = Object.values(fournisseurStats)
+      .sort((a, b) => b.chiffreAffaire - a.chiffreAffaire);
+
+    // Calculer le chiffre d'affaire par article
+    const articleStats: { [key: string]: { article: string; chiffreAffaire: number; quantite: number; prixMoyen: number } } = {};
+    
+    receptions.forEach(r => {
+      const details = r.details || [];
+      details.forEach((detail: any) => {
+        const articleName = detail.article_nom || detail.designation || detail.description || 'Article sans nom';
+        const quantite = parseFloat(detail.quantite || detail.qte) || 0;
+        const prix = parseFloat(detail.prix || detail.pu) || 0;
+        const totalLigne = parseFloat(detail.total || detail.ttc) || (prix * quantite);
+        
+        if (!articleStats[articleName]) {
+          articleStats[articleName] = {
+            article: articleName,
+            chiffreAffaire: 0,
+            quantite: 0,
+            prixMoyen: 0
+          };
+        }
+        articleStats[articleName].chiffreAffaire += totalLigne;
+        articleStats[articleName].quantite += quantite;
+      });
+    });
+
+    // Calculer le prix moyen par article
+    Object.keys(articleStats).forEach(articleName => {
+      const stat = articleStats[articleName];
+      stat.prixMoyen = stat.quantite > 0 ? stat.chiffreAffaire / stat.quantite : 0;
+    });
+
+    // Convertir en tableau et trier par chiffre d'affaire décroissant
+    this.dashboardStats.chiffreAffaireParArticle = Object.values(articleStats)
+      .sort((a, b) => b.chiffreAffaire - a.chiffreAffaire);
+
+    // Initialiser les graphiques après un court délai pour s'assurer que les canvas sont rendus
+    setTimeout(() => {
+      this.initCharts(receptions);
+    }, 100);
+  }
+
+  initCharts(receptions: any[]): void {
+    this.createEvolutionChart(receptions);
+    this.createFournisseurChart(receptions);
+    this.createTopFournisseursChart(receptions);
+    this.createArticleChart(receptions);
+  }
+
+  createEvolutionChart(receptions: any[]): void {
+    const canvas = document.getElementById('evolutionChartReception') as HTMLCanvasElement;
+    if (!canvas) return;
+
+    if (this.evolutionChart) {
+      this.evolutionChart.destroy();
+    }
+
+    const monthlyData: { [key: string]: number } = {};
+    receptions.forEach(r => {
+      if (r.date) {
+        const date = new Date(r.date);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        monthlyData[monthKey] = (monthlyData[monthKey] || 0) + (parseFloat(r.total_ttc) || 0);
+      }
+    });
+
+    const sortedMonths = Object.keys(monthlyData).sort();
+    const labels = sortedMonths.map(m => {
+      const [year, month] = m.split('-');
+      const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+      return `${monthNames[parseInt(month) - 1]} ${year}`;
+    });
+    const data = sortedMonths.map(m => monthlyData[m]);
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const Chart = (window as any).Chart;
+    if (!Chart) return;
+
+    this.evolutionChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Montant TTC (DH)',
+          data: data,
+          borderColor: 'rgb(75, 192, 192)',
+          backgroundColor: 'rgba(75, 192, 192, 0.2)',
+          tension: 0.4,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, position: 'top' }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: function(value: any) {
+                return value.toFixed(2) + ' DH';
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  createFournisseurChart(receptions: any[]): void {
+    const canvas = document.getElementById('fournisseurChartReception') as HTMLCanvasElement;
+    if (!canvas) return;
+
+    if (this.fournisseurChart) {
+      this.fournisseurChart.destroy();
+    }
+
+    const topFournisseurs = this.dashboardStats.chiffreAffaireParFournisseur.slice(0, 10);
+    
+    if (topFournisseurs.length === 0) {
+      return;
+    }
+
+    const labels = topFournisseurs.map((f: any) => f.fournisseur);
+    const data = topFournisseurs.map((f: any) => f.chiffreAffaire);
+    const colors = [
+      'rgba(255, 99, 132, 0.8)', 'rgba(54, 162, 235, 0.8)', 'rgba(255, 206, 86, 0.8)',
+      'rgba(75, 192, 192, 0.8)', 'rgba(153, 102, 255, 0.8)', 'rgba(255, 159, 64, 0.8)',
+      'rgba(199, 199, 199, 0.8)', 'rgba(83, 102, 255, 0.8)', 'rgba(255, 99, 255, 0.8)',
+      'rgba(99, 255, 132, 0.8)'
+    ];
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const Chart = (window as any).Chart;
+    if (!Chart) return;
+
+    this.fournisseurChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Chiffre d\'affaire (DH)',
+          data: data,
+          backgroundColor: colors.slice(0, labels.length),
+          borderWidth: 2,
+          borderColor: '#fff'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, position: 'right' },
+          tooltip: {
+            callbacks: {
+              label: function(context: any) {
+                const label = context.label || '';
+                const value = context.parsed || 0;
+                const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
+                const percentage = ((value / total) * 100).toFixed(1);
+                return `${label}: ${value.toFixed(2)} DH (${percentage}%)`;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  createTopFournisseursChart(receptions: any[]): void {
+    const canvas = document.getElementById('topFournisseursChartReception') as HTMLCanvasElement;
+    if (!canvas) return;
+
+    if (this.topFournisseursChart) {
+      this.topFournisseursChart.destroy();
+    }
+
+    const topFournisseurs = this.dashboardStats.chiffreAffaireParFournisseur.slice(0, 10);
+    
+    if (topFournisseurs.length === 0) {
+      return;
+    }
+
+    const labels = topFournisseurs.map((f: any) => f.fournisseur);
+    const data = topFournisseurs.map((f: any) => f.chiffreAffaire);
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const Chart = (window as any).Chart;
+    if (!Chart) return;
+
+    this.topFournisseursChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Chiffre d\'affaire (DH)',
+          data: data,
+          backgroundColor: 'rgba(54, 162, 235, 0.8)',
+          borderColor: 'rgba(54, 162, 235, 1)',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, position: 'top' },
+          tooltip: {
+            callbacks: {
+              label: function(context: any) {
+                return `Chiffre d'affaire: ${context.parsed.x.toFixed(2)} DH`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            ticks: {
+              callback: function(value: any) {
+                return value.toFixed(2) + ' DH';
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  createArticleChart(receptions: any[]): void {
+    const canvas = document.getElementById('articleChartReception') as HTMLCanvasElement;
+    if (!canvas) return;
+
+    if (this.articleChart) {
+      this.articleChart.destroy();
+    }
+
+    const topArticles = this.dashboardStats.chiffreAffaireParArticle.slice(0, 10);
+    
+    if (topArticles.length === 0) {
+      return;
+    }
+
+    const labels = topArticles.map((a: any) => a.article.length > 30 ? a.article.substring(0, 30) + '...' : a.article);
+    const data = topArticles.map((a: any) => a.chiffreAffaire);
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const Chart = (window as any).Chart;
+    if (!Chart) return;
+
+    this.articleChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Chiffre d\'affaire (DH)',
+          data: data,
+          backgroundColor: 'rgba(153, 102, 255, 0.8)',
+          borderColor: 'rgba(153, 102, 255, 1)',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, position: 'top' },
+          tooltip: {
+            callbacks: {
+              label: function(context: any) {
+                return `Chiffre d'affaire: ${context.parsed.x.toFixed(2)} DH`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            ticks: {
+              callback: function(value: any) {
+                return value.toFixed(2) + ' DH';
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  ngOnDestroy(): void {
+    // Détruire les graphiques
+    if (this.evolutionChart) {
+      this.evolutionChart.destroy();
+    }
+    if (this.fournisseurChart) {
+      this.fournisseurChart.destroy();
+    }
+    if (this.topFournisseursChart) {
+      this.topFournisseursChart.destroy();
+    }
+    if (this.articleChart) {
+      this.articleChart.destroy();
+    }
   }
 }
 

@@ -60,7 +60,7 @@ router.post('/sortie-stock/info', sortieStockController.saveInfo);
 router.post('/sortie-stock/delete-lignes', sortieStockController.deleteLignesParIds);
 
 // Générer un PDF de sortie de stock
-router.post('/sortie-stock/generate-pdf', async (req, res) => {
+router.post('/sortie-stock/generate-pdf', authenticateToken, async (req, res) => {
   try {
     const { document_id, withStamp } = req.body;
     const sequelize = req.sequelize || require('../../config/database').getConnection();

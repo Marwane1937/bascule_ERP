@@ -437,8 +437,8 @@
                       <button class="btn btn-sm btn-outline-danger me-1" (click)="removeRetour(r, i)" title="Supprimer">
                         <i class="fas fa-trash-alt"></i>
                       </button>
-                      <button class="btn btn-sm btn-outline-purple me-1" (click)="OnPrintRetour(r.document_id)" title="Imprimer">
-                        <i class="fas fa-print"></i>
+                      <button *ngIf="pdfPermissionsService.hasAnyPdfAccess('retour')" class="btn btn-sm btn-outline-purple me-1" (click)="OnPrintRetour(r.document_id)" title="Imprimer PDF">
+                        <i class="fas fa-file-pdf"></i>
                       </button>
                     </td>
                   </tr>

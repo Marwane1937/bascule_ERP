@@ -14,10 +14,229 @@
 
     <!-- Actions -->
     <div class="row mb-3">
-      <div class="col-md-12 text-end">
+      <div class="col-md-12 d-flex justify-content-between gap-2 align-items-center">
+        <button type="button" class="btn btn-info px-4 py-2 shadow-sm" (click)="toggleDashboard()">
+          <i class="fas fa-chart-line me-2"></i> {{ showDashboard ? 'Masquer Dashboard' : 'Afficher Dashboard' }}
+        </button>
         <button class="btn btn-warning" (click)="openTransfertModal()">
           <i class="fas fa-exchange-alt"></i> Commande → Réception
         </button>
+      </div>
+    </div>
+
+    <!-- Dashboard Section -->
+    <div *ngIf="showDashboard" class="dashboard-section mb-4">
+      <div class="card shadow-sm">
+        <div class="card-header bg-gradient-primary text-white">
+          <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Dashboard Réceptions</h5>
+        </div>
+        <div class="card-body">
+          <div *ngIf="dashboardLoading" class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Chargement...</span>
+            </div>
+          </div>
+          <div *ngIf="!dashboardLoading">
+            <!-- Cards Statistiques -->
+            <div class="row mb-4">
+              <div class="col-md-2 mb-3">
+                <div class="card border-left-primary shadow h-100">
+                  <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                      <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                          Total Réceptions
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                          {{ dashboardStats.totalReceptions | number }}
+                        </div>
+                      </div>
+                      <div class="col-auto">
+                        <i class="fas fa-box fa-2x text-gray-300"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-2 mb-3">
+                <div class="card border-left-success shadow h-100">
+                  <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                      <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                          Total HT
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                          {{ dashboardStats.totalMontantHT | number:'1.2-2' }} DH
+                        </div>
+                      </div>
+                      <div class="col-auto">
+                        <i class="fas fa-money-bill-wave fa-2x text-gray-300"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-2 mb-3">
+                <div class="card border-left-info shadow h-100">
+                  <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                      <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                          Total TVA
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                          {{ dashboardStats.totalTVA | number:'1.2-2' }} DH
+                        </div>
+                      </div>
+                      <div class="col-auto">
+                        <i class="fas fa-percent fa-2x text-gray-300"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-2 mb-3">
+                <div class="card border-left-warning shadow h-100">
+                  <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                      <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                          Total TTC
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                          {{ dashboardStats.totalMontantTTC | number:'1.2-2' }} DH
+                        </div>
+                      </div>
+                      <div class="col-auto">
+                        <i class="fas fa-wallet fa-2x text-gray-300"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-2 mb-3">
+                <div class="card border-left-danger shadow h-100">
+                  <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                      <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                          Prix Moyen Achat
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                          {{ dashboardStats.prixMoyenAchat | number:'1.2-2' }} DH
+                        </div>
+                      </div>
+                      <div class="col-auto">
+                        <i class="fas fa-chart-line fa-2x text-gray-300"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-2 mb-3">
+                <div class="card border-left-secondary shadow h-100">
+                  <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                      <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-secondary text-uppercase mb-1">
+                          Total Fournisseurs
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                          {{ dashboardStats.chiffreAffaireParFournisseur.length | number }}
+                        </div>
+                      </div>
+                      <div class="col-auto">
+                        <i class="fas fa-building fa-2x text-gray-300"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Graphiques -->
+            <div class="row mb-4">
+              <!-- Graphique d'évolution des réceptions -->
+              <div class="col-md-6 mb-3">
+                <div class="card shadow-sm h-100">
+                  <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-chart-line me-2"></i>Évolution des Réceptions</h6>
+                  </div>
+                  <div class="card-body">
+                    <canvas id="evolutionChartReception" style="max-height: 300px;"></canvas>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Graphique de répartition par fournisseur -->
+              <div class="col-md-6 mb-3">
+                <div class="card shadow-sm h-100">
+                  <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Répartition par Fournisseur</h6>
+                  </div>
+                  <div class="card-body">
+                    <canvas id="fournisseurChartReception" style="max-height: 300px;"></canvas>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Graphique Top Fournisseurs et Articles -->
+            <div class="row mb-4">
+              <div class="col-md-6">
+                <div class="card shadow-sm">
+                  <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Top 10 Fournisseurs par Chiffre d'Affaire</h6>
+                  </div>
+                  <div class="card-body">
+                    <canvas id="topFournisseursChartReception" style="max-height: 400px;"></canvas>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="card shadow-sm">
+                  <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-box me-2"></i>Top 10 Articles par Chiffre d'Affaire</h6>
+                  </div>
+                  <div class="card-body">
+                    <canvas id="articleChartReception" style="max-height: 400px;"></canvas>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tableau Chiffre d'affaire par fournisseur -->
+            <div class="card shadow-sm">
+              <div class="card-header bg-light">
+                <h6 class="mb-0"><i class="fas fa-building me-2"></i>Chiffre d'affaire par Fournisseur</h6>
+              </div>
+              <div class="card-body">
+                <div class="table-responsive">
+                  <table class="table table-hover">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Fournisseur</th>
+                        <th class="text-end">Chiffre d'affaire (DH)</th>
+                        <th class="text-end">Nombre de Réceptions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr *ngFor="let fournisseur of dashboardStats.chiffreAffaireParFournisseur">
+                        <td><strong>{{ fournisseur.fournisseur }}</strong></td>
+                        <td class="text-end">{{ fournisseur.chiffreAffaire | number:'1.2-2' }}</td>
+                        <td class="text-end">{{ fournisseur.totalReceptions }}</td>
+                      </tr>
+                      <tr *ngIf="dashboardStats.chiffreAffaireParFournisseur.length === 0">
+                        <td colspan="3" class="text-center text-muted">Aucune donnée disponible</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 

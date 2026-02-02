@@ -142,6 +142,72 @@ const genererPDF = async (regle_id, options = {}) => {
   }
 };
 
+// Statistiques générales
+const getReglementStats = async (options = {}, sequelizeConnection = null) => {
+  try {
+    const result = await reglementModel.getReglementStats(options, sequelizeConnection);
+    return result;
+  } catch (error) {
+    console.error('[getReglementStats Service] ❌ Erreur:', error);
+    throw error;
+  }
+};
+
+// Répartition par mode
+const getReglementByMode = async (options = {}, sequelizeConnection = null) => {
+  try {
+    const result = await reglementModel.getReglementByMode(options, sequelizeConnection);
+    return result;
+  } catch (error) {
+    console.error('[getReglementByMode Service] ❌ Erreur:', error);
+    throw error;
+  }
+};
+
+// Évolution temporelle
+const getReglementEvolution = async (options = {}, sequelizeConnection = null) => {
+  try {
+    const result = await reglementModel.getReglementEvolution(options, sequelizeConnection);
+    return result;
+  } catch (error) {
+    console.error('[getReglementEvolution Service] ❌ Erreur:', error);
+    throw error;
+  }
+};
+
+// Top clients
+const getTopClients = async (options = {}, sequelizeConnection = null) => {
+  try {
+    const result = await reglementModel.getTopClients(options, sequelizeConnection);
+    return result;
+  } catch (error) {
+    console.error('[getTopClients Service] ❌ Erreur:', error);
+    throw error;
+  }
+};
+
+// Alertes
+const getReglementAlerts = async (options = {}, sequelizeConnection = null) => {
+  try {
+    const result = await reglementModel.getReglementAlerts(options, sequelizeConnection);
+    return result;
+  } catch (error) {
+    console.error('[getReglementAlerts Service] ❌ Erreur:', error);
+    throw error;
+  }
+};
+
+// Règlements récents
+const getRecentReglements = async (options = {}, sequelizeConnection = null) => {
+  try {
+    const result = await reglementModel.getRecentReglements(options, sequelizeConnection);
+    return result;
+  } catch (error) {
+    console.error('[getRecentReglements Service] ❌ Erreur:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   getReglements,
   getReglementById,
@@ -152,6 +218,12 @@ module.exports = {
   getModeReglements,
   getFacturesForLettrage,
   saveLettrageFactures,
-  genererPDF
+  genererPDF,
+  getReglementStats,
+  getReglementByMode,
+  getReglementEvolution,
+  getTopClients,
+  getReglementAlerts,
+  getRecentReglements
 };
 

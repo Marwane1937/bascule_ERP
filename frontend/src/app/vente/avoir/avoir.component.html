@@ -384,8 +384,8 @@
                     <td *ngIf="columnVisibility.facture_tva" class="text-end">{{ a.facture_tva | number:'1.2-2' }} dh</td>
                     <td *ngIf="columnVisibility.facture_ttc" class="text-end fw-bold">{{ a.facture_ttc | number:'1.2-2' }} dh</td>
                     <td class="text-center">
-                      <button class="btn btn-sm btn-outline-primary me-1" (click)="onPrintAvoir(a)" title="Imprimer">
-                        <i class="fas fa-print"></i>
+                      <button *ngIf="pdfPermissionsService.hasAnyPdfAccess('avoir')" class="btn btn-sm btn-outline-primary me-1" (click)="onPrintAvoir(a)" title="Imprimer PDF">
+                        <i class="fas fa-file-pdf"></i>
                       </button>
                       <button class="btn btn-sm btn-outline-danger me-1" (click)="removeAvoir(a, i)" title="Supprimer">
                         <i class="fas fa-trash-alt"></i>

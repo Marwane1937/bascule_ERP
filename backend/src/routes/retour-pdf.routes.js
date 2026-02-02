@@ -4,6 +4,7 @@ const emailService = require('../services/email.service');
 const { getEmailDataByDocumentId } = require('../models/email.model');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const databaseInjector = require('../middleware/database-injector.middleware');
+const { checkPdfPermission } = require('../middleware/pdf-permissions.middleware');
 const path = require('path');
 const https = require('https');
 const fs = require('fs');
@@ -88,7 +89,7 @@ router.get('/:filename', async (req, res) => {
 });
 
 // Générer un PDF de retour (route protégée)
-router.post('/generate', authenticateToken, async (req, res) => {
+router.post('/generate', authenticateToken, checkPdfPermission('retour'), async (req, res) => {
   try {
     const { document_id, withStamp } = req.body;
     console.log(`[RetourPDF] 📥 Requête génération PDF pour document_id: ${document_id}`);

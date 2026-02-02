@@ -7,6 +7,7 @@ const { getFactureReportById, getFactureContratById } = require('../models/vente
 const pdfConfigService = require('../services/pdf-config.service');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const databaseInjector = require('../middleware/database-injector.middleware');
+const { checkPdfPermission } = require('../middleware/pdf-permissions.middleware');
 
 /**
  * Routes pour la génération de PDF des FACTURES
@@ -90,7 +91,7 @@ router.get('/:filename', async (req, res) => {
 
 // Routes POST protégées (nécessitent authentification)
 // Générer un PDF de facture
-router.post('/generate', authenticateToken, databaseInjector.injectConnection.bind(databaseInjector), async (req, res) => {
+router.post('/generate', authenticateToken, databaseInjector.injectConnection.bind(databaseInjector), checkPdfPermission('facturation'), async (req, res) => {
   try {
     const { facture_id, withStamp } = req.body;
     

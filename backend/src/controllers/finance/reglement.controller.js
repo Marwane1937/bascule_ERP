@@ -231,6 +231,92 @@ const genererPDF = async (req, res) => {
   }
 };
 
+const getReglementStats = async (req, res) => {
+  try {
+    const { dateFrom, dateTo, clientId, modeId } = req.query;
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const stats = await reglementService.getReglementStats({ 
+      dateFrom, 
+      dateTo, 
+      clientId: clientId ? parseInt(clientId) : null, 
+      modeId: modeId ? parseInt(modeId) : null 
+    }, sequelize);
+    res.json({ success: true, data: stats });
+  } catch (error) {
+    console.error('[getReglementStats Controller] Erreur:', error);
+    res.status(500).json({ success: false, message: error.message || 'Erreur lors de la récupération des statistiques' });
+  }
+};
+
+const getReglementByMode = async (req, res) => {
+  try {
+    const { dateFrom, dateTo } = req.query;
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const data = await reglementService.getReglementByMode({ dateFrom, dateTo }, sequelize);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('[getReglementByMode Controller] Erreur:', error);
+    res.status(500).json({ success: false, message: error.message || 'Erreur lors de la récupération des données par mode' });
+  }
+};
+
+const getReglementEvolution = async (req, res) => {
+  try {
+    const { dateFrom, dateTo, groupBy } = req.query;
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const data = await reglementService.getReglementEvolution({ dateFrom, dateTo, groupBy }, sequelize);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('[getReglementEvolution Controller] Erreur:', error);
+    res.status(500).json({ success: false, message: error.message || 'Erreur lors de la récupération de l\'évolution' });
+  }
+};
+
+const getTopClients = async (req, res) => {
+  try {
+    const { dateFrom, dateTo, limit, sortBy } = req.query;
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const data = await reglementService.getTopClients({ 
+      dateFrom, 
+      dateTo, 
+      limit: parseInt(limit) || 5, 
+      sortBy: sortBy || 'montant' 
+    }, sequelize);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('[getTopClients Controller] Erreur:', error);
+    res.status(500).json({ success: false, message: error.message || 'Erreur lors de la récupération des top clients' });
+  }
+};
+
+const getReglementAlerts = async (req, res) => {
+  try {
+    const { daysAhead } = req.query;
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const data = await reglementService.getReglementAlerts({ daysAhead: parseInt(daysAhead) || 7 }, sequelize);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('[getReglementAlerts Controller] Erreur:', error);
+    res.status(500).json({ success: false, message: error.message || 'Erreur lors de la récupération des alertes' });
+  }
+};
+
+const getRecentReglements = async (req, res) => {
+  try {
+    const { limit, dateFrom, dateTo } = req.query;
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const data = await reglementService.getRecentReglements({ 
+      limit: parseInt(limit) || 10, 
+      dateFrom, 
+      dateTo 
+    }, sequelize);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('[getRecentReglements Controller] Erreur:', error);
+    res.status(500).json({ success: false, message: error.message || 'Erreur lors de la récupération des règlements récents' });
+  }
+};
+
 module.exports = {
   getReglements,
   getReglementById,
@@ -241,6 +327,12 @@ module.exports = {
   getModeReglements,
   getFacturesForLettrage,
   saveLettrageFactures,
-  genererPDF
+  genererPDF,
+  getReglementStats,
+  getReglementByMode,
+  getReglementEvolution,
+  getTopClients,
+  getReglementAlerts,
+  getRecentReglements
 };
 

@@ -1,0 +1,269 @@
+<div class="container-fluid py-4 px-3">
+    <!-- En-tête -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 border-bottom pb-3">
+        <div>
+            <h4 class="mb-1">{{ isEditMode ? '✏️ Modifier' : '➕ Ajouter' }} Bordereau de Remise</h4>
+            <div class="small text-muted">/ Finance / Bordereaux de Remise / {{ isEditMode ? 'Modifier' : 'Ajouter' }}</div>
+        </div>
+        <div class="d-flex gap-2">
+            <button *ngIf="isEditMode && bordereauId" class="btn btn-info" (click)="telechargerPDF(+bordereauId)" title="Imprimer le PDF">
+                <i class="fas fa-print me-1"></i> Imprimer PDF
+            </button>
+            <button class="btn btn-secondary" (click)="cancel()">
+                <i class="fas fa-arrow-left me-1"></i> Retour
+            </button>
+        </div>
+    </div>
+
+    <!-- Message de notification -->
+    <div
+        *ngIf="successMessage"
+        class="modern-toast"
+        [ngClass]="{ 'toast-success': !isError, 'toast-error': isError }"
+    >
+        <span class="toast-icon">
+            <i *ngIf="!isError" class="bi bi-check-circle-fill"></i>
+            <i *ngIf="isError" class="bi bi-exclamation-triangle-fill"></i>
+        </span>
+        <span class="toast-message">{{ successMessage }}</span>
+    </div>
+
+    <!-- Formulaire -->
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="card border-0 shadow-sm rounded-3">
+                <div class="card-body p-4">
+                    <form [formGroup]="bordereauForm" (ngSubmit)="onSubmit()">
+                        <div class="row g-3">
+                            <!-- Numéro -->
+                            <div class="col-md-6">
+                                <label class="form-label">
+                                    Numéro <span class="text-danger">*</span>
+                                </label>
+                                <input 
+                                    type="text" 
+                                    class="form-control"
+                                    formControlName="numero"
+                                    [class.is-invalid]="bordereauForm.get('numero')?.invalid && bordereauForm.get('numero')?.touched"
+                                    placeholder="Numéro du bordereau">
+                                <div *ngIf="bordereauForm.get('numero')?.invalid && bordereauForm.get('numero')?.touched" 
+                                     class="invalid-feedback">
+                                    Le numéro est obligatoire
+                                </div>
+                            </div>
+
+                            <!-- Date -->
+                            <div class="col-md-6">
+                                <label class="form-label">
+                                    Date <span class="text-danger">*</span>
+                                </label>
+                                <input 
+                                    type="date" 
+                                    class="form-control"
+                                    formControlName="date"
+                                    [class.is-invalid]="bordereauForm.get('date')?.invalid && bordereauForm.get('date')?.touched">
+                                <div *ngIf="bordereauForm.get('date')?.invalid && bordereauForm.get('date')?.touched" 
+                                     class="invalid-feedback">
+                                    La date est obligatoire
+                                </div>
+                            </div>
+
+                            <!-- Compte Cible -->
+                            <div class="col-md-6">
+                                <label class="form-label">Compte Cible</label>
+                                <input 
+                                    type="text" 
+                                    class="form-control"
+                                    formControlName="compte_cible"
+                                    placeholder="Compte bancaire (optionnel)">
+                            </div>
+
+                            <!-- Type -->
+                            <div class="col-md-6">
+                                <label class="form-label">Type</label>
+                                <select 
+                                    class="form-select"
+                                    formControlName="type">
+                                    <option [value]="null">-- Sélectionner --</option>
+                                    <option *ngFor="let type of types" [value]="type.id">
+                                        {{ type.nom }}
+                                    </option>
+                                </select>
+                            </div>
+
+                            <!-- État -->
+                            <div class="col-md-6">
+                                <label class="form-label">État</label>
+                                <select 
+                                    class="form-select"
+                                    formControlName="etat">
+                                    <option [value]="null">-- Sélectionner --</option>
+                                    <option *ngFor="let etat of etats" [value]="etat.id">
+                                        {{ etat.nom }}
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tableau des chèques pour le bordereau -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-gradient-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-money-check-alt me-2"></i>
+                            Sélection des Chèques
+                        </h5>
+                        <div class="d-flex align-items-center gap-3">
+                            <span class="badge bg-light text-dark">
+                                {{ getSelectedChequesCount() }} chèque(s) sélectionné(s)
+                            </span>
+                            <span class="badge bg-success">
+                                Total: {{ getSelectedChequesTotal() | number:'1.2-2' }} DH
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Barre de recherche -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                <input 
+                                    type="text" 
+                                    class="form-control" 
+                                    placeholder="Rechercher par numéro, client ou date..."
+                                    [(ngModel)]="searchFilter"
+                                    (input)="applyFilter()">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tableau des chèques -->
+                    <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                        <table class="table table-hover table-striped">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width: 50px;">
+                                        <input 
+                                            type="checkbox" 
+                                            [checked]="areAllChequesSelected()"
+                                            (change)="toggleAllCheques($event)">
+                                    </th>
+                                    <th (click)="onSort('numero')" class="sortable" style="cursor: pointer;">
+                                        Numéro
+                                        <i class="fas ms-1" [ngClass]="sortColumn === 'numero' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
+                                    </th>
+                                    <th (click)="onSort('date')" class="sortable" style="cursor: pointer;">
+                                        Date
+                                        <i class="fas ms-1" [ngClass]="sortColumn === 'date' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
+                                    </th>
+                                    <th (click)="onSort('client')" class="sortable" style="cursor: pointer;">
+                                        Client
+                                        <i class="fas ms-1" [ngClass]="sortColumn === 'client' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
+                                    </th>
+                                    <th>Mode</th>
+                                    <th (click)="onSort('montant')" class="sortable text-end" style="cursor: pointer;">
+                                        Montant
+                                        <i class="fas ms-1" [ngClass]="sortColumn === 'montant' ? (sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
+                                    </th>
+                                    <th>Échéance</th>
+                                    <th>Statut</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr *ngIf="loadingCheques">
+                                    <td colspan="8" class="text-center py-4">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">Chargement...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr *ngFor="let cheque of filteredCheques.slice((currentPage - 1) * pageSize, currentPage * pageSize)"
+                                    [class.table-primary]="isChequeSelected(cheque)"
+                                    [class.table-danger]="getChequeStatus(cheque) === 'retiré'"
+                                    [class.text-muted]="isChequeSelected(cheque)"
+                                    [style.opacity]="isChequeSelected(cheque) ? '0.7' : '1'">
+                                    <td>
+                                        <input 
+                                            type="checkbox" 
+                                            [checked]="isChequeSelected(cheque)"
+                                            [disabled]="!canSelectCheque(cheque)"
+                                            (change)="toggleChequeSelection(cheque)">
+                                    </td>
+                                    <td><strong>{{ cheque.numero }}</strong></td>
+                                    <td>{{ cheque.date | date:'dd/MM/yyyy' }}</td>
+                                    <td>{{ cheque.client }}</td>
+                                    <td>{{ cheque.mode }}</td>
+                                    <td class="text-end">{{ cheque.montant | number:'1.2-2' }} DH</td>
+                                    <td>{{ cheque.echeance ? (cheque.echeance | date:'dd/MM/yyyy') : '-' }}</td>
+                                    <td>
+                                        <span [ngClass]="getStatusBadgeClass(getChequeStatus(cheque))">
+                                            {{ getStatusLabel(getChequeStatus(cheque)) }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr *ngIf="filteredCheques.length === 0 && !loadingCheques">
+                                    <td colspan="8" class="text-center text-muted py-4">
+                                        <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                                        Aucun chèque disponible
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    <div class="d-flex justify-content-between align-items-center mt-3" *ngIf="totalPages > 1">
+                        <div>
+                            <span class="text-muted">
+                                Page {{ currentPage }} sur {{ totalPages }}
+                            </span>
+                        </div>
+                        <nav>
+                            <ul class="pagination mb-0">
+                                <li class="page-item" [class.disabled]="currentPage === 1">
+                                    <a class="page-link" (click)="goToPreviousPage()" style="cursor: pointer;">Précédent</a>
+                                </li>
+                                <li class="page-item" *ngFor="let page of [].constructor(totalPages); let i = index" 
+                                    [class.active]="currentPage === i + 1">
+                                    <a class="page-link" (click)="goToPage(i + 1)" style="cursor: pointer;">{{ i + 1 }}</a>
+                                </li>
+                                <li class="page-item" [class.disabled]="currentPage === totalPages">
+                                    <a class="page-link" (click)="goToNextPage()" style="cursor: pointer;">Suivant</a>
+                                </li>
+                            </ul>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Boutons en bas de la page -->
+    <div class="row mt-4 mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-secondary" (click)="cancel()">
+                            <i class="fas fa-arrow-left me-1"></i> Retour
+                        </button>
+                        <button type="button" class="btn btn-success" (click)="onSubmit()" [disabled]="loading || bordereauForm.invalid">
+                            <i class="fas fa-save me-1"></i> 
+                            {{ loading ? 'Enregistrement...' : (isEditMode ? 'Modifier' : 'Créer') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+

@@ -408,15 +408,15 @@
                                             </span>
                                         </td>
                                         <td class="text-center">
-                                            <div class="btn-group" role="group">
+                                            <div class="btn-group" role="group" *ngIf="pdfPermissionsService.hasAnyPdfAccess('facturation')">
                                                 <button type="button" class="btn btn-sm btn-outline-purple dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Imprimer">
-                                                    <i class="fas fa-print"></i>
+                                                    <i class="fas fa-file-pdf"></i>
                                                 </button>
                                                 <ul class="dropdown-menu">
-                                                    <li><a class="dropdown-item" href="javascript:void(0)" (click)="onPrintFacture(f.facture_id, 'standard')">
+                                                    <li><a *ngIf="pdfPermissionsService.canAccessPdf('facturation', 'normal')" class="dropdown-item" href="javascript:void(0)" (click)="onPrintFacture(f.facture_id, 'standard')">
                                                         <i class="fas fa-file-invoice me-2"></i> Facture standard
                                                     </a></li>
-                                                    <li *ngIf="hasContratAccess"><a class="dropdown-item" href="javascript:void(0)" (click)="onPrintFacture(f.facture_id, 'contrat')">
+                                                    <li *ngIf="hasContratAccess && pdfPermissionsService.canAccessPdf('facturation', 'normal')"><a class="dropdown-item" href="javascript:void(0)" (click)="onPrintFacture(f.facture_id, 'contrat')">
                                                         <i class="fas fa-file-contract me-2"></i> Facture contrat
                                                     </a></li>
                                                 </ul>

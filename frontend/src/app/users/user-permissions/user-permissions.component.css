@@ -141,7 +141,6 @@
 }
 
 .permission-card:hover {
-  transform: translateY(-5px);
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
 }
 
@@ -219,7 +218,12 @@
 }
 
 .checkbox-input {
-  display: none;
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
 }
 
 .checkbox-custom {
@@ -257,6 +261,137 @@
 .permission-label {
   font-weight: 500;
   flex: 1;
+}
+
+/* Tree Structure Styles */
+.tree-item-parent {
+  margin-bottom: 0.5rem;
+}
+
+.tree-item-header {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  border-radius: 6px;
+  transition: background-color 0.2s ease;
+  margin-bottom: 0.25rem;
+}
+
+.tree-toggle-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 0.5rem;
+  color: #667eea;
+  font-size: 0.75rem;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+}
+
+.tree-toggle-icon:hover {
+  background-color: #e9ecef;
+  color: #764ba2;
+}
+
+.tree-parent-checkbox {
+  flex: 1;
+  margin: 0;
+}
+
+.tree-parent-label {
+  font-weight: 600;
+  color: #495057;
+  font-size: 1rem;
+}
+
+.tree-children {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+  opacity: 0;
+  margin-left: 1.5rem;
+  padding-left: 1rem;
+  border-left: 2px solid #e9ecef;
+  position: relative;
+}
+
+.tree-children::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, #667eea, #764ba2);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.tree-children.expanded {
+  max-height: 500px;
+  opacity: 1;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.tree-children.expanded::before {
+  opacity: 1;
+}
+
+.tree-child {
+  margin-bottom: 0.5rem;
+  padding-left: 0.5rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.tree-child:hover {
+  background-color: #f8f9fa;
+}
+
+.tree-child-checkbox {
+  font-size: 0.9rem;
+}
+
+.tree-child-label {
+  color: #6c757d;
+  font-weight: 400;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.pdf-icon {
+  color: #dc3545;
+  font-size: 0.85rem;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.tree-item-regular {
+  margin-bottom: 0.5rem;
+}
+
+.tree-parent-label strong {
+  color: #495057;
+  transition: color 0.2s ease;
+}
+
+.tree-item-header:hover .tree-parent-label strong {
+  color: #667eea;
 }
 
 /* Save Actions */

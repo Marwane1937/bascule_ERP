@@ -249,8 +249,23 @@
        <button class="btn btn-info text-white" (click)="ouvrirPopupEmail()">
   <i class="bi bi-envelope"></i> Envoyer par e-mail</button>
 
-        <button class="btn btn-success" (click)="envoyerWhatsApp(livraison)" disabled><i class="bi bi-whatsapp"></i> WhatsApp</button>
-        <button class="btn btn-outline-primary" (click)="voirLivraison()">📄 Voir livraison</button>
+         <div class="btn-group" *ngIf="pdfPermissionsService.hasAnyPdfAccess('livraison')">
+          <button type="button" class="btn btn-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-printer-fill me-1"></i> Impression
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li>
+              <button *ngIf="pdfPermissionsService.canAccessPdf('livraison', 'normal')" class="dropdown-item" type="button" (click)="imprimerPdfNormal()">
+                BL normal
+              </button>
+            </li>
+            <li>
+              <button *ngIf="pdfPermissionsService.canAccessPdf('livraison', 'non_valorise')" class="dropdown-item" type="button" (click)="imprimerPdfNonValorise()">
+                BL non valorisé
+              </button>
+            </li>
+          </ul>
+        </div>
     </div>
 
 </div>

@@ -171,10 +171,12 @@ class EmailService {
     }
     return new Promise(async (resolve, reject) => {
       try {
-        // === MODE D'IMPRESSION (NORMAL / NOMENCLATURE) ===
-        // printMode = 'normal' (par défaut) -> comportement existant
+        // === MODE D'IMPRESSION (NORMAL / NOMENCLATURE / NON_VALORISE) ===
+        // printMode = 'normal' (par défaut) -> comportement existant (BL normal)
         // printMode = 'nomenclature' -> PDF basé sur le même modèle, mais avec 1 seule ligne "article composé"
+        // printMode = 'non_valorise' -> BL non valorisé (même mise en page que normal mais sans les totaux HT/TVA/TTC)
         const printMode = (options.printMode || 'normal').toLowerCase();
+        const isNonValorise = printMode === 'non_valorise';
 
         // === EXONÉRATION TVA (DEVIS + BON DE LIVRAISON) ===
         let isClientExonerated = false;
@@ -1818,76 +1820,79 @@ class EmailService {
         }
 
         // === BLOC RÉCAPITULATIF HORIZONTAL (ne dépasse pas la moitié de la page, positionné à droite) ===
-        // Vérifier s'il y a assez d'espace pour le bloc récapitulatif sur la page actuelle
-        const recapTableHeight = 25;
-        const recapTableRowHeight = 20;
-        const recapTableTotalHeight = recapTableHeight + recapTableRowHeight;
-        const spaceNeededForRecap = recapTableTotalHeight + 10; // 10px d'espace avant
-        
-        // Si pas assez d'espace, passer à la page suivante
-        if (y + spaceNeededForRecap > footerY) {
-          doc.addPage();
-          currentPageNumber++;
-          y = drawDocumentHeader(false);
+        // Ne pas afficher le bloc récapitulatif si le mode est "non_valorise"
+        if (!isNonValorise) {
+          // Vérifier s'il y a assez d'espace pour le bloc récapitulatif sur la page actuelle
+          const recapTableHeight = 25;
+          const recapTableRowHeight = 20;
+          const recapTableTotalHeight = recapTableHeight + recapTableRowHeight;
+          const spaceNeededForRecap = recapTableTotalHeight + 10; // 10px d'espace avant
+          
+          // Si pas assez d'espace, passer à la page suivante
+          if (y + spaceNeededForRecap > footerY) {
+            doc.addPage();
+            currentPageNumber++;
+            y = drawDocumentHeader(false);
+          }
+          
+          y += 10; // Espace avant le bloc récapitulatif
+          const recapTableY = y;
+          const recapTableWidth = 255; // Moitié de la page (510 / 2)
+          const recapTableX = 305; // Position à droite (50 + 510 - 255 = 305)
+
+          // Tableau complet avec bordures arrondies (moitié de la page)
+          doc.roundedRect(recapTableX, recapTableY, recapTableWidth, recapTableTotalHeight, tableBorderRadius).stroke('#000');
+
+          // Ligne de séparation horizontale
+          doc.moveTo(recapTableX, recapTableY + recapTableHeight).lineTo(recapTableX + recapTableWidth, recapTableY + recapTableHeight).stroke('#000');
+
+          // Lignes de séparation verticales (4 colonnes)
+          const recapColWidth = recapTableWidth / 4; // 63.75px par colonne
+          const recapCol1X = recapTableX + recapColWidth; // Total HT
+          const recapCol2X = recapTableX + recapColWidth * 2;   // Réduction
+          const recapCol3X = recapTableX + recapColWidth * 3;  // Total TVA
+
+          doc.moveTo(recapCol1X, recapTableY).lineTo(recapCol1X, recapTableY + recapTableTotalHeight).stroke('#000');
+          doc.moveTo(recapCol2X, recapTableY).lineTo(recapCol2X, recapTableY + recapTableTotalHeight).stroke('#000');
+          doc.moveTo(recapCol3X, recapTableY).lineTo(recapCol3X, recapTableY + recapTableTotalHeight).stroke('#000');
+
+          // En-tête (ligne 1)
+          doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
+          doc.text('Total HT', recapTableX, recapTableY + 8, { width: recapColWidth, align: 'center' });
+          doc.text('Réduction', recapCol1X, recapTableY + 8, { width: recapColWidth, align: 'center' });
+          doc.text('Total TVA', recapCol2X, recapTableY + 8, { width: recapColWidth, align: 'center' });
+          doc.text('Total TTC', recapCol3X, recapTableY + 8, { width: recapColWidth, align: 'center' });
+
+          // Données (ligne 2)
+          doc.font('Helvetica').fontSize(9);
+          doc.text(totalHT.toFixed(2).replace('.', ','), recapTableX, recapTableY + recapTableHeight + 6, { width: recapColWidth, align: 'center' });
+          doc.text(totalReduction.toFixed(2).replace('.', ','), recapCol1X, recapTableY + recapTableHeight + 6, { width: recapColWidth, align: 'center' });
+          // Afficher le montant réel de la TVA au lieu de "20%"
+          doc.text(totalTVA.toFixed(2).replace('.', ','), recapCol2X, recapTableY + recapTableHeight + 6, { width: recapColWidth, align: 'center' });
+          doc.text(totalTTC.toFixed(2).replace('.', ','), recapCol3X, recapTableY + recapTableHeight + 6, { width: recapColWidth, align: 'center' });
+
+          y = recapTableY + recapTableTotalHeight + 10;
+
+          // === MONTANT EN LETTRES (phrase en italique, montant en gras) ===
+          const totalTTCWords = convertAmountToWordsFR(totalTTC);
+          doc.font('Helvetica-Oblique').fontSize(9).fillColor('#000'); // Italique pour la phrase
+
+          // Adapter le texte selon le type de document
+          let phraseText = 'Arrêté le présent devis à la somme de: ';
+          if (isRetour) {
+            phraseText = 'Arrêté le présent bon de retour à la somme de: ';
+          } else if (isLivraison) {
+            phraseText = 'Arrêté le présent bon de livraison à la somme de: ';
+          }
+
+          doc.text(phraseText, 50, y, { width: 500, align: 'left' });
+
+          // Calculer la position du montant en lettres (après la phrase)
+          const phraseWidth = doc.widthOfString(phraseText);
+          doc.font('Helvetica-Bold').fontSize(9).fillColor('#000'); // Gras pour le montant
+          doc.text(totalTTCWords, 50 + phraseWidth, y, { width: 500 - phraseWidth, align: 'left' });
+          y += 20;
         }
-        
-        y += 10; // Espace avant le bloc récapitulatif
-        const recapTableY = y;
-        const recapTableWidth = 255; // Moitié de la page (510 / 2)
-        const recapTableX = 305; // Position à droite (50 + 510 - 255 = 305)
-
-        // Tableau complet avec bordures arrondies (moitié de la page)
-        doc.roundedRect(recapTableX, recapTableY, recapTableWidth, recapTableTotalHeight, tableBorderRadius).stroke('#000');
-
-        // Ligne de séparation horizontale
-        doc.moveTo(recapTableX, recapTableY + recapTableHeight).lineTo(recapTableX + recapTableWidth, recapTableY + recapTableHeight).stroke('#000');
-
-        // Lignes de séparation verticales (4 colonnes)
-        const recapColWidth = recapTableWidth / 4; // 63.75px par colonne
-        const recapCol1X = recapTableX + recapColWidth; // Total HT
-        const recapCol2X = recapTableX + recapColWidth * 2;   // Réduction
-        const recapCol3X = recapTableX + recapColWidth * 3;  // Total TVA
-
-        doc.moveTo(recapCol1X, recapTableY).lineTo(recapCol1X, recapTableY + recapTableTotalHeight).stroke('#000');
-        doc.moveTo(recapCol2X, recapTableY).lineTo(recapCol2X, recapTableY + recapTableTotalHeight).stroke('#000');
-        doc.moveTo(recapCol3X, recapTableY).lineTo(recapCol3X, recapTableY + recapTableTotalHeight).stroke('#000');
-
-        // En-tête (ligne 1)
-        doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
-        doc.text('Total HT', recapTableX, recapTableY + 8, { width: recapColWidth, align: 'center' });
-        doc.text('Réduction', recapCol1X, recapTableY + 8, { width: recapColWidth, align: 'center' });
-        doc.text('Total TVA', recapCol2X, recapTableY + 8, { width: recapColWidth, align: 'center' });
-        doc.text('Total TTC', recapCol3X, recapTableY + 8, { width: recapColWidth, align: 'center' });
-
-        // Données (ligne 2)
-        doc.font('Helvetica').fontSize(9);
-        doc.text(totalHT.toFixed(2).replace('.', ','), recapTableX, recapTableY + recapTableHeight + 6, { width: recapColWidth, align: 'center' });
-        doc.text(totalReduction.toFixed(2).replace('.', ','), recapCol1X, recapTableY + recapTableHeight + 6, { width: recapColWidth, align: 'center' });
-        // Afficher le montant réel de la TVA au lieu de "20%"
-        doc.text(totalTVA.toFixed(2).replace('.', ','), recapCol2X, recapTableY + recapTableHeight + 6, { width: recapColWidth, align: 'center' });
-        doc.text(totalTTC.toFixed(2).replace('.', ','), recapCol3X, recapTableY + recapTableHeight + 6, { width: recapColWidth, align: 'center' });
-
-        y = recapTableY + recapTableTotalHeight + 10;
-
-        // === MONTANT EN LETTRES (phrase en italique, montant en gras) ===
-        const totalTTCWords = convertAmountToWordsFR(totalTTC);
-        doc.font('Helvetica-Oblique').fontSize(9).fillColor('#000'); // Italique pour la phrase
-
-        // Adapter le texte selon le type de document
-        let phraseText = 'Arrêté le présent devis à la somme de: ';
-        if (isRetour) {
-          phraseText = 'Arrêté le présent bon de retour à la somme de: ';
-        } else if (isLivraison) {
-          phraseText = 'Arrêté le présent bon de livraison à la somme de: ';
-        }
-
-        doc.text(phraseText, 50, y, { width: 500, align: 'left' });
-
-        // Calculer la position du montant en lettres (après la phrase)
-        const phraseWidth = doc.widthOfString(phraseText);
-        doc.font('Helvetica-Bold').fontSize(9).fillColor('#000'); // Gras pour le montant
-        doc.text(totalTTCWords, 50 + phraseWidth, y, { width: 500 - phraseWidth, align: 'left' });
-        y += 20;
 
         // Mention sur PDF (devis + bon de livraison) si exonération valide
         if (isClientExonerated && (isDevis || isLivraison)) {

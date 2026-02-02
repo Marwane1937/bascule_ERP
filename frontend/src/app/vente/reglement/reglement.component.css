@@ -50,6 +50,50 @@
   border-radius: 12px;
 }
 
+/* Dashboard Styles */
+.dashboard-section {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bg-gradient-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.border-left-primary {
+  border-left: 4px solid #667eea;
+}
+
+.border-left-success {
+  border-left: 4px solid #28a745;
+}
+
+.border-left-info {
+  border-left: 4px solid #17a2b8;
+}
+
+.text-xs {
+  font-size: 0.75rem;
+}
+
+.text-gray-300 {
+  color: #d1d3e2;
+}
+
+.text-gray-800 {
+  color: #5a5c69;
+}
+
 .table-hover tbody tr:hover {
   background-color: #f6f8fc;
 }

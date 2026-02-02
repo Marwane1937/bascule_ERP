@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { VentesService } from 'src/app/service/ventes.service';
 import { EmailService } from 'src/app/service/email.service';
 import { PermissionsService } from 'src/app/service/permissions.service';
+import { PdfPermissionsService } from 'src/app/service/pdf-permissions.service';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -88,7 +89,8 @@ export class FacturationComponent implements OnInit, AfterViewInit {
     private router: Router,
     private emailService: EmailService,
     private cdr: ChangeDetectorRef,
-    private permissionsService: PermissionsService
+    private permissionsService: PermissionsService,
+    public pdfPermissionsService: PdfPermissionsService
   ) {}
 
   ngOnInit(): void {

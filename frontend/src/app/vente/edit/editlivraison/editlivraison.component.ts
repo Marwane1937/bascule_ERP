@@ -6,6 +6,7 @@ import { VentesService } from 'src/app/service/ventes.service';
 import Quill from 'quill';
 import Swal from 'sweetalert2';
 import { EmailService } from 'src/app/service/email.service';
+import { PdfPermissionsService } from 'src/app/service/pdf-permissions.service';
 import { forkJoin, of } from 'rxjs';
 import { catchError, retry } from 'rxjs/operators';
 const QuillMention = require('quill-mention');
@@ -105,7 +106,7 @@ export class EditlivraisonComponent implements OnInit {
 
   constructor(private baseService: BaseService, private fb: FormBuilder, private route: ActivatedRoute,
     private venteSerivce: VentesService, private emailService: EmailService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef, public pdfPermissionsService: PdfPermissionsService
   ) {
     this.emailForm = this.fb.group({
       to: ['', [Validators.required, Validators.email]],
@@ -1218,11 +1219,11 @@ export class EditlivraisonComponent implements OnInit {
     const hasModifications = this.checkForModifications();
     
     if (hasModifications) {
-      // Enregistrer d'abord, puis générer le PDF
-      this.enregistrerEtGenererPDF(id);
+      // Enregistrer d'abord, puis générer le PDF (mode normal par défaut)
+      this.enregistrerEtGenererPDF(id, 'normal');
     } else {
-      // Pas de modifications, générer directement le PDF
-      this.genererPDF(id);
+      // Pas de modifications, générer directement le PDF (mode normal par défaut)
+      this.genererPDF(id, 'normal');
     }
   }
 
@@ -1250,7 +1251,7 @@ export class EditlivraisonComponent implements OnInit {
   }
 
   // Enregistre les modifications puis génère le PDF
-  private enregistrerEtGenererPDF(documentId: string): void {
+  private enregistrerEtGenererPDF(documentId: string, printMode: 'normal' | 'non_valorise' = 'normal'): void {
     const lignesAModifier: any[] = [];
     const document_id = +documentId;
     
@@ -1332,7 +1333,7 @@ export class EditlivraisonComponent implements OnInit {
 
     if (lignesAModifier.length === 0) {
       // Pas de modifications à enregistrer, générer directement le PDF
-      this.genererPDF(documentId);
+      this.genererPDF(documentId, printMode);
       return;
     }
 
@@ -1342,7 +1343,7 @@ export class EditlivraisonComponent implements OnInit {
         this.produitsOriginal = JSON.parse(JSON.stringify(this.produits));
         this.showNotification('✅ Modifications enregistrées', false);
         // Générer le PDF après l'enregistrement
-        this.genererPDF(documentId);
+        this.genererPDF(documentId, printMode);
       },
       error: (err) => {
         Swal.fire({
@@ -1355,8 +1356,8 @@ export class EditlivraisonComponent implements OnInit {
   }
 
   // Génère le PDF
-  private genererPDF(documentId: string): void {
-    this.emailService.generateDevisPDF(documentId).subscribe({
+  private genererPDF(documentId: string, printMode: 'normal' | 'non_valorise' = 'normal'): void {
+    this.emailService.generateDevisPDF(documentId, { printMode }).subscribe({
       next: (res) => {
         const url = res?.pdfUrl;
         if (url) {
@@ -1369,5 +1370,45 @@ export class EditlivraisonComponent implements OnInit {
         Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors de la génération du PDF." });
       }
     });
+  }
+
+  // Imprimer PDF en mode normal (BL normal)
+  imprimerPdfNormal(): void {
+    const id = this.route.snapshot.paramMap.get('document_id');
+    if (!id) {
+      Swal.fire({ icon: 'error', title: 'Erreur', text: 'document_id introuvable.' });
+      return;
+    }
+
+    // Vérifier s'il y a des modifications non enregistrées
+    const hasModifications = this.checkForModifications();
+    
+    if (hasModifications) {
+      // Enregistrer d'abord, puis générer le PDF
+      this.enregistrerEtGenererPDF(id, 'normal');
+    } else {
+      // Pas de modifications, générer directement le PDF
+      this.genererPDF(id, 'normal');
+    }
+  }
+
+  // Imprimer PDF en mode non valorisé (BL non valorisé)
+  imprimerPdfNonValorise(): void {
+    const id = this.route.snapshot.paramMap.get('document_id');
+    if (!id) {
+      Swal.fire({ icon: 'error', title: 'Erreur', text: 'document_id introuvable.' });
+      return;
+    }
+
+    // Vérifier s'il y a des modifications non enregistrées
+    const hasModifications = this.checkForModifications();
+    
+    if (hasModifications) {
+      // Enregistrer d'abord, puis générer le PDF
+      this.enregistrerEtGenererPDF(id, 'non_valorise');
+    } else {
+      // Pas de modifications, générer directement le PDF
+      this.genererPDF(id, 'non_valorise');
+    }
   }
 }

@@ -129,7 +129,8 @@ publicRouter.get('/:filename', async (req, res) => {
 });
 
 // Routes POST protégées (nécessitent authentification)
-router.post('/generate', authenticateToken, databaseInjector.injectConnection.bind(databaseInjector), async (req, res) => {
+const { checkPdfPermission } = require('../middleware/pdf-permissions.middleware');
+router.post('/generate', authenticateToken, databaseInjector.injectConnection.bind(databaseInjector), checkPdfPermission('commande'), async (req, res) => {
   try {
     const { document_id, withStamp } = req.body;
     const commandeData = await getEmailDataByDocumentId(document_id);

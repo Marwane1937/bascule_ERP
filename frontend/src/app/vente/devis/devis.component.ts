@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { BaseService } from 'src/app/service/base.service';
 import { VentesService } from 'src/app/service/ventes.service';
 import { EmailService } from 'src/app/service/email.service';
+import { PdfPermissionsService } from 'src/app/service/pdf-permissions.service';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -83,7 +84,8 @@ export class DevisComponent implements OnInit, AfterViewInit {
     private baseService: BaseService, 
     private fb: FormBuilder, 
     private emailService: EmailService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    public pdfPermissionsService: PdfPermissionsService
   ) {}
 
   ngOnInit(): void {

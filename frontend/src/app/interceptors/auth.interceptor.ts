@@ -39,6 +39,9 @@ export class AuthInterceptor implements HttpInterceptor {
     
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
+    } else {
+      // Log pour déboguer si le token est manquant
+      console.warn('[AuthInterceptor] Token manquant pour la requête:', req.url);
     }
     
     if (societeId) {

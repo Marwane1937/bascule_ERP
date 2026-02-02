@@ -190,27 +190,22 @@ class ReceptionPdfService {
           if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
         }
 
+        // Utiliser l'en-tête personnalisé si disponible - à côté du logo
         if (options.documentSociete && options.documentSociete.entete) {
-          const htmlToPlainText = (html) => {
-            if (!html) return '';
-            return html.replace(/<[^>]*>/g, '').replace(/[ \t]+/g, ' ').trim();
-          };
-          const enteteText = htmlToPlainText(options.documentSociete.entete);
-          const enteteLines = enteteText.split('\n');
-          let yPos = 30;
-          enteteLines.forEach(line => {
-            if (line.trim()) {
-              doc.fontSize(10).font('Helvetica-Bold').text(line.trim(), 160, yPos);
-              yPos += 12;
-            }
-          });
-        } else {
-          doc.fontSize(11).fillColor('#bccbaa').font('Helvetica-Bold').text('Cactus Informatique', 160, 30);
-          doc.font('Helvetica').fontSize(10).fillColor('#000')
-            .text('LOTISSEMENT HLIWA RUE 8 N°69', 160, 45)
-            .text('AIN SEBAA 20250 CASABLANCA', 160, 58)
-            .text('TEL : 05 22 34 35 45', 160, 71)
-            .text('FAX : 05 22 67 38 09', 160, 84);
+          const entete = options.documentSociete.entete;
+          // Vérifier si c'est un objet JSON ou du texte brut
+          if (typeof entete === 'object' || (typeof entete === 'string' && entete.trim())) {
+            renderFormattedText(doc, entete, {
+              startX: 160,
+              startY: 20,
+              defaultFontSize: 10,
+              defaultColor: '#046ba7',
+              defaultFont: 'Helvetica-Bold',
+              defaultAlign: 'left',
+              defaultLineSpacing: 12,
+              width: 435
+            });
+          }
         }
 
         doc.rect(40, 100, 520, 1).fill('#000');

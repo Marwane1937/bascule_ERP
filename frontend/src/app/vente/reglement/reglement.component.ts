@@ -18,6 +18,37 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
   successMessage: string | null = null;
   isError: boolean = false;
   
+  // Dashboard
+  showDashboard: boolean = false;
+  dashboardLoading: boolean = false;
+  dashboardStats: any = {
+    totalReglements: 0,
+    totalClients: 0,
+    totalEncaisse: 0,
+    totalEnAttente: 0,
+    totalEnRetard: 0,
+    totalMontant: 0,
+    soldeTotal: 0,
+    chiffreAffaireParClient: []
+  };
+  dashboardFilters: any = {
+    dateFrom: '',
+    dateTo: '',
+    clientId: null,
+    modeId: null,
+    periodType: 'month' // 'day', 'week', 'month'
+  };
+  statsByMode: any[] = [];
+  evolutionData: any[] = [];
+  topClients: any[] = [];
+  alerts: any[] = [];
+  recentReglements: any[] = [];
+  
+  // Charts
+  modeChart: any = null;
+  evolutionChart: any = null;
+  topClientsChart: any = null;
+  
   // Pagination
   currentPage: number = 1;
   pageSize: number = 25;
@@ -119,6 +150,305 @@ export class ReglementComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.clientSearchSub?.unsubscribe();
+    // Détruire les graphiques
+    if (this.evolutionChart) {
+      this.evolutionChart.destroy();
+    }
+    if (this.modeChart) {
+      this.modeChart.destroy();
+    }
+    if (this.topClientsChart) {
+      this.topClientsChart.destroy();
+    }
+  }
+
+  // Dashboard Methods
+  toggleDashboard(): void {
+    this.showDashboard = !this.showDashboard;
+    if (this.showDashboard) {
+      this.loadDashboardStats();
+    }
+  }
+
+  loadDashboardStats(): void {
+    this.dashboardLoading = true;
+    
+    // Charger tous les règlements pour calculer les statistiques
+    this.ventesService.getReglements({
+      page: 1,
+      pageSize: 10000, // Charger tous les règlements
+      orderBy: 'date',
+      orderDirection: 'DESC',
+      search: ''
+    }).subscribe({
+      next: (response: any) => {
+        const allReglements = response.data || [];
+        this.calculateDashboardStats(allReglements);
+        this.dashboardLoading = false;
+      },
+      error: (err: any) => {
+        console.error('Erreur lors du chargement des statistiques:', err);
+        this.dashboardLoading = false;
+        this.showError("❌ Impossible de charger les statistiques du dashboard.");
+      }
+    });
+  }
+
+  calculateDashboardStats(reglements: any[]): void {
+    // Calculer le total des règlements
+    this.dashboardStats.totalReglements = reglements.length;
+
+    // Calculer le total des montants
+    this.dashboardStats.totalMontant = reglements.reduce((sum, r) => {
+      return sum + (parseFloat(r.montant) || 0);
+    }, 0);
+
+    // Calculer le solde total
+    this.dashboardStats.soldeTotal = reglements.reduce((sum, r) => {
+      return sum + (parseFloat(r.solde) || 0);
+    }, 0);
+
+    // Calculer le chiffre d'affaire et le solde par client
+    const clientStats: { [key: string]: { client: string; chiffreAffaire: number; solde: number } } = {};
+    
+    reglements.forEach(r => {
+      const clientName = r.client || 'Non spécifié';
+      if (!clientStats[clientName]) {
+        clientStats[clientName] = {
+          client: clientName,
+          chiffreAffaire: 0,
+          solde: 0
+        };
+      }
+      clientStats[clientName].chiffreAffaire += parseFloat(r.montant) || 0;
+      clientStats[clientName].solde += parseFloat(r.solde) || 0;
+    });
+
+    // Convertir en tableau et trier par chiffre d'affaire décroissant
+    this.dashboardStats.chiffreAffaireParClient = Object.values(clientStats)
+      .sort((a, b) => b.chiffreAffaire - a.chiffreAffaire);
+
+    // Initialiser les graphiques après un court délai pour s'assurer que les canvas sont rendus
+    setTimeout(() => {
+      this.initCharts(reglements);
+    }, 100);
+  }
+
+  initCharts(reglements: any[]): void {
+    this.createEvolutionChart(reglements);
+    this.createModeChart(reglements);
+    this.createTopClientsChart(reglements);
+  }
+
+  createEvolutionChart(reglements: any[]): void {
+    const canvas = document.getElementById('evolutionChart') as HTMLCanvasElement;
+    if (!canvas) return;
+
+    // Détruire le graphique existant s'il existe
+    if (this.evolutionChart) {
+      this.evolutionChart.destroy();
+    }
+
+    // Grouper les règlements par mois
+    const monthlyData: { [key: string]: number } = {};
+    reglements.forEach(r => {
+      if (r.date) {
+        const date = new Date(r.date);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        monthlyData[monthKey] = (monthlyData[monthKey] || 0) + (parseFloat(r.montant) || 0);
+      }
+    });
+
+    // Trier les mois et préparer les données
+    const sortedMonths = Object.keys(monthlyData).sort();
+    const labels = sortedMonths.map(m => {
+      const [year, month] = m.split('-');
+      const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+      return `${monthNames[parseInt(month) - 1]} ${year}`;
+    });
+    const data = sortedMonths.map(m => monthlyData[m]);
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const Chart = (window as any).Chart;
+    if (!Chart) return;
+
+    this.evolutionChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Montant (DH)',
+          data: data,
+          borderColor: 'rgb(75, 192, 192)',
+          backgroundColor: 'rgba(75, 192, 192, 0.2)',
+          tension: 0.4,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top'
+          },
+          title: {
+            display: false
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: function(value: any) {
+                return value.toFixed(2) + ' DH';
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  createModeChart(reglements: any[]): void {
+    const canvas = document.getElementById('modeChart') as HTMLCanvasElement;
+    if (!canvas) return;
+
+    // Détruire le graphique existant s'il existe
+    if (this.modeChart) {
+      this.modeChart.destroy();
+    }
+
+    // Grouper par mode de règlement
+    const modeData: { [key: string]: number } = {};
+    reglements.forEach(r => {
+      const mode = r.mode || 'Non spécifié';
+      modeData[mode] = (modeData[mode] || 0) + (parseFloat(r.montant) || 0);
+    });
+
+    const labels = Object.keys(modeData);
+    const data = Object.values(modeData);
+    const colors = [
+      'rgba(255, 99, 132, 0.8)',
+      'rgba(54, 162, 235, 0.8)',
+      'rgba(255, 206, 86, 0.8)',
+      'rgba(75, 192, 192, 0.8)',
+      'rgba(153, 102, 255, 0.8)',
+      'rgba(255, 159, 64, 0.8)',
+      'rgba(199, 199, 199, 0.8)',
+      'rgba(83, 102, 255, 0.8)'
+    ];
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const Chart = (window as any).Chart;
+    if (!Chart) return;
+
+    this.modeChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: data,
+          backgroundColor: colors.slice(0, labels.length),
+          borderWidth: 2,
+          borderColor: '#fff'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'right'
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context: any) {
+                const label = context.label || '';
+                const value = context.parsed || 0;
+                const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
+                const percentage = ((value / total) * 100).toFixed(1);
+                return `${label}: ${value.toFixed(2)} DH (${percentage}%)`;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  createTopClientsChart(reglements: any[]): void {
+    const canvas = document.getElementById('topClientsChart') as HTMLCanvasElement;
+    if (!canvas) return;
+
+    // Détruire le graphique existant s'il existe
+    if (this.topClientsChart) {
+      this.topClientsChart.destroy();
+    }
+
+    // Prendre les top 10 clients
+    const topClients = this.dashboardStats.chiffreAffaireParClient.slice(0, 10);
+    
+    if (topClients.length === 0) {
+      return;
+    }
+
+    const labels = topClients.map((c: any) => c.client);
+    const data = topClients.map((c: any) => c.chiffreAffaire);
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const Chart = (window as any).Chart;
+    if (!Chart) return;
+
+    this.topClientsChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Chiffre d\'affaire (DH)',
+          data: data,
+          backgroundColor: 'rgba(54, 162, 235, 0.8)',
+          borderColor: 'rgba(54, 162, 235, 1)',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top'
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context: any) {
+                return `Chiffre d'affaire: ${context.parsed.x.toFixed(2)} DH`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            ticks: {
+              callback: function(value: any) {
+                return value.toFixed(2) + ' DH';
+              }
+            }
+          }
+        }
+      }
+    });
   }
 
   initForm(): void {

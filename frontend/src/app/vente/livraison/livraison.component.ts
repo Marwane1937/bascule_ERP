@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { BaseService } from 'src/app/service/base.service';
 import { VentesService } from 'src/app/service/ventes.service';
 import { EmailService } from 'src/app/service/email.service';
+import { PdfPermissionsService } from 'src/app/service/pdf-permissions.service';
 import Swal from 'sweetalert2';
 import { Subscription } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
@@ -113,14 +114,47 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   private clientSearchSub?: Subscription;
   private commercialSearchSub?: Subscription;
 
+  // Email form
+  emailForm!: FormGroup;
+  selectedLivraisonForEmail: any = null;
+  isSending: boolean = false;
+
+  // Dashboard
+  showDashboard: boolean = false;
+  dashboardLoading: boolean = false;
+  dashboardStats: any = {
+    totalLivraisons: 0,
+    totalClients: 0,
+    totalMontantHT: 0,
+    totalMontantTTC: 0,
+    totalTVA: 0,
+    prixMoyenVente: 0,
+    chiffreAffaireParClient: [],
+    chiffreAffaireParArticle: []
+  };
+  
+  // Charts
+  evolutionChart: any = null;
+  clientChart: any = null;
+  topClientsChart: any = null;
+  articleChart: any = null;
+
   constructor(
     private ventesService: VentesService, 
     private router: Router,
     private baseService: BaseService, 
     private fb: FormBuilder, 
     private emailService: EmailService,
-    private cdr: ChangeDetectorRef
-  ) {}
+    private cdr: ChangeDetectorRef,
+    public pdfPermissionsService: PdfPermissionsService
+  ) {
+    this.emailForm = this.fb.group({
+      to: ['', [Validators.required, Validators.email]],
+      cc: [''],
+      subject: ['Livraison à votre attention'],
+      body: ['Bonjour,\n\nVeuillez trouver ci-joint le bon de livraison demandé.\n\nCordialement,']
+    });
+  }
 
   ngOnInit(): void {
     this.getLivraisons();
@@ -1221,7 +1255,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
-  OnPrintLivraison(document_id: any) {
+  OnPrintLivraison(document_id: any, printMode: string = 'normal') {
     // Afficher un loader pendant la génération du PDF
     Swal.fire({
       title: 'Génération du PDF...',
@@ -1231,8 +1265,13 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
       }
     });
 
+    // Convertir le mode d'impression pour le backend
+    // 'normal' -> 'normal' (BL normal)
+    // 'non_valorise' -> 'non_valorise' (BL non valorisé)
+    const backendPrintMode = printMode === 'non_valorise' ? 'non_valorise' : 'normal';
+
     // Utiliser generateDevisPDF car la route /api/pdf/generate gère tous les types de documents (devis, commandes, livraisons)
-    this.emailService.generateDevisPDF(document_id.toString()).subscribe({
+    this.emailService.generateDevisPDF(document_id.toString(), { printMode: backendPrintMode }).subscribe({
       next: (res: any) => {
         Swal.close();
         const url = res?.pdfUrl;
@@ -1790,8 +1829,526 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     this.showColumnContextMenu(event, column);
   }
 
+  openEmailModal(livraison: any): void {
+    this.selectedLivraisonForEmail = livraison;
+    // Réinitialiser le formulaire avec les valeurs par défaut
+    this.emailForm.reset({
+      to: '',
+      cc: '',
+      subject: 'Livraison à votre attention',
+      body: 'Bonjour,\n\nVeuillez trouver ci-joint le bon de livraison demandé.\n\nCordialement,'
+    });
+    // Ouvrir le modal Bootstrap
+    const modalElement = document.getElementById('emailModalLivraison');
+    if (modalElement) {
+      const modal = new (window as any).bootstrap.Modal(modalElement);
+      modal.show();
+    }
+  }
+
+  envoyerEmail(): void {
+    if (this.emailForm.invalid || !this.selectedLivraisonForEmail) return;
+
+    this.isSending = true;
+
+    const formData = {
+      ...this.emailForm.value,
+      document_id: this.selectedLivraisonForEmail.document_id
+    };
+
+    // Afficher le spinner
+    Swal.fire({
+      title: 'Envoi en cours...',
+      html: '<div class="loading-spinner"></div><p>Veuillez patienter</p>',
+      showConfirmButton: false,
+      allowOutsideClick: false
+    });
+
+    this.emailService.envoyerDevis(formData).subscribe({
+      next: res => {
+        Swal.fire({
+          icon: 'success',
+          title: 'E-mail envoyé !',
+          text: 'La livraison a été envoyée avec succès.',
+          timer: 3000,
+          showConfirmButton: false
+        });
+
+        // Fermer la modale Bootstrap
+        const modalElement = document.getElementById('emailModalLivraison');
+        if (modalElement) {
+          const modalInstance = (window as any).bootstrap.Modal.getInstance(modalElement);
+          if (modalInstance) {
+            modalInstance.hide();
+          }
+        }
+        this.isSending = false;
+      },
+      error: err => {
+        Swal.fire({
+          icon: 'error',
+          title: 'Erreur',
+          text: "Échec de l'envoi de l'e-mail."
+        });
+        this.isSending = false;
+      }
+    });
+  }
+
+  // Dashboard Methods
+  toggleDashboard(): void {
+    this.showDashboard = !this.showDashboard;
+    if (this.showDashboard) {
+      this.loadDashboardStats();
+    }
+  }
+
+  loadDashboardStats(): void {
+    this.dashboardLoading = true;
+    
+    // Charger toutes les livraisons pour calculer les statistiques
+    this.ventesService.getLivraisons({
+      page: 1,
+      pageSize: 10000, // Charger toutes les livraisons
+      orderBy: 'date',
+      orderDirection: 'DESC',
+      search: ''
+    }).subscribe({
+      next: (response: any) => {
+        // Gérer différents formats de réponse
+        let allLivraisons = [];
+        if (response && response.data && Array.isArray(response.data)) {
+          allLivraisons = response.data;
+        } else if (response && response.success && Array.isArray(response.data)) {
+          allLivraisons = response.data;
+        } else if (Array.isArray(response)) {
+          allLivraisons = response;
+        }
+        
+        // Charger les détails de chaque livraison pour les statistiques par article
+        this.loadLivraisonsDetails(allLivraisons);
+      },
+      error: (err: any) => {
+        console.error('Erreur lors du chargement des statistiques:', err);
+        this.dashboardLoading = false;
+        this.showError("❌ Impossible de charger les statistiques du dashboard.");
+      }
+    });
+  }
+
+  loadLivraisonsDetails(livraisons: any[]): void {
+    // Charger les détails de chaque livraison
+    const detailPromises = livraisons.map((livraison: any) => {
+      const livraisonId = livraison.document_id || livraison.id;
+      if (!livraisonId) {
+        return Promise.resolve({ ...livraison, details: [] });
+      }
+      
+      return this.ventesService.getLivraisonById(livraisonId).toPromise().then(
+        (response: any) => {
+          const details = response?.details || response?.data?.details || [];
+          return { ...livraison, details: Array.isArray(details) ? details : [] };
+        },
+        () => ({ ...livraison, details: [] })
+      );
+    });
+
+    Promise.all(detailPromises).then((livraisonsWithDetails: any[]) => {
+      this.calculateDashboardStats(livraisonsWithDetails);
+      this.dashboardLoading = false;
+    }).catch((err: any) => {
+      console.error('Erreur lors du chargement des détails:', err);
+      // Calculer les stats même sans détails
+      this.calculateDashboardStats(livraisons);
+      this.dashboardLoading = false;
+    });
+  }
+
+  calculateDashboardStats(livraisons: any[]): void {
+    // Calculer le total des livraisons
+    this.dashboardStats.totalLivraisons = livraisons.length;
+
+    // Calculer les totaux
+    this.dashboardStats.totalMontantHT = livraisons.reduce((sum, l) => {
+      return sum + (parseFloat(l.total_ht) || 0);
+    }, 0);
+
+    this.dashboardStats.totalMontantTTC = livraisons.reduce((sum, l) => {
+      return sum + (parseFloat(l.total_ttc) || 0);
+    }, 0);
+
+    this.dashboardStats.totalTVA = livraisons.reduce((sum, l) => {
+      return sum + (parseFloat(l.total_tva) || 0);
+    }, 0);
+
+    // Calculer le prix moyen des ventes
+    const totalTTC = this.dashboardStats.totalMontantTTC;
+    this.dashboardStats.prixMoyenVente = livraisons.length > 0 ? totalTTC / livraisons.length : 0;
+
+    // Calculer le chiffre d'affaire par client
+    const clientStats: { [key: string]: { client: string; chiffreAffaire: number; totalLivraisons: number } } = {};
+    
+    livraisons.forEach(l => {
+      const clientName = l.client || 'Non spécifié';
+      if (!clientStats[clientName]) {
+        clientStats[clientName] = {
+          client: clientName,
+          chiffreAffaire: 0,
+          totalLivraisons: 0
+        };
+      }
+      clientStats[clientName].chiffreAffaire += parseFloat(l.total_ttc) || 0;
+      clientStats[clientName].totalLivraisons += 1;
+    });
+
+    // Convertir en tableau et trier par chiffre d'affaire décroissant
+    this.dashboardStats.chiffreAffaireParClient = Object.values(clientStats)
+      .sort((a, b) => b.chiffreAffaire - a.chiffreAffaire);
+
+    // Calculer le chiffre d'affaire par article
+    const articleStats: { [key: string]: { article: string; chiffreAffaire: number; quantite: number; prixMoyen: number } } = {};
+    
+    livraisons.forEach(l => {
+      const details = l.details || [];
+      details.forEach((detail: any) => {
+        const articleName = detail.article_nom || detail.designation || detail.description || 'Article sans nom';
+        const quantite = parseFloat(detail.quantite || detail.qte) || 0;
+        const prix = parseFloat(detail.prix || detail.pu) || 0;
+        const totalLigne = parseFloat(detail.total || detail.ttc) || (prix * quantite);
+        
+        if (!articleStats[articleName]) {
+          articleStats[articleName] = {
+            article: articleName,
+            chiffreAffaire: 0,
+            quantite: 0,
+            prixMoyen: 0
+          };
+        }
+        articleStats[articleName].chiffreAffaire += totalLigne;
+        articleStats[articleName].quantite += quantite;
+      });
+    });
+
+    // Calculer le prix moyen par article
+    Object.keys(articleStats).forEach(articleName => {
+      const stat = articleStats[articleName];
+      stat.prixMoyen = stat.quantite > 0 ? stat.chiffreAffaire / stat.quantite : 0;
+    });
+
+    // Convertir en tableau et trier par chiffre d'affaire décroissant
+    this.dashboardStats.chiffreAffaireParArticle = Object.values(articleStats)
+      .sort((a, b) => b.chiffreAffaire - a.chiffreAffaire);
+
+    // Initialiser les graphiques après un court délai pour s'assurer que les canvas sont rendus
+    setTimeout(() => {
+      this.initCharts(livraisons);
+    }, 100);
+  }
+
+  initCharts(livraisons: any[]): void {
+    this.createEvolutionChart(livraisons);
+    this.createClientChart(livraisons);
+    this.createTopClientsChart(livraisons);
+    this.createArticleChart(livraisons);
+  }
+
+  createEvolutionChart(livraisons: any[]): void {
+    const canvas = document.getElementById('evolutionChartLivraison') as HTMLCanvasElement;
+    if (!canvas) return;
+
+    // Détruire le graphique existant s'il existe
+    if (this.evolutionChart) {
+      this.evolutionChart.destroy();
+    }
+
+    // Grouper les livraisons par mois
+    const monthlyData: { [key: string]: number } = {};
+    livraisons.forEach(l => {
+      if (l.date) {
+        const date = new Date(l.date);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        monthlyData[monthKey] = (monthlyData[monthKey] || 0) + (parseFloat(l.total_ttc) || 0);
+      }
+    });
+
+    // Trier les mois et préparer les données
+    const sortedMonths = Object.keys(monthlyData).sort();
+    const labels = sortedMonths.map(m => {
+      const [year, month] = m.split('-');
+      const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+      return `${monthNames[parseInt(month) - 1]} ${year}`;
+    });
+    const data = sortedMonths.map(m => monthlyData[m]);
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const Chart = (window as any).Chart;
+    if (!Chart) return;
+
+    this.evolutionChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Montant TTC (DH)',
+          data: data,
+          borderColor: 'rgb(75, 192, 192)',
+          backgroundColor: 'rgba(75, 192, 192, 0.2)',
+          tension: 0.4,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top'
+          },
+          title: {
+            display: false
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: function(value: any) {
+                return value.toFixed(2) + ' DH';
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  createClientChart(livraisons: any[]): void {
+    const canvas = document.getElementById('clientChartLivraison') as HTMLCanvasElement;
+    if (!canvas) return;
+
+    // Détruire le graphique existant s'il existe
+    if (this.clientChart) {
+      this.clientChart.destroy();
+    }
+
+    // Utiliser les données calculées dans dashboardStats
+    const topClients = this.dashboardStats.chiffreAffaireParClient.slice(0, 10);
+    
+    if (topClients.length === 0) {
+      return;
+    }
+
+    const labels = topClients.map((c: any) => c.client);
+    const data = topClients.map((c: any) => c.chiffreAffaire);
+    const colors = [
+      'rgba(255, 99, 132, 0.8)',
+      'rgba(54, 162, 235, 0.8)',
+      'rgba(255, 206, 86, 0.8)',
+      'rgba(75, 192, 192, 0.8)',
+      'rgba(153, 102, 255, 0.8)',
+      'rgba(255, 159, 64, 0.8)',
+      'rgba(199, 199, 199, 0.8)',
+      'rgba(83, 102, 255, 0.8)',
+      'rgba(255, 99, 255, 0.8)',
+      'rgba(99, 255, 132, 0.8)'
+    ];
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const Chart = (window as any).Chart;
+    if (!Chart) return;
+
+    this.clientChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Chiffre d\'affaire (DH)',
+          data: data,
+          backgroundColor: colors.slice(0, labels.length),
+          borderWidth: 2,
+          borderColor: '#fff'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'right'
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context: any) {
+                const label = context.label || '';
+                const value = context.parsed || 0;
+                const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
+                const percentage = ((value / total) * 100).toFixed(1);
+                return `${label}: ${value.toFixed(2)} DH (${percentage}%)`;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  createArticleChart(livraisons: any[]): void {
+    const canvas = document.getElementById('articleChartLivraison') as HTMLCanvasElement;
+    if (!canvas) return;
+
+    // Détruire le graphique existant s'il existe
+    if (this.articleChart) {
+      this.articleChart.destroy();
+    }
+
+    // Prendre les top 10 articles
+    const topArticles = this.dashboardStats.chiffreAffaireParArticle.slice(0, 10);
+    
+    if (topArticles.length === 0) {
+      return;
+    }
+
+    const labels = topArticles.map((a: any) => a.article.length > 30 ? a.article.substring(0, 30) + '...' : a.article);
+    const data = topArticles.map((a: any) => a.chiffreAffaire);
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const Chart = (window as any).Chart;
+    if (!Chart) return;
+
+    this.articleChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Chiffre d\'affaire (DH)',
+          data: data,
+          backgroundColor: 'rgba(153, 102, 255, 0.8)',
+          borderColor: 'rgba(153, 102, 255, 1)',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top'
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context: any) {
+                return `Chiffre d'affaire: ${context.parsed.x.toFixed(2)} DH`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            ticks: {
+              callback: function(value: any) {
+                return value.toFixed(2) + ' DH';
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  createTopClientsChart(livraisons: any[]): void {
+    const canvas = document.getElementById('topClientsChartLivraison') as HTMLCanvasElement;
+    if (!canvas) return;
+
+    // Détruire le graphique existant s'il existe
+    if (this.topClientsChart) {
+      this.topClientsChart.destroy();
+    }
+
+    // Prendre les top 10 clients
+    const topClients = this.dashboardStats.chiffreAffaireParClient.slice(0, 10);
+    
+    if (topClients.length === 0) {
+      return;
+    }
+
+    const labels = topClients.map((c: any) => c.client);
+    const data = topClients.map((c: any) => c.chiffreAffaire);
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const Chart = (window as any).Chart;
+    if (!Chart) return;
+
+    this.topClientsChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Chiffre d\'affaire (DH)',
+          data: data,
+          backgroundColor: 'rgba(54, 162, 235, 0.8)',
+          borderColor: 'rgba(54, 162, 235, 1)',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top'
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context: any) {
+                return `Chiffre d'affaire: ${context.parsed.x.toFixed(2)} DH`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            ticks: {
+              callback: function(value: any) {
+                return value.toFixed(2) + ' DH';
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
   ngOnDestroy(): void {
     this.clientSearchSub?.unsubscribe();
     this.commercialSearchSub?.unsubscribe();
+    // Détruire les graphiques
+    if (this.evolutionChart) {
+      this.evolutionChart.destroy();
+    }
+    if (this.clientChart) {
+      this.clientChart.destroy();
+    }
+    if (this.topClientsChart) {
+      this.topClientsChart.destroy();
+    }
+    if (this.articleChart) {
+      this.articleChart.destroy();
+    }
   }
 }

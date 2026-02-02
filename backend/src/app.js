@@ -109,6 +109,7 @@ app.use('/factures-fournisseur', express.static(path.join(__dirname, 'public', '
 app.use('/retours', express.static(path.join(__dirname, 'public', 'retours'), staticOptions));
 app.use('/avoirs', express.static(path.join(__dirname, 'public', 'avoirs'), staticOptions));
 app.use('/receptions', express.static(path.join(__dirname, 'public', 'receptions'), staticOptions));
+app.use('/bordereaux-remise', express.static(path.join(__dirname, 'public', 'bordereaux-remise'), staticOptions));
 app.use('/interventions', express.static(path.join(__dirname, 'public', 'interventions'), staticOptions));
 app.use('/stock-historique', express.static(path.join(__dirname, 'public', 'stock-historique'), staticOptions));
 
@@ -150,6 +151,7 @@ const { router: commandePdfRoutes, publicRouter: commandePdfPublicRoutes } = req
 const avoirPdfRoutes = require('./routes/avoir-pdf.routes');
 const factureFournisseurPdfRoutes = require('./routes/achats/facture-fournisseur-pdf.routes');
 const receptionPdfRoutes = require('./routes/reception-pdf.routes');
+const bordereauRemisePdfRoutes = require('./routes/bordereau-remise-pdf.routes');
 
 // ✅ Authentification
 const authRoutes = require('./routes/auth.routes');
@@ -184,6 +186,8 @@ app.use('/api/vente/reporting', authenticateToken, venteReportingRoutes);
 app.use('/api/caisse', authenticateToken, caisseRoutes);
 app.use('/api/reglement', authenticateToken, reglementRoutes);
 app.use('/api/reglements', authenticateToken, reglementRoutes); // Alias pour compatibilité frontend
+const bordereauRemiseRoutes = require('./routes/finance/bordereau-remise.routes');
+app.use('/api/bordereau-remise', authenticateToken, bordereauRemiseRoutes);
 app.use('/api/finance/reporting', authenticateToken, financeReportingRoutes);
 // ✅ Achats
 app.use('/api/bon-commande', authenticateToken, bonCommandeRoutes);
@@ -229,7 +233,10 @@ app.use('/commandes', commandePdfPublicRoutes); // Routes publiques pour servir 
 app.use('/api/commande-pdf', commandePdfRoutes);
 app.use('/api/avoir-pdf', authenticateToken, avoirPdfRoutes);
 app.use('/api/facture-fournisseur-pdf', authenticateToken, factureFournisseurPdfRoutes);
-app.use('/api/reception-pdf', authenticateToken, receptionPdfRoutes);
+// Route reception-pdf : les routes POST sont protégées dans reception-pdf.routes.js, la route GET est publique
+app.use('/api/reception-pdf', receptionPdfRoutes);
+// Route bordereau-remise-pdf : les routes POST sont protégées dans bordereau-remise-pdf.routes.js, la route GET est publique
+app.use('/api/bordereau-remise-pdf', bordereauRemisePdfRoutes);
 
 // ✅ Generation / Impression Chèque
 const chequePdfRoutes = require('./routes/generation/cheque.routes');

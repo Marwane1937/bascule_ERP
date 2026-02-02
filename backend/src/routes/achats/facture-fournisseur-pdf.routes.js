@@ -5,6 +5,7 @@ const { getFactureFournisseurReportById } = require('../../models/achats/facture
 const pdfConfigService = require('../../services/pdf-config.service');
 const { authenticateToken } = require('../../middleware/auth.middleware');
 const databaseInjector = require('../../middleware/database-injector.middleware');
+const { checkPdfPermission } = require('../../middleware/pdf-permissions.middleware');
 const path = require('path');
 
 /**
@@ -18,7 +19,7 @@ router.use(authenticateToken);
 router.use(databaseInjector.injectConnection.bind(databaseInjector));
 
 // Générer un PDF de facture fournisseur
-router.get('/:facture_id', async (req, res) => {
+router.get('/:facture_id', authenticateToken, checkPdfPermission('facture_fournisseur'), async (req, res) => {
   try {
     const facture_id = parseInt(req.params.facture_id, 10);
     

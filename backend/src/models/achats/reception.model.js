@@ -155,7 +155,7 @@ const formatToSqlDateTime = (value) => {
   return value;
 };
 
-
+ 
 
 const createReceptionFromCommande = async (commandeId, detailsOverride = null, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();

@@ -451,6 +451,291 @@ const getReglementForPDF = async (regle_id) => {
   }
 };
 
+// Statistiques générales avec filtres
+const getReglementStats = async (options = {}, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  try {
+    const { dateFrom, dateTo, clientId, modeId } = options;
+    
+    let whereClause = 'WHERE 1=1';
+    const replacements = {};
+    
+    if (dateFrom) {
+      whereClause += ' AND v.date >= :dateFrom';
+      replacements.dateFrom = dateFrom;
+    }
+    if (dateTo) {
+      whereClause += ' AND v.date <= :dateTo';
+      replacements.dateTo = dateTo;
+    }
+    if (clientId) {
+      whereClause += ' AND EXISTS (SELECT 1 FROM reglement r WHERE r.numero = v.numero AND r.part_id = :clientId)';
+      replacements.clientId = clientId;
+    }
+    if (modeId) {
+      whereClause += ' AND EXISTS (SELECT 1 FROM reglement r WHERE r.numero = v.numero AND r.mode = :modeId)';
+      replacements.modeId = modeId;
+    }
+    
+    const query = `
+      SELECT 
+        COUNT(*) as total_reglements,
+        COUNT(DISTINCT (SELECT r.part_id FROM reglement r WHERE r.numero = v.numero)) as total_clients,
+        SUM(CASE WHEN v.solde = 0 THEN v.montant ELSE 0 END) as total_encaisse,
+        SUM(CASE WHEN v.solde > 0 THEN v.montant ELSE 0 END) as total_en_attente,
+        SUM(CASE WHEN v.echeance IS NOT NULL AND v.echeance < CAST(GETDATE() AS DATE) AND v.solde > 0 THEN v.montant ELSE 0 END) as total_en_retard,
+        SUM(v.montant) as total_montant
+      FROM v_reglement v
+      ${whereClause}
+    `;
+    
+    const [result] = await sequelize.query(query, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
+    
+    return result || {
+      total_reglements: 0,
+      total_clients: 0,
+      total_encaisse: 0,
+      total_en_attente: 0,
+      total_en_retard: 0,
+      total_montant: 0
+    };
+  } catch (error) {
+    console.error('[getReglementStats] Erreur:', error);
+    throw error;
+  }
+};
+
+// Répartition par mode de paiement
+const getReglementByMode = async (options = {}, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  try {
+    const { dateFrom, dateTo } = options;
+    
+    let whereClause = 'WHERE 1=1';
+    const replacements = {};
+    
+    if (dateFrom) {
+      whereClause += ' AND v.date >= :dateFrom';
+      replacements.dateFrom = dateFrom;
+    }
+    if (dateTo) {
+      whereClause += ' AND v.date <= :dateTo';
+      replacements.dateTo = dateTo;
+    }
+    
+    const query = `
+      SELECT 
+        v.mode as mode_nom,
+        COUNT(*) as nombre,
+        SUM(v.montant) as total_montant,
+        SUM(CASE WHEN v.solde = 0 THEN v.montant ELSE 0 END) as encaisse
+      FROM v_reglement v
+      ${whereClause}
+      GROUP BY v.mode
+      ORDER BY total_montant DESC
+    `;
+    
+    return await sequelize.query(query, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
+  } catch (error) {
+    console.error('[getReglementByMode] Erreur:', error);
+    throw error;
+  }
+};
+
+// Évolution temporelle
+const getReglementEvolution = async (options = {}, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  try {
+    const { dateFrom, dateTo, groupBy = 'day' } = options;
+    
+    let whereClause = 'WHERE 1=1';
+    const replacements = {};
+    
+    if (dateFrom) {
+      whereClause += ' AND v.date >= :dateFrom';
+      replacements.dateFrom = dateFrom;
+    }
+    if (dateTo) {
+      whereClause += ' AND v.date <= :dateTo';
+      replacements.dateTo = dateTo;
+    }
+    
+    let dateFormat;
+    if (groupBy === 'day') {
+      dateFormat = 'FORMAT(v.date, \'yyyy-MM-dd\')';
+    } else if (groupBy === 'week') {
+      dateFormat = 'FORMAT(DATEPART(year, v.date), \'0000\') + \'-\' + FORMAT(DATEPART(week, v.date), \'00\')';
+    } else {
+      dateFormat = 'FORMAT(v.date, \'yyyy-MM\')';
+    }
+    
+    const query = `
+      SELECT 
+        ${dateFormat} as periode,
+        COUNT(*) as nombre_reglements,
+        SUM(v.montant) as total_encaisse,
+        SUM(CASE WHEN v.solde = 0 THEN v.montant ELSE 0 END) as encaisse_reel,
+        SUM(CASE WHEN v.solde > 0 THEN v.montant ELSE 0 END) as en_attente,
+        SUM(CASE WHEN v.echeance IS NOT NULL AND v.echeance < CAST(GETDATE() AS DATE) AND v.solde > 0 THEN v.montant ELSE 0 END) as en_retard
+      FROM v_reglement v
+      ${whereClause}
+      GROUP BY ${dateFormat}
+      ORDER BY periode ASC
+    `;
+    
+    return await sequelize.query(query, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
+  } catch (error) {
+    console.error('[getReglementEvolution] Erreur:', error);
+    throw error;
+  }
+};
+
+// Top clients
+const getTopClients = async (options = {}, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  try {
+    const { dateFrom, dateTo, limit = 5, sortBy = 'montant' } = options;
+    
+    let whereClause = 'WHERE 1=1';
+    const replacements = {};
+    
+    if (dateFrom) {
+      whereClause += ' AND v.date >= :dateFrom';
+      replacements.dateFrom = dateFrom;
+    }
+    if (dateTo) {
+      whereClause += ' AND v.date <= :dateTo';
+      replacements.dateTo = dateTo;
+    }
+    
+    const orderBy = sortBy === 'solde' 
+      ? 'SUM(v.solde) DESC' 
+      : 'SUM(v.montant) DESC';
+    
+    const query = `
+      SELECT TOP ${limit}
+        v.client,
+        COUNT(*) as nombre_reglements,
+        SUM(v.montant) as total_montant,
+        SUM(CASE WHEN v.solde = 0 THEN v.montant ELSE 0 END) as montant_regle,
+        SUM(v.solde) as solde_restant
+      FROM v_reglement v
+      ${whereClause}
+      GROUP BY v.client
+      ORDER BY ${orderBy}
+    `;
+    
+    return await sequelize.query(query, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
+  } catch (error) {
+    console.error('[getTopClients] Erreur:', error);
+    throw error;
+  }
+};
+
+// Alertes (échéances proches, retards)
+const getReglementAlerts = async (options = {}, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  try {
+    const { daysAhead = 7 } = options;
+    
+    const query = `
+      SELECT 
+        v.numero,
+        v.date,
+        v.echeance,
+        v.montant,
+        v.solde,
+        v.client,
+        v.mode,
+        v.reference,
+        CASE 
+          WHEN v.echeance < CAST(GETDATE() AS DATE) AND v.solde > 0 THEN 'retard'
+          WHEN v.echeance BETWEEN CAST(GETDATE() AS DATE) AND DATEADD(day, :daysAhead, CAST(GETDATE() AS DATE)) AND v.solde > 0 THEN 'echeance_proche'
+          ELSE 'normal'
+        END as statut_alerte,
+        DATEDIFF(day, CAST(GETDATE() AS DATE), v.echeance) as jours_restants
+      FROM v_reglement v
+      WHERE v.echeance IS NOT NULL 
+        AND v.solde > 0
+        AND (
+          v.echeance < CAST(GETDATE() AS DATE) 
+          OR v.echeance <= DATEADD(day, :daysAhead, CAST(GETDATE() AS DATE))
+        )
+      ORDER BY v.echeance ASC
+    `;
+    
+    return await sequelize.query(query, {
+      replacements: { daysAhead },
+      type: sequelize.QueryTypes.SELECT
+    });
+  } catch (error) {
+    console.error('[getReglementAlerts] Erreur:', error);
+    throw error;
+  }
+};
+
+// Règlements récents
+const getRecentReglements = async (options = {}, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  try {
+    const { limit = 10, dateFrom, dateTo } = options;
+    
+    let whereClause = 'WHERE 1=1';
+    const replacements = {};
+    
+    if (dateFrom) {
+      whereClause += ' AND v.date >= :dateFrom';
+      replacements.dateFrom = dateFrom;
+    }
+    if (dateTo) {
+      whereClause += ' AND v.date <= :dateTo';
+      replacements.dateTo = dateTo;
+    }
+    
+    const query = `
+      SELECT TOP ${limit}
+        v.numero,
+        v.date,
+        v.montant,
+        v.solde,
+        v.reference,
+        v.client,
+        v.mode,
+        v.echeance,
+        CASE 
+          WHEN v.solde = 0 THEN 'Payé'
+          WHEN v.echeance IS NOT NULL AND v.echeance < CAST(GETDATE() AS DATE) THEN 'En retard'
+          WHEN v.echeance IS NOT NULL THEN 'En attente'
+          ELSE 'En attente'
+        END as statut,
+        (SELECT r.regle_id FROM reglement r WHERE r.numero = v.numero) as regle_id
+      FROM v_reglement v
+      ${whereClause}
+      ORDER BY v.date DESC, v.numero DESC
+    `;
+    
+    return await sequelize.query(query, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
+  } catch (error) {
+    console.error('[getRecentReglements] Erreur:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   getAllReglements,
   getReglementById,
@@ -460,6 +745,12 @@ module.exports = {
   getAllModeReglements,
   getFacturesForLettrage,
   saveLettrageFactures,
-  getReglementForPDF
+  getReglementForPDF,
+  getReglementStats,
+  getReglementByMode,
+  getReglementEvolution,
+  getTopClients,
+  getReglementAlerts,
+  getRecentReglements
 };
 

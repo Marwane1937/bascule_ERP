@@ -4,6 +4,7 @@ const emailService = require('../services/email.service');
 const { getEmailDataByDocumentId } = require('../models/email.model');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const databaseInjector = require('../middleware/database-injector.middleware');
+const { checkPdfPermission } = require('../middleware/pdf-permissions.middleware');
 const pdfConfigService = require('../services/pdf-config.service');
 const path = require('path');
 const https = require('https');
@@ -84,40 +85,79 @@ router.get('/:folder/:filename', async (req, res) => {
 });
 
 // Route POST protégée pour générer les PDFs (nécessite authentification)
-router.post('/generate', authenticateToken, databaseInjector.injectConnection.bind(databaseInjector), async (req, res) => { 
-  try {
-    const { document_id, withStamp, printMode, composeArticle, forceDocumentType } = req.body;
-    const docId = parseInt(document_id, 10);
-    console.log('📄 Génération PDF demandée pour document_id:', docId, '(type:', typeof docId, ')', forceDocumentType ? `[Force: ${forceDocumentType}]` : '');
-    
-    if (isNaN(docId)) {
-      console.error('❌ document_id invalide:', document_id);
-      return res.status(400).json({ success: false, message: 'document_id invalide' });
-    }
-    
-    // Utiliser la connexion injectée par le middleware
-    const sequelize = req.sequelize || require('../config/database');
-    
-    let devisData;
+router.post('/generate', 
+  authenticateToken, 
+  databaseInjector.injectConnection.bind(databaseInjector),
+  async (req, res, next) => {
     try {
-      devisData = await getEmailDataByDocumentId(docId, sequelize);
-
-      console.log('📊 Données récupérées:', devisData?.length || 0, 'ligne(s)');
+      const { document_id, forceDocumentType } = req.body;
+      const docId = parseInt(document_id, 10);
+      
+      if (isNaN(docId)) {
+        return res.status(400).json({ success: false, message: 'document_id invalide' });
+      }
+      
+      const sequelize = req.sequelize || require('../config/database');
+      const devisData = await getEmailDataByDocumentId(docId, sequelize);
+      
       if (!devisData || devisData.length === 0) {
-        console.error('❌ Document introuvable pour document_id:', docId);
         return res.status(404).json({ success: false, message: 'Document introuvable' });
       }
       
-      console.log('📊 Première ligne de données:', devisData[0] ? Object.keys(devisData[0]) : 'Aucune donnée');
-    } catch (queryError) {
-      console.error('❌ Erreur lors de la récupération des données pour le PDF:', queryError);
-      console.error('❌ Stack:', queryError.stack);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Erreur lors de la récupération des données', 
-        error: queryError.message 
-      });
+      const documentKind = devisData[0]?.document_kind || '';
+      const documentType = devisData[0]?.type || 0;
+      
+      // Déterminer le type de PDF
+      let pdfType = 'devis'; // par défaut
+      if (documentKind === 'LIVRAISON' || documentType === 2) {
+        pdfType = 'livraison';
+      } else if (documentKind === 'RETOUR CLIENT' || documentType === 5) {
+        pdfType = 'retour';
+      } else if (forceDocumentType === 'facturation') {
+        pdfType = 'facturation';
+      } else if (forceDocumentType === 'commande') {
+        pdfType = 'commande';
+      } else if (forceDocumentType === 'avoir') {
+        pdfType = 'avoir';
+      }
+      
+      // Vérifier la permission
+      req.pdfType = pdfType;
+      return checkPdfPermission(pdfType)(req, res, next);
+    } catch (error) {
+      console.error('[PDF Route] Erreur détermination type PDF:', error);
+      return res.status(500).json({ success: false, message: 'Erreur lors de la vérification' });
     }
+  },
+  async (req, res) => { 
+    try {
+      const { document_id, withStamp, printMode, composeArticle, forceDocumentType } = req.body;
+      const docId = parseInt(document_id, 10);
+      console.log('📄 Génération PDF demandée pour document_id:', docId, '(type:', typeof docId, ')', forceDocumentType ? `[Force: ${forceDocumentType}]` : '');
+    
+      // Utiliser la connexion injectée par le middleware
+      const sequelize = req.sequelize || require('../config/database');
+    
+      let devisData;
+      try {
+        devisData = await getEmailDataByDocumentId(docId, sequelize);
+
+        console.log('📊 Données récupérées:', devisData?.length || 0, 'ligne(s)');
+        if (!devisData || devisData.length === 0) {
+          console.error('❌ Document introuvable pour document_id:', docId);
+          return res.status(404).json({ success: false, message: 'Document introuvable' });
+        }
+        
+        console.log('📊 Première ligne de données:', devisData[0] ? Object.keys(devisData[0]) : 'Aucune donnée');
+      } catch (queryError) {
+        console.error('❌ Erreur lors de la récupération des données pour le PDF:', queryError);
+        console.error('❌ Stack:', queryError.stack);
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Erreur lors de la récupération des données', 
+          error: queryError.message 
+        });
+      }
 
     // Récupérer les informations depuis le fichier JSON de configuration
     const documentSociete = pdfConfigService.getDocumentSociete();

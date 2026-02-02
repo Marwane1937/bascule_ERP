@@ -327,6 +327,79 @@ RemoveDevis(ids: any[]): Observable<any> {
     return this.http.get(url, { responseType: 'blob' });
   }
 
+  // ============ BORDEREAU REMISE ============
+  getBordereaux(options?: {
+    page?: number;
+    pageSize?: number;
+    orderBy?: string;
+    orderDirection?: string;
+    search?: string;
+  }): Observable<any> {
+    let url = `${this.apiUrl}/bordereau-remise/`;
+    const params = new URLSearchParams();
+    if (options?.page) params.append('page', options.page.toString());
+    if (options?.pageSize) params.append('pageSize', options.pageSize.toString());
+    if (options?.orderBy) params.append('orderBy', options.orderBy);
+    if (options?.orderDirection) params.append('orderDirection', options.orderDirection);
+    if (options?.search) params.append('search', options.search);
+    if (params.toString()) url += '?' + params.toString();
+    return this.http.get(url);
+  }
+
+  getBordereauById(id: number): Observable<any> {
+    const url = `${this.apiUrl}/bordereau-remise/${id}`;
+    return this.http.get(url);
+  }
+
+  addBordereau(data: any): Observable<any> {
+    const url = `${this.apiUrl}/bordereau-remise/`;
+    return this.http.post(url, data);
+  }
+
+  updateBordereau(id: number, data: any): Observable<any> {
+    const url = `${this.apiUrl}/bordereau-remise/${id}`;
+    return this.http.put(url, data);
+  }
+
+  deleteBordereau(id: number): Observable<any> {
+    const url = `${this.apiUrl}/bordereau-remise/${id}`;
+    return this.http.delete(url);
+  }
+
+  getEtats(): Observable<any> {
+    const url = `${this.apiUrl}/bordereau-remise/etats`;
+    return this.http.get(url);
+  }
+
+  getTypes(): Observable<any> {
+    const url = `${this.apiUrl}/bordereau-remise/types`;
+    return this.http.get(url);
+  }
+
+  getNextBordereauNumero(): Observable<any> {
+    const url = `${this.apiUrl}/bordereau-remise/next-numero`;
+    return this.http.get(url);
+  }
+
+  // Récupérer les chèques disponibles pour le bordereau
+  getChequesForBordereau(bordereau_id?: number): Observable<any> {
+    const params = bordereau_id ? `?bordereau_id=${bordereau_id}` : '';
+    const url = `${this.apiUrl}/bordereau-remise/cheques${params}`;
+    return this.http.get(url);
+  }
+
+  // Récupérer les chèques d'un bordereau
+  getChequesByBordereau(bordereau_id: number): Observable<any> {
+    const url = `${this.apiUrl}/bordereau-remise/${bordereau_id}/cheques`;
+    return this.http.get(url);
+  }
+
+  // Enregistrer les chèques dans le bordereau
+  saveChequesBordereau(bordereau_id: number, cheques: any[]): Observable<any> {
+    const url = `${this.apiUrl}/bordereau-remise/${bordereau_id}/cheques`;
+    return this.http.post(url, { cheques });
+  }
+
   // ============ FACTURATIONS ============
   
   // Obtenir toutes les factures avec pagination
@@ -498,5 +571,64 @@ RemoveDevis(ids: any[]): Observable<any> {
     return this.http.post(`${this.apiUrl}/contrats/delete-lignes`, { ligneIds: ids }, {
       headers: { 'Content-Type': 'application/json' }
     });
+  }
+
+  // Dashboard methods
+  getReglementStats(options?: {
+    dateFrom?: string;
+    dateTo?: string;
+    clientId?: number;
+    modeId?: number;
+  }): Observable<any> {
+    const params = new URLSearchParams();
+    if (options?.dateFrom) params.append('dateFrom', options.dateFrom);
+    if (options?.dateTo) params.append('dateTo', options.dateTo);
+    if (options?.clientId) params.append('clientId', options.clientId.toString());
+    if (options?.modeId) params.append('modeId', options.modeId.toString());
+    const url = `${this.apiUrl}/reglements/stats/dashboard${params.toString() ? '?' + params.toString() : ''}`;
+    return this.http.get(url);
+  }
+
+  getReglementByMode(options?: { dateFrom?: string; dateTo?: string }): Observable<any> {
+    const params = new URLSearchParams();
+    if (options?.dateFrom) params.append('dateFrom', options.dateFrom);
+    if (options?.dateTo) params.append('dateTo', options.dateTo);
+    const url = `${this.apiUrl}/reglements/stats/by-mode${params.toString() ? '?' + params.toString() : ''}`;
+    return this.http.get(url);
+  }
+
+  getReglementEvolution(options?: { dateFrom?: string; dateTo?: string; groupBy?: string }): Observable<any> {
+    const params = new URLSearchParams();
+    if (options?.dateFrom) params.append('dateFrom', options.dateFrom);
+    if (options?.dateTo) params.append('dateTo', options.dateTo);
+    if (options?.groupBy) params.append('groupBy', options.groupBy);
+    const url = `${this.apiUrl}/reglements/stats/evolution${params.toString() ? '?' + params.toString() : ''}`;
+    return this.http.get(url);
+  }
+
+  getTopClients(options?: { dateFrom?: string; dateTo?: string; limit?: number; sortBy?: string }): Observable<any> {
+    const params = new URLSearchParams();
+    if (options?.dateFrom) params.append('dateFrom', options.dateFrom);
+    if (options?.dateTo) params.append('dateTo', options.dateTo);
+    if (options?.limit) params.append('limit', options.limit.toString());
+    if (options?.sortBy) params.append('sortBy', options.sortBy);
+    const url = `${this.apiUrl}/reglements/stats/top-clients${params.toString() ? '?' + params.toString() : ''}`;
+    return this.http.get(url);
+  }
+
+  getReglementAlerts(options?: { daysAhead?: number }): Observable<any> {
+    const params = new URLSearchParams();
+    if (options?.daysAhead) params.append('daysAhead', options.daysAhead.toString());
+    const url = `${this.apiUrl}/reglements/alerts${params.toString() ? '?' + params.toString() : ''}`;
+    return this.http.get(url);
+  }
+
+  getRecentReglements(options?: { limit?: number; dateFrom?: string; dateTo?: string }): Observable<any> {
+    const params = new URLSearchParams();
+    if (options?.limit) params.append('limit', options.limit.toString());
+    if (options?.dateFrom) params.append('dateFrom', options.dateFrom);
+    if (options?.dateTo) params.append('dateTo', options.dateTo);
+    const url = `${this.apiUrl}/reglements/recent${params.toString() ? '?' + params.toString() : ''}`;
+    return this.http.get(url);
   }
 }

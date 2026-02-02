@@ -413,7 +413,7 @@
                                                 <button class="btn btn-sm btn-outline-info" (click)="OnEdit(d.document_id)" title="Modifier">
                                                     <i class="fas fa-edit"></i>
                                                 </button>
-                                                <button class="btn btn-sm btn-outline-purple" (click)="onPrintDevis(d.document_id)" title="Imprimer PDF">
+                                                <button *ngIf="pdfPermissionsService.hasAnyPdfAccess('devis')" class="btn btn-sm btn-outline-purple" (click)="onPrintDevis(d.document_id)" title="Imprimer PDF">
                                                     <i class="fas fa-file-pdf"></i>
                                                 </button>
                                                 <button class="btn btn-sm btn-outline-danger" (click)="removeDevis(i)" title="Supprimer">

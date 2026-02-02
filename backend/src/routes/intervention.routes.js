@@ -7,7 +7,7 @@ const databaseInjector = require('../middleware/database-injector.middleware');
 // Appliquer l'authentification à toutes les routes
 // Routes pour les interventions qui n'ont pas besoin d'authentification (e.g., PDF)
 router.get('/:id/print', interventionController.printInterventionPDF);
-router.get('/test/pdf', interventionController.testPDF); // Route de test
+router.get('/test/pdf', authenticateToken, interventionController.testPDF); // Route de test
 
 // Appliquer l'authentification à toutes les routes suivantes
 router.use(authenticateToken);

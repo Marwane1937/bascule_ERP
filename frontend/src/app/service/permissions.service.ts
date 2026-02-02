@@ -30,6 +30,7 @@ export class PermissionsService {
     '/Bon-Commande': 'Bon de commande',
     '/Reception': 'Réception',
     '/Reglement': 'Règlements',
+    '/Finance/Bordereau-Remise': 'Bordereau de Remise',
     '/Caisse': 'Caisse',
     '/Caisse-Recettes': 'Recettes',
     '/Caisse-Depenses': 'Dépenses',
@@ -126,6 +127,12 @@ export class PermissionsService {
     
     const filtered = categories.map(category => {
       const filteredItems = category.items.filter(item => {
+        // Exclure les items PDF du menu (ceux qui commencent par "pdf_" ou ont une route vide avec un nom PDF)
+        const itemName = String(item.name || '').trim().toLowerCase();
+        if (itemName.startsWith('pdf_') || (item.route === '' && itemName.includes('pdf'))) {
+          return false; // Ne pas afficher les PDFs dans le menu
+        }
+        
         // Chercher une permission exacte pour l'item (comparaison exacte)
         let permission = permissions.find(p => {
           const dbName = String(p.menu_item || '').trim();

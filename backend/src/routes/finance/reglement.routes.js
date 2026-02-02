@@ -22,5 +22,13 @@ router.post('/', reglementController.addReglement);
 router.put('/:id', reglementController.updateReglement);
 router.delete('/:id', reglementController.deleteReglement);
 
+// Routes pour le dashboard
+router.get('/stats/dashboard', reglementController.getReglementStats);
+router.get('/stats/by-mode', reglementController.getReglementByMode);
+router.get('/stats/evolution', reglementController.getReglementEvolution);
+router.get('/stats/top-clients', reglementController.getTopClients);
+router.get('/alerts', reglementController.getReglementAlerts);
+router.get('/recent', reglementController.getRecentReglements);
+
 module.exports = router;
 

@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { BaseService } from 'src/app/service/base.service';
 import { VentesService } from 'src/app/service/ventes.service';
 import { EmailService } from 'src/app/service/email.service';
+import { PdfPermissionsService } from 'src/app/service/pdf-permissions.service';
 import Swal from 'sweetalert2';
 import { Subscription } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
@@ -99,7 +100,8 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
     private baseService: BaseService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
-    private emailService: EmailService
+    private emailService: EmailService,
+    public pdfPermissionsService: PdfPermissionsService
   ) { }
 
   ngOnInit(): void {

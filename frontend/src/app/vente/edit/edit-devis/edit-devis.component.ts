@@ -6,6 +6,7 @@ import { VentesService } from 'src/app/service/ventes.service';
 import Quill from 'quill';
 import Swal from 'sweetalert2';
 import { EmailService } from 'src/app/service/email.service';
+import { PdfPermissionsService } from 'src/app/service/pdf-permissions.service';
 import { forkJoin, of } from 'rxjs';
 import { catchError, retry } from 'rxjs/operators';
 const QuillMention = require('quill-mention');
@@ -128,7 +129,7 @@ export class EditDevisComponent implements OnInit {
 
   constructor(private baseService: BaseService, private fb: FormBuilder, private route: ActivatedRoute,
     private venteSerivce: VentesService, private emailService: EmailService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef, public pdfPermissionsService: PdfPermissionsService
   ) {
     this.emailForm = this.fb.group({
       to: ['', [Validators.required, Validators.email]],

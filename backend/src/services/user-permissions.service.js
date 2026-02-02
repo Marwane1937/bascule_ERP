@@ -188,11 +188,19 @@ class UserPermissionsService {
         icon: 'fas fa-pen-square',
         items: [
           { name: 'Devis', route: '/Devis' },
+          { name: 'pdf_devis_normal', route: '' },
+          { name: 'pdf_devis_nomenclature', route: '' },
           { name: 'Commande Client', route: '/Commande' },
+          { name: 'pdf_commande_normal', route: '' },
           { name: 'Livraison', route: '/Livraison' },
+          { name: 'pdf_livraison_normal', route: '' },
+          { name: 'pdf_livraison_non_valorise', route: '' },
           { name: 'Retour Client', route: '/Retour' },
+          { name: 'pdf_retour_normal', route: '' },
           { name: 'Avoir Client', route: '/Avoir' },
+          { name: 'pdf_avoir_normal', route: '' },
           { name: 'Facturation', route: '/Facturation' },
+          { name: 'pdf_facturation_normal', route: '' },
           { name: 'Contrat', route: '/Contrat' },
           { name: 'Reporting Vente', route: '/Vente/Reporting' }
         ]
@@ -202,9 +210,13 @@ class UserPermissionsService {
         icon: 'fas fa-shopping-cart',
         items: [
           { name: 'Demande d\'achat', route: '/Demande-Achat' },
+          { name: 'pdf_demande_achat_normal', route: '' },
           { name: 'Bon de commande', route: '/Bon-Commande' },
+          { name: 'pdf_bon_commande_normal', route: '' },
           { name: 'Facture Fournisseur', route: '/Facture-Fournisseur' },
-          { name: 'Réception', route: '/Reception' }
+          { name: 'pdf_facture_fournisseur_normal', route: '' },
+          { name: 'Réception', route: '/Reception' },
+          { name: 'pdf_reception_normal', route: '' }
         ]
       },
       {
@@ -232,6 +244,8 @@ class UserPermissionsService {
         icon: 'fas fa-money-bill-wave',
         items: [
           { name: 'Règlements', route: '/Reglement' },
+          { name: 'Bordereau de Remise', route: '/Finance/Bordereau-Remise' },
+          { name: 'pdf_bordereau_remise_normal', route: '' },
           { name: 'Caisse', route: '/Caisse' },
           { name: 'Recettes', route: '/Caisse-Recettes' },
           { name: 'Dépenses', route: '/Caisse-Depenses' },
@@ -269,7 +283,7 @@ class UserPermissionsService {
           { name: 'notification_restore', route: '' },
           { name: 'notification_delete', route: '' }
         ]
-      }
+      },
     ];
   }
 

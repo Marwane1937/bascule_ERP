@@ -68,6 +68,8 @@ import { StockHistoriqueComponent } from './stock/stock-historique/stock-histori
 import { StockReportingComponent } from './stock/stock-reporting/stock-reporting.component';
 import { VenteReportingComponent } from './vente/vente-reporting/vente-reporting.component';
 import { FinanceReportingComponent } from './finance/finance-reporting/finance-reporting.component';
+import { BordereauRemiseComponent } from './finance/bordereau-remise/bordereau-remise.component';
+import { EditBordereauRemiseComponent } from './finance/edit/edit-bordereau-remise/edit-bordereau-remise.component';
 import { EditEntreeStockComponent } from './stock/edit-entree-stock/edit-entree-stock.component';
 import { EditSortieStockComponent } from './stock/edit-sortie-stock/edit-sortie-stock.component';
 import { EditInventaireComponent } from './stock/edit-inventaire/edit-inventaire.component';
@@ -143,6 +145,8 @@ import { CompteurComponent } from './base/compteur/compteur.component';
     StockReportingComponent,
     VenteReportingComponent,
     FinanceReportingComponent,
+    BordereauRemiseComponent,
+    EditBordereauRemiseComponent,
     EditEntreeStockComponent,
     EditSortieStockComponent,
     EditInventaireComponent,

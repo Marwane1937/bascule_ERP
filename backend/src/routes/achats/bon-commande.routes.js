@@ -3,6 +3,7 @@ const router = express.Router();
 const bonCommandeController = require('../../controllers/achats/bon-commande.controller');
 const { authenticateToken } = require('../../middleware/auth.middleware');
 const databaseInjector = require('../../middleware/database-injector.middleware');
+const { checkPdfPermission } = require('../../middleware/pdf-permissions.middleware');
 
 // Toutes les routes nécessitent une authentification
 router.use(authenticateToken);
@@ -22,7 +23,7 @@ router.post('/delete', bonCommandeController.deleteBonCommande);
 router.post('/delete-lignes', bonCommandeController.deleteLignesParIds);
 
 // Route pour générer le PDF du bon de commande
-router.get('/pdf/:id', bonCommandeController.genererPDF);
+router.get('/pdf/:id', checkPdfPermission('bon_commande'), bonCommandeController.genererPDF);
 
 // Route pour transformer une demande d'achat en bon de commande
 router.post('/transformer-demande-achat', bonCommandeController.transformerDemandeAchatEnBonCommande);

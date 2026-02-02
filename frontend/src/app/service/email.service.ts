@@ -34,7 +34,7 @@ export class EmailService {
     window.open(whatsappUrl, '_blank');
   }
 
-  generateDevisPDF(document_id: string, options?: { withStamp?: boolean; printMode?: 'normal' | 'nomenclature'; composeArticle?: any; forceDocumentType?: string }) {
+  generateDevisPDF(document_id: string, options?: { withStamp?: boolean; printMode?: 'normal' | 'nomenclature' | 'non_valorise'; composeArticle?: any; forceDocumentType?: string }) {
     return this.http.post<any>(`${environment.apiUrl}/pdf/generate`, {
       document_id,
       withStamp: !!options?.withStamp,

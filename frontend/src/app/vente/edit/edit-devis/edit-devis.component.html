@@ -290,18 +290,18 @@
   <i class="bi bi-envelope"></i> Envoyer par e-mail</button>
 
         <button class="btn btn-success" (click)="envoyerWhatsApp(devis)" disabled><i class="bi bi-whatsapp"></i> WhatsApp</button>
-        <div class="btn-group">
+        <div class="btn-group" *ngIf="pdfPermissionsService.hasAnyPdfAccess('devis')">
             <button type="button" class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                 📄 PDF
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
                 <li>
-                    <button class="dropdown-item" type="button" (click)="imprimerPdfNormal()">
+                    <button *ngIf="pdfPermissionsService.canAccessPdf('devis', 'normal')" class="dropdown-item" type="button" (click)="imprimerPdfNormal()">
                         Normal
                     </button>
                 </li>
                 <li>
-                    <button class="dropdown-item" type="button" (click)="imprimerPdfNomenclature()">
+                    <button *ngIf="pdfPermissionsService.canAccessPdf('devis', 'nomenclature')" class="dropdown-item" type="button" (click)="imprimerPdfNomenclature()">
                         Nomenclature
                     </button>
                 </li>

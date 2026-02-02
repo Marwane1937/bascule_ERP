@@ -412,7 +412,7 @@
                         <button class="btn btn-sm btn-outline-info" (click)="OnEditCommande(d.document_id)" title="Modifier">
                           <i class="fas fa-edit"></i>
                         </button>
-                        <button class="btn btn-sm btn-outline-purple" (click)="OnPrintCommande(d.document_id)" title="Imprimer PDF">
+                        <button *ngIf="pdfPermissionsService.hasAnyPdfAccess('commande')" class="btn btn-sm btn-outline-purple" (click)="OnPrintCommande(d.document_id)" title="Imprimer PDF">
                           <i class="fas fa-file-pdf"></i>
                         </button>
                         <button class="btn btn-sm btn-outline-danger" (click)="removeCommande(d, i)" title="Supprimer">
