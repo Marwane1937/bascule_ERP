@@ -1,4 +1,4 @@
-<div class="commande-container" style="margin-top: 0 !important; padding-top: 0 !important;">
+﻿<div class="commande-container" style="margin-top: 0 !important; padding-top: 0 !important;">
     <!-- En-tête de la réception -->
     <div class="mb-2">
         <div class="d-flex align-items-center mb-1">
@@ -37,6 +37,10 @@
                 <ng-container *ngIf="!editInfos">
                     <p><strong>Fournisseur :</strong> {{ ReceptionForm.get('fournisseurSearch')?.value || reception.fournisseur || 'Non renseigné' }}</p>
                     <p><strong>Date :</strong> {{ ReceptionForm.get('date')?.value | date: 'dd/MM/yyyy' }}</p>
+                    <p><strong>Dépôt :</strong> {{ getDepotLabel() }}</p>
+                    <div *ngIf="!ReceptionForm.get('depot_id')?.value" class="alert alert-warning py-1 px-2 mt-2 mb-2">
+                        Merci d'insérer le dépôt pour cette réception.
+                    </div>
                     <p><strong>Description :</strong> {{ ReceptionForm.get('description')?.value || reception.description || '' }}</p>
 
                 </ng-container>
@@ -60,6 +64,20 @@
                     <div class="mb-2">
                         <label class="form-label">Date</label>
                         <input type="date" class="form-control form-control-sm" formControlName="date">
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label">Dépôt <span class="text-danger">*</span></label>
+                        <select class="form-select form-select-sm"
+                                [class.is-invalid]="ReceptionForm.get('depot_id')?.invalid && ReceptionForm.get('depot_id')?.touched"
+                                formControlName="depot_id"
+                                (change)="onDepotHeaderChange()">
+                            <option [ngValue]="null">-- Choisir un dépôt --</option>
+                            <option *ngFor="let depot of depots" [ngValue]="depot.id">{{ depot.nom }}</option>
+                        </select>
+                        <div class="invalid-feedback" *ngIf="ReceptionForm.get('depot_id')?.invalid && ReceptionForm.get('depot_id')?.touched">
+                            Le dépôt est obligatoire.
+                        </div>
                     </div>
 
                     <div>
@@ -96,7 +114,7 @@
 
 
     <!-- Produits -->
-    <div class="bg-white rounded shadow-sm p-4 mb-3">
+    <div class="bg-white rounded shadow-sm p-4 mb-3 products-panel">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h6 class="mb-0">📦 Liste des Produits</h6>
             <button class="btn btn-success" (click)="addProduit()">➕ Ajouter produit</button>
@@ -104,15 +122,15 @@
 
 
         <!-- Tableau -->
-        <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+        <div class="table-responsive products-table-wrap">
             <table class="table table-striped align-middle text-center">
                 <thead class="table-light">
                     <tr>
                         <th style="min-width: 300px;">Détails</th>
                         <th class="text-end" style="min-width: 80px;">PU</th>
                         <th class="text-end" style="min-width: 70px;">Qté</th>
-                        <th style="min-width: 120px;">Réduc</th>
-                        <th style="min-width: 70px;">TVA (%)</th>
+                        <th style="min-width: 160px;">N° lot</th>
+                        <th style="min-width: 170px;">Dépôt</th>
                         <th class="text-end" style="min-width: 110px;">Total</th>
                         <th style="width: 40px; padding: 2px;">Action</th>
                     </tr>
@@ -120,25 +138,34 @@
                 <tbody>
                     <tr *ngFor="let p of produits; let i = index">
                         <td>
-                            <div class="position-relative">
-                                <input 
-                                    type="text" 
-                                    class="form-control form-control-sm" 
-                                    style="min-width: 280px; width: 100%;"
-                                    [(ngModel)]="p.articleSearch"
-                                    (input)="onArticleSearchChange(i, $any($event.target).value)"
-                                    placeholder="Rechercher un article..."
-                                    autocomplete="off" />
-                                <ul *ngIf="p.articleSearch && filteredArticles[i] && filteredArticles[i].length > 0" 
-                                    class="list-group position-absolute w-100 shadow"
-                                    style="max-height: 600px; overflow-y: auto; z-index: 1050; font-size: 14px;">
-                                    <li class="list-group-item list-group-item-action" 
-                                        *ngFor="let article of filteredArticles[i]"
-                                        (click)="selectArticle(i, article)"
-                                        style="padding: 10px 15px; cursor: pointer; font-size: 14px; line-height: 1.5;">
-                                        {{ article.article_nom }}
-                                    </li>
-                                </ul>
+                            <div class="d-flex align-items-start gap-2">
+                                <button type="button"
+                                        class="btn btn-outline-primary btn-sm"
+                                        style="padding: 2px 5px; font-size: 0.72rem; line-height: 1;"
+                                        title="Fiche article"
+                                        [disabled]="!p.article_id"
+                                        (click)="showArticleFiche(i)">
+                                    <i class="fas fa-info-circle"></i>
+                                </button>
+                                <div class="position-relative flex-grow-1 product-search-cell">
+                                    <input 
+                                        type="text" 
+                                        class="form-control form-control-sm" 
+                                        style="min-width: 280px; width: 100%;"
+                                        [(ngModel)]="p.articleSearch"
+                                        (input)="onArticleSearchChange(i, $any($event.target).value)"
+                                        (keydown)="onArticleSearchKeydown(i, $event)"
+                                        placeholder="Rechercher un article..."
+                                        autocomplete="off" />
+                                    <ul *ngIf="p.articleSearch && filteredArticles[i] && filteredArticles[i].length > 0" 
+                                        class="list-group position-absolute w-100 shadow product-autocomplete-dropdown">
+                                        <li class="list-group-item list-group-item-action product-autocomplete-item" 
+                                            *ngFor="let article of filteredArticles[i]; let articleIndex = index"
+                                            [class.active]="highlightedArticleIndex[i] === articleIndex"
+                                            (click)="selectArticle(i, article)"
+                                            >{{ article.article_nom }}</li>
+                                    </ul>
+                                </div>
                             </div>
                         </td>
 
@@ -153,18 +180,20 @@
                         </td>
 
                         <td>
-                            <div style="display: flex; align-items: center; gap: 6px;">
-                                <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="p.reduc" (ngModelChange)="recalculateTotal(i)" style="width: 80px;" />
-                                <select class="form-select form-select-sm" [(ngModel)]="p.reducMode" (change)="recalculateTotal(i)" style="width: 90px;">
-                                    <option value="pourcentage">%</option>
-                                    <option value="montant">dh</option>
-                                </select>
-                            </div>
+                            <input type="text" class="form-control form-control-sm" [(ngModel)]="p.numero_lot" />
                         </td>
 
 
 
-                        <td>{{ ((p.taxe || 0.2) * 100) }}%</td>
+
+                        <td>
+                            <select class="form-select form-select-sm" [(ngModel)]="p.depot_id" [class.is-invalid]="!p.depot_id">
+                                <option [ngValue]="null">-- Dépôt --</option>
+                                <option *ngFor="let depot of depots" [ngValue]="depot.id">{{ depot.nom }}</option>
+                            </select>
+                            <small class="text-danger" *ngIf="!p.depot_id">Dépôt obligatoire</small>
+                        </td>
+
 
                         <td class="text-end"><strong>{{ p.total | number:'1.2-2' }}</strong> dh</td>
 
@@ -214,4 +243,5 @@
     </div>
 
 </div>
+
 

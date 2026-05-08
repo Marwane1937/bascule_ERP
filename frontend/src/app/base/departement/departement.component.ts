@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import Swal from 'sweetalert2';
+import { environment } from 'src/environments/environment';
 
 @Component({
   selector: 'app-departement',
@@ -8,6 +9,7 @@ import Swal from 'sweetalert2';
   styleUrls: ['./departement.component.css']
 })
 export class DepartementComponent implements OnInit {
+  private readonly apiUrl = environment.apiUrl;
   departements: any[] = [];
   loading: boolean = true;
 
@@ -50,7 +52,7 @@ export class DepartementComponent implements OnInit {
       orderDirection: this.sortDirection
     };
 
-    this.http.get('http://localhost:3500/api/departements', { params }).subscribe({
+    this.http.get(`${this.apiUrl}/departements`, { params }).subscribe({
       next: (response: any) => {
         this.departements = response?.data || [];
         this.totalRecords = response?.pagination?.total || 0;
@@ -154,8 +156,8 @@ export class DepartementComponent implements OnInit {
     }
 
     const url = this.isEditMode
-      ? `http://localhost:3500/api/departements/${this.currentDepartement.id}`
-      : 'http://localhost:3500/api/departements';
+      ? `${this.apiUrl}/departements/${this.currentDepartement.id}`
+      : `${this.apiUrl}/departements`;
     const method = this.isEditMode ? 'put' : 'post';
 
     this.http[method](url, this.currentDepartement).subscribe({
@@ -180,7 +182,7 @@ export class DepartementComponent implements OnInit {
       confirmButtonText: 'Oui'
     }).then((result) => {
       if (result.isConfirmed) {
-        this.http.delete(`http://localhost:3500/api/departements/${departement.id}`).subscribe({
+        this.http.delete(`${this.apiUrl}/departements/${departement.id}`).subscribe({
           next: () => {
             Swal.fire('Succès', 'Département supprimé', 'success');
             this.getDepartements();

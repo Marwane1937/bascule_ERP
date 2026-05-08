@@ -19,6 +19,24 @@ const getEmployes = async (req, res) => {
   }
 };
 
+const getEmployesAutocomplete = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const employes = await employeService.getEmployesAutocomplete(sequelize);
+    res.json({
+      success: true,
+      data: employes || []
+    });
+  } catch (err) {
+    console.error('[employe.controller.js] Erreur autocomplete employes:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+      data: []
+    });
+  }
+};
+
 const getEmploye = async (req, res) => {
   try {
     const employe = await employeService.getEmploye(req.params.id);
@@ -75,6 +93,7 @@ const getEmployesActifs = async (req, res) => {
 
 module.exports = {
   getEmployes,
+  getEmployesAutocomplete,
   getEmploye,
   createEmploye,
   editEmploye,

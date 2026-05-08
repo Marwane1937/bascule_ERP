@@ -3,6 +3,7 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { StockService } from 'src/app/service/stock.service';
 import { BaseService } from 'src/app/service/base.service';
+import { EmailService } from 'src/app/service/email.service';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -42,7 +43,8 @@ export class StockSortieComponent implements OnInit {
     private stockService: StockService,
     private fb: FormBuilder,
     private router: Router,
-    private baseService: BaseService
+    private baseService: BaseService,
+    private emailService: EmailService
   ) { }
 
   ngOnInit(): void {
@@ -64,11 +66,20 @@ export class StockSortieComponent implements OnInit {
     });
   }
 
+  private isPartnerOfType(partner: any, expectedType: number): boolean {
+    const partnerType = Number(partner?.type ?? partner?.part_type ?? partner?.partenaire_type);
+    return !Number.isFinite(partnerType) || partnerType === expectedType;
+  }
+
+  private filterPartnersByType(partners: any[], expectedType: number): any[] {
+    return (Array.isArray(partners) ? partners : []).filter((partner: any) => this.isPartnerOfType(partner, expectedType));
+  }
+
   loadClients(): void {
     this.baseService.getClient().subscribe({
       next: (response: any) => {
         const data = response?.data || response || [];
-        this.clients = Array.isArray(data) ? data : [];
+        this.clients = this.filterPartnersByType(data, 1);
         this.filteredClients = [...this.clients];
       },
       error: (error) => {
@@ -247,6 +258,40 @@ export class StockSortieComponent implements OnInit {
     this.getSortiesStock();
   }
 
+  toggleSortieRowExpansion(achat: any, index: number): void {
+    const documentId = Number(achat?.document_id || 0);
+    if (!documentId) {
+      return;
+    }
+
+    const shouldClose = !!this.expandedRows[index];
+    this.expandedRows = {};
+
+    if (shouldClose) {
+      return;
+    }
+
+    this.expandedRows[index] = true;
+
+    if (!this.achatDetails[documentId]) {
+      this.loadingDetails[documentId] = true;
+
+      this.stockService.getSortieStockById(documentId).subscribe({
+        next: (response: any) => {
+          const data = response?.data || response || {};
+          this.achatDetails[documentId] = Array.isArray(data?.details) ? data.details : [];
+          this.loadingDetails[documentId] = false;
+          this.detailsLoaded[documentId] = true;
+        },
+        error: () => {
+          Swal.fire('Erreur', 'Erreur lors du chargement des dÃ©tails', 'error');
+          this.expandedRows = {};
+          this.loadingDetails[documentId] = false;
+        }
+      });
+    }
+  }
+
   toggleRowExpansion(achat: any, index: number): void {
     if (this.expandedRows[index]) {
       // Fermer la ligne
@@ -285,6 +330,86 @@ export class StockSortieComponent implements OnInit {
 
   editSortieStock(documentId: number): void {
     this.router.navigate(['/Edit-SortieStock', documentId]);
+  }
+
+  isTransferredToLivraison(achat: any): boolean {
+    return Number(achat?.transferred_livraison_id || 0) > 0;
+  }
+
+  getClientDisplay(achat: any): string {
+    return achat?.client || achat?.client_nom || '-';
+  }
+
+  getTransferStatusLabel(achat: any): string {
+    return this.isTransferredToLivraison(achat) ? 'Transfere' : 'En attente';
+  }
+
+  getTransferStatusBadgeClass(achat: any): string {
+    return this.isTransferredToLivraison(achat) ? 'badge-success' : 'badge-warning';
+  }
+
+  viewLivraison(achat: any, event?: Event): void {
+    event?.stopPropagation();
+    const livraisonId = Number(achat?.transferred_livraison_id || 0);
+    if (livraisonId > 0) {
+      this.router.navigate(['/Edit-Livraison', livraisonId]);
+    }
+  }
+
+  transfererVersLivraison(achat: any, event?: Event): void {
+    event?.stopPropagation();
+
+    const livraisonId = Number(achat?.transferred_livraison_id || 0);
+    if (livraisonId > 0) {
+      return;
+    }
+
+    Swal.fire({
+      title: 'Confirmation',
+      text: `Creer un BL depuis la sortie de stock ${achat?.numero || ''} ?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Oui',
+      cancelButtonText: 'Annuler'
+    }).then((result) => {
+      if (!result.isConfirmed) {
+        return;
+      }
+
+      this.stockService.transferSortieStockToLivraison(Number(achat?.document_id)).subscribe({
+        next: (response: any) => {
+          const createdLivraisonId = Number(response?.data?.stock_id || response?.data?.document_id || response?.data?.id || 0);
+          Swal.fire('Succes', response?.message || 'Bon de livraison cree avec succes.', 'success').then(() => {
+            if (createdLivraisonId > 0) {
+              this.router.navigate(['/Edit-Livraison', createdLivraisonId]);
+              return;
+            }
+
+            this.getSortiesStock();
+          });
+        },
+        error: (error) => {
+          Swal.fire('Erreur', error?.error?.message || 'Erreur lors du transfert vers le BL.', 'error');
+        }
+      });
+    });
+  }
+
+  imprimerSortieStock(documentId: number, event?: Event): void {
+    event?.stopPropagation();
+    this.emailService.generateSortieStockPDF(String(documentId)).subscribe({
+      next: (res: any) => {
+        const url = res?.pdfUrl;
+        if (url) {
+          window.open(url, '_blank');
+          return;
+        }
+        Swal.fire('Erreur', 'Lien PDF non reçu.', 'error');
+      },
+      error: (err) => {
+        Swal.fire('Erreur', err?.error?.message || "Erreur lors de la génération du PDF.", 'error');
+      }
+    });
   }
 
   isButtonDisabled(achatId: number): boolean {
@@ -376,4 +501,3 @@ export class StockSortieComponent implements OnInit {
   }
 
 }
-

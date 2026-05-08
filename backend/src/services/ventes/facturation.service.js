@@ -66,6 +66,22 @@ const getFacture = async (id, sequelizeConnection = null) => {
   return facture;
 };
 
+const getFactureParcours = async (id, sequelizeConnection = null) => {
+  const parcours = await facturationModel.getFactureParcoursById(id, sequelizeConnection);
+  if (!parcours) {
+    throw new Error('Facture non trouvÃ©e');
+  }
+  return parcours;
+};
+
+const getFactureLivraisonDetails = async (id, sequelizeConnection = null) => {
+  const details = await facturationModel.getFactureLivraisonDetailsById(id, sequelizeConnection);
+  if (!details) {
+    throw new Error('Facture non trouvÃ©e');
+  }
+  return details;
+};
+
 // Obtenir le rapport de facturation
 const getFacturationReport = async (options = {}, sequelizeConnection = null) => {
   try {
@@ -91,6 +107,8 @@ const getFactureMontant = async (factureId, sequelizeConnection = null) => {
 module.exports = {
   getFactures,
   getFacture,
+  getFactureParcours,
+  getFactureLivraisonDetails,
   getFacturationReport,
   getFactureMontant
 };

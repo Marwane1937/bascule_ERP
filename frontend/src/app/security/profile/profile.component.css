@@ -1,0 +1,229 @@
+﻿.profile-shell {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.hero-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(255,255,255,0.35), transparent 30%),
+    linear-gradient(135deg, #0f766e 0%, #0ea5a4 45%, #f59e0b 100%);
+  color: #fff;
+  box-shadow: 0 20px 50px rgba(15, 118, 110, 0.22);
+}
+
+.hero-gradient {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,0.08), transparent),
+    radial-gradient(circle at bottom right, rgba(255,255,255,0.22), transparent 35%);
+}
+
+.hero-content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 1.25rem;
+  align-items: center;
+  padding: 1.75rem 2rem;
+}
+
+.hero-avatar {
+  width: 78px;
+  height: 78px;
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255,255,255,0.25);
+  backdrop-filter: blur(8px);
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.hero-meta h2 {
+  margin: 0.35rem 0;
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.hero-meta p {
+  margin: 0;
+  opacity: 0.92;
+  max-width: 620px;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.16);
+  border: 1px solid rgba(255,255,255,0.18);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.hero-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 0.75rem;
+}
+
+.hero-stat {
+  min-width: 120px;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  background: rgba(7, 20, 30, 0.16);
+  border: 1px solid rgba(255,255,255,0.16);
+}
+
+.hero-stat span {
+  display: block;
+  opacity: 0.78;
+  font-size: 0.78rem;
+  margin-bottom: 0.2rem;
+}
+
+.profile-card {
+  overflow: hidden;
+}
+
+.profile-card-soft {
+  background: linear-gradient(180deg, #ffffff, #f8fbfb);
+}
+
+.profile-card-strong {
+  background: linear-gradient(180deg, #ffffff, #fcfcff);
+}
+
+.profile-fields {
+  display: grid;
+  gap: 1rem;
+}
+
+.profile-field {
+  padding: 1rem 1.05rem;
+  border: 1px solid #e9ecef;
+  border-radius: 16px;
+  background: #fafcfd;
+}
+
+.profile-label {
+  display: block;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6c757d;
+  margin-bottom: 0.4rem;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.strength-chip {
+  padding: 0.55rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: #fff7ed;
+  color: #9a3412;
+  border: 1px solid #fdba74;
+}
+
+.strength-chip[data-strength='moyen'] {
+  background: #fffbeb;
+  color: #a16207;
+  border-color: #fcd34d;
+}
+
+.strength-chip[data-strength='fort'] {
+  background: #ecfdf5;
+  color: #166534;
+  border-color: #86efac;
+}
+
+.password-shell {
+  position: relative;
+}
+
+.password-shell .form-control {
+  padding-right: 3rem;
+  border-radius: 16px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.85rem;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+}
+
+.password-standards {
+  padding: 1rem 1.1rem;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #f8fafc, #f1f5f9);
+  border: 1px solid #e2e8f0;
+}
+
+.standards-title {
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.65rem;
+}
+
+.standards-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: #334155;
+}
+
+.standards-list li + li {
+  margin-top: 0.3rem;
+}
+
+.invalid-hint {
+  color: #dc3545;
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 1199px) {
+  .hero-content {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+  }
+
+  .hero-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+}
+
+@media (max-width: 767px) {
+  .hero-content {
+    padding: 1.25rem;
+  }
+
+  .hero-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .section-header {
+    flex-direction: column;
+  }
+}

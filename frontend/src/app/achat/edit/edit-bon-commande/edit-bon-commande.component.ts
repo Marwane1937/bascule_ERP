@@ -53,6 +53,7 @@ export class EditBonCommandeComponent implements OnInit {
   }];
 
   filteredArticles: { [key: number]: any[] } = {};
+  highlightedArticleIndex: { [key: number]: number } = {};
 
   selectedInfo = {
     document_id: this.route.snapshot.paramMap.get('document_id')!,
@@ -427,6 +428,7 @@ export class EditBonCommandeComponent implements OnInit {
   onArticleSearchChange(index: number, term: string) {
     if (!term) {
       this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
       return;
     }
 
@@ -434,6 +436,7 @@ export class EditBonCommandeComponent implements OnInit {
 
     if (term.length === 0) {
       this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
       return;
     }
 
@@ -442,6 +445,7 @@ export class EditBonCommandeComponent implements OnInit {
         this.filteredArticles[index] = this.produits1.filter((article: any) =>
           article.article_nom && article.article_nom.toLowerCase().includes(term)
         );
+        this.highlightedArticleIndex[index] = this.filteredArticles[index].length ? 0 : -1;
       });
       return;
     }
@@ -449,12 +453,49 @@ export class EditBonCommandeComponent implements OnInit {
     this.filteredArticles[index] = this.produits1.filter((article: any) =>
       article.article_nom && article.article_nom.toLowerCase().includes(term)
     );
+    this.highlightedArticleIndex[index] = this.filteredArticles[index].length ? 0 : -1;
+  }
+
+  onArticleSearchKeydown(index: number, event: KeyboardEvent) {
+    const articles = this.filteredArticles[index] || [];
+    if (!articles.length) {
+      return;
+    }
+
+    const currentIndex = this.highlightedArticleIndex[index] ?? -1;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.highlightedArticleIndex[index] = currentIndex < articles.length - 1 ? currentIndex + 1 : 0;
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.highlightedArticleIndex[index] = currentIndex > 0 ? currentIndex - 1 : articles.length - 1;
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const selectedArticle = articles[currentIndex >= 0 ? currentIndex : 0];
+      if (selectedArticle) {
+        this.selectArticle(index, selectedArticle);
+      }
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
+    }
   }
 
   selectArticle(index: number, article: any) {
     this.produits[index].article_id = article.article_id;
     this.produits[index].articleSearch = article.article_nom;
     this.filteredArticles[index] = [];
+    this.highlightedArticleIndex[index] = -1;
 
     this.produits[index].designation = article.article_nom;
     this.produits[index].pu = article.pu || 0;

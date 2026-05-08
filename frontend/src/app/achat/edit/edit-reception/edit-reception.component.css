@@ -407,3 +407,53 @@ table.grise {
   }
 }
 
+.commande-container .products-panel {
+  overflow: visible;
+}
+
+.commande-container .products-table-wrap {
+  max-height: none;
+  overflow: visible !important;
+}
+
+.commande-container .table-responsive {
+  overflow: visible !important;
+}
+
+.commande-container .table,
+.commande-container .table tbody td {
+  overflow: visible;
+}
+
+.commande-container .product-search-cell {
+  min-width: 0;
+  width: 100%;
+  position: relative;
+  z-index: 50;
+}
+
+.commande-container .product-autocomplete-dropdown {
+  margin-top: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  z-index: 3000;
+  border: 1px solid rgba(102, 126, 234, 0.18);
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.14) !important;
+}
+
+.commande-container .product-autocomplete-item {
+  text-align: left;
+  padding: 10px 12px;
+  line-height: 1.25;
+  cursor: pointer;
+}
+
+.commande-container .product-autocomplete-item:hover {
+  background: #eef4ff;
+}
+
+.commande-container .product-autocomplete-item.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}

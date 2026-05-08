@@ -78,6 +78,15 @@
             <li class="nav-item">
               <a class="nav-link active" data-bs-toggle="pill" href="#article_nomenclature">article_nomenclature</a>
             </li>
+            <li class="nav-item">
+              <a class="nav-link" data-bs-toggle="pill" href="#article_unite">Article Unité</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" data-bs-toggle="pill" href="#article_stock">Article Stock</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" data-bs-toggle="pill" href="#article_fournisseur">Article Fournisseur</a>
+            </li>
           </ul>
 
           <div class="tab-content mt-4">
@@ -196,6 +205,156 @@
                     </table>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <div class="tab-pane fade" id="article_unite">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted small">
+                  Configuration des unités de l'article.
+                </div>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-outline-primary btn-sm" (click)="addArticleUniteLine()">
+                    <i class="fas fa-plus"></i> Ajouter
+                  </button>
+                  <button class="btn btn-success btn-sm" (click)="saveArticleUnites()" [disabled]="isSavingUnites">
+                    💾 Enregistrer
+                  </button>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table table-bordered table-hover align-middle text-center">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Unité</th>
+                      <th style="width: 140px;">Fact</th>
+                      <th style="width: 110px;">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let line of articleUnites; let i = index">
+                      <td>
+                        <select class="form-select form-select-sm" [(ngModel)]="line.unite_id">
+                          <option [ngValue]="null">--</option>
+                          <option *ngFor="let u of unites" [ngValue]="u.id">{{ u.nom }}</option>
+                        </select>
+                      </td>
+                      <td>
+                        <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="line.fact" />
+                      </td>
+                      <td>
+                        <button class="btn btn-danger btn-sm" (click)="removeArticleUniteLine(i)">
+                          🗑️
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="tab-pane fade" id="article_stock">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted small">
+                  Paramètres de stock par dépôt.
+                </div>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-outline-primary btn-sm" (click)="addArticleStockLine()">
+                    <i class="fas fa-plus"></i> Ajouter
+                  </button>
+                  <button class="btn btn-success btn-sm" (click)="saveArticleStocks()" [disabled]="isSavingStocks">
+                    💾 Enregistrer
+                  </button>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table table-bordered table-hover align-middle text-center">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Dépôt</th>
+                      <th>Stock minimum</th>
+                      <th>Stock maximum</th>
+                      <th>Périssable</th>
+                      <th style="width: 110px;">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let line of articleStocks; let i = index">
+                      <td>
+                        <select class="form-select form-select-sm" [(ngModel)]="line.depot_id">
+                          <option [ngValue]="null">--</option>
+                          <option *ngFor="let d of depots" [ngValue]="d.id">{{ d.nom || ('Depot ' + d.id) }}</option>
+                        </select>
+                      </td>
+                      <td>
+                        <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="line.stock_min" />
+                      </td>
+                      <td>
+                        <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="line.stock_max" />
+                      </td>
+                      <td>
+                        <input type="checkbox" [(ngModel)]="line.perissable" />
+                      </td>
+                      <td>
+                        <button class="btn btn-danger btn-sm" (click)="removeArticleStockLine(i)">
+                          🗑️
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="tab-pane fade" id="article_fournisseur">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted small">
+                  Configuration fournisseurs de l'article.
+                </div>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-outline-primary btn-sm" (click)="addArticleCodeLine()">
+                    <i class="fas fa-plus"></i> Ajouter
+                  </button>
+                  <button class="btn btn-success btn-sm" (click)="saveArticleCodes()" [disabled]="isSavingCodes">
+                    💾 Enregistrer
+                  </button>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table table-bordered table-hover align-middle text-center">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Ligne</th>
+                      <th>Code</th>
+                      <th>Fournisseur</th>
+                      <th style="width: 110px;">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let line of articleCodes; let i = index">
+                      <td>
+                        <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="line.ligne" readonly />
+                      </td>
+                      <td>
+                        <input type="text" class="form-control form-control-sm" [(ngModel)]="line.code" />
+                      </td>
+                      <td>
+                        <select class="form-select form-select-sm" [(ngModel)]="line.part_id">
+                          <option [ngValue]="null">--</option>
+                          <option *ngFor="let f of fournisseurs" [ngValue]="f.part_id">{{ f.nom }}</option>
+                        </select>
+                      </td>
+                      <td>
+                        <button class="btn btn-danger btn-sm" (click)="removeArticleCodeLine(i)">
+                          🗑️
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

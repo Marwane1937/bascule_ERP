@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import Swal from 'sweetalert2';
+import { environment } from 'src/environments/environment';
 
 @Component({
   selector: 'app-beneficiaire',
@@ -8,6 +9,7 @@ import Swal from 'sweetalert2';
   styleUrls: ['./beneficiaire.component.css']
 })
 export class BeneficiaireComponent implements OnInit {
+  private readonly apiUrl = environment.apiUrl;
   beneficiaires: any[] = [];
   loading: boolean = true;
 
@@ -46,7 +48,7 @@ export class BeneficiaireComponent implements OnInit {
       orderDirection: this.sortDirection
     };
 
-    this.http.get('http://localhost:3500/api/beneficiaires', { params }).subscribe({
+    this.http.get(`${this.apiUrl}/beneficiaires`, { params }).subscribe({
       next: (response: any) => {
         this.beneficiaires = response?.data || [];
         this.totalRecords = response?.pagination?.total || 0;
@@ -146,8 +148,8 @@ export class BeneficiaireComponent implements OnInit {
     }
 
     const url = this.isEditMode
-      ? `http://localhost:3500/api/beneficiaires/${this.currentBeneficiaire.id}`
-      : 'http://localhost:3500/api/beneficiaires';
+      ? `${this.apiUrl}/beneficiaires/${this.currentBeneficiaire.id}`
+      : `${this.apiUrl}/beneficiaires`;
     const method = this.isEditMode ? 'put' : 'post';
 
     this.http[method](url, this.currentBeneficiaire).subscribe({
@@ -172,7 +174,7 @@ export class BeneficiaireComponent implements OnInit {
       confirmButtonText: 'Oui'
     }).then((result) => {
       if (result.isConfirmed) {
-        this.http.delete(`http://localhost:3500/api/beneficiaires/${beneficiaire.id}`).subscribe({
+        this.http.delete(`${this.apiUrl}/beneficiaires/${beneficiaire.id}`).subscribe({
           next: () => {
             Swal.fire('Succès', 'Bénéficiaire supprimé', 'success');
             this.getBeneficiaires();

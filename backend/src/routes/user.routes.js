@@ -14,6 +14,7 @@ router.get('/', userController.getAll);
 router.post('/', userController.create);
 router.put('/:id', userController.update);
 router.delete('/:id', userController.delete);
+router.patch('/change-password', userController.changePassword);
 router.patch('/:id/toggle-status', userController.toggleStatus);
 router.patch('/:id/reset-password', userController.resetPassword);
 

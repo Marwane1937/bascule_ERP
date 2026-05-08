@@ -1,51 +1,87 @@
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import { AchatsService } from 'src/app/service/achats.service';
+import { firstValueFrom } from 'rxjs';
 import Swal from 'sweetalert2';
+import { AchatsService } from 'src/app/service/achats.service';
+
+interface FactureFournisseurScanArticle {
+  designation: string | null;
+  quantite: number | null;
+  prix_unitaire: number | null;
+  total_ligne: number | null;
+}
+
+interface FactureFournisseurScanResult {
+  fournisseur: string | null;
+  ice: string | null;
+  if: string | null;
+  numero_facture: string | null;
+  date_facture: string | null;
+  total_ht: number | null;
+  tva: number | null;
+  total_ttc: number | null;
+  devise: string | null;
+  articles: FactureFournisseurScanArticle[];
+}
+
+interface ScanFileItem {
+  file: File;
+  previewUrl: string;
+  status: 'pending' | 'processing' | 'success' | 'error';
+  message: string | null;
+}
 
 @Component({
   selector: 'app-facture-fournisseur',
   templateUrl: './facture-fournisseur.component.html',
   styleUrls: ['./facture-fournisseur.component.css']
 })
-export class FactureFournisseurComponent implements OnInit {
+export class FactureFournisseurComponent implements OnInit, OnDestroy {
   factures: any[] = [];
-  loading: boolean = true;
+  loading = true;
   successMessage: string | null = null;
-  isError: boolean = false;
-  
-  // Pagination
-  currentPage: number = 1;
-  pageSize: number = 25;
-  totalRecords: number = 0;
-  totalPages: number = 0;
-  searchTerm: string = '';
-  
-  // Tri
-  sortColumn: string = 'facture_dat';
+  isError = false;
+  openActionMenuId: number | null = null;
+
+  currentPage = 1;
+  pageSize = 25;
+  totalRecords = 0;
+  totalPages = 0;
+  searchTerm = '';
+
+  sortColumn = 'facture_dat';
   sortDirection: 'ASC' | 'DESC' = 'DESC';
-  
-  // Filtres avancés
-  showAdvancedFilters: boolean = false;
-  filterDateFrom: string = '';
-  filterDateTo: string = '';
-  filterFournisseur: string = '';
+
+  showAdvancedFilters = false;
+  filterDateFrom = '';
+  filterDateTo = '';
+  filterFournisseur = '';
   filterMontantMin: number | null = null;
   filterMontantMax: number | null = null;
-  
-  // Modal transfert commande → facture
-  showTransfertModal: boolean = false;
+
+  showTransfertModal = false;
   commandesNonFacturees: any[] = [];
   commandesNonFactureesFiltered: any[] = [];
-  loadingCommandes: boolean = false;
-  
-  // Pagination et tri pour le modal
-  modalCurrentPage: number = 1;
-  modalPageSize: number = 10;
-  modalTotalPages: number = 1;
-  modalSortColumn: string = 'date';
+  loadingCommandes = false;
+
+  modalCurrentPage = 1;
+  modalPageSize = 10;
+  modalTotalPages = 1;
+  modalSortColumn = 'date';
   modalSortDirection: 'ASC' | 'DESC' = 'DESC';
-  modalSearchTerm: string = '';
+  modalSearchTerm = '';
+
+  showScanModal = false;
+  loadingScanAnalysis = false;
+  savingScanToDatabase = false;
+  selectedScanError: string | null = null;
+  scanFiles: ScanFileItem[] = [];
+  scanProgressCurrent = 0;
+  scanProgressTotal = 0;
+  scanProgressPercent = 0;
+  scanProgressLabel = '';
+  scanAnalysisResult: FactureFournisseurScanResult | null = null;
+  scanAnalysisRawJson = '';
 
   constructor(
     private achatsService: AchatsService,
@@ -57,11 +93,25 @@ export class FactureFournisseurComponent implements OnInit {
     this.loadFactures(1, '', false);
   }
 
+  ngOnDestroy(): void {
+    this.revokeScanPreviewUrls();
+  }
+
+  @HostListener('document:click')
+  onDocumentClick(): void {
+    this.closeActionMenu();
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscapePressed(): void {
+    this.closeActionMenu();
+  }
+
   loadFactures(page: number = 1, search: string = '', resetFilters: boolean = false): void {
     this.loading = true;
     this.currentPage = page;
     this.searchTerm = search;
-    
+
     if (resetFilters) {
       this.filterDateFrom = '';
       this.filterDateTo = '';
@@ -71,26 +121,24 @@ export class FactureFournisseurComponent implements OnInit {
     }
 
     this.achatsService.getFacturesFournisseur({
-      page: page,
+      page,
       pageSize: this.pageSize,
       orderBy: this.sortColumn,
       orderDirection: this.sortDirection,
-      search: search
+      search
     }).subscribe({
       next: (response: any) => {
         const result = response.data || [];
         const pagination = response.pagination || {};
-        
+
         this.factures = Array.isArray(result) ? result : [];
         this.totalRecords = pagination.total || 0;
         this.totalPages = pagination.totalPages || 1;
-        
-        
         this.loading = false;
         this.cdr.detectChanges();
       },
-      error: (err) => {
-        this.showError("❌ Erreur lors du chargement des factures fournisseur.");
+      error: () => {
+        this.showError("Erreur lors du chargement des factures fournisseur.");
         this.loading = false;
         this.factures = [];
         this.cdr.detectChanges();
@@ -105,7 +153,7 @@ export class FactureFournisseurComponent implements OnInit {
   }
 
   onPageSizeChange(event: any): void {
-    const newPageSize = parseInt(event.target.value);
+    const newPageSize = parseInt(event.target.value, 10);
     if (newPageSize > 0) {
       this.pageSize = newPageSize;
       this.loadFactures(1, this.searchTerm);
@@ -116,26 +164,20 @@ export class FactureFournisseurComponent implements OnInit {
     this.loadFactures(1, this.searchTerm);
   }
 
-  onSearchKeyPress(event: KeyboardEvent): void {
-    if (event.key === 'Enter') {
-      this.onSearch();
-    }
-  }
-
   getPageNumbers(): number[] {
     const pages: number[] = [];
     const maxPagesToShow = 5;
     let startPage = Math.max(1, this.currentPage - Math.floor(maxPagesToShow / 2));
     let endPage = Math.min(this.totalPages, startPage + maxPagesToShow - 1);
-    
+
     if (endPage - startPage < maxPagesToShow - 1) {
       startPage = Math.max(1, endPage - maxPagesToShow + 1);
     }
-    
-    for (let i = startPage; i <= endPage; i++) {
+
+    for (let i = startPage; i <= endPage; i += 1) {
       pages.push(i);
     }
-    
+
     return pages;
   }
 
@@ -145,19 +187,53 @@ export class FactureFournisseurComponent implements OnInit {
     return `${start} à ${end}`;
   }
 
-  showError(message: string) {
-    this.successMessage = message;
-    this.isError = true;
-    setTimeout(() => { this.successMessage = null; }, 5000);
+  showError(message: string): void {
+    this.showNotification(message, true);
   }
 
-  showNotification(message: string, isError: boolean = false) {
+  showNotification(message: string, isError: boolean = false): void {
     this.successMessage = message;
     this.isError = isError;
     setTimeout(() => { this.successMessage = null; }, 5000);
   }
 
-  // Tri par colonne
+  private getApiErrorMessage(err: any, fallbackMessage: string): string {
+    if (typeof err?.error === 'string' && err.error.trim()) {
+      return err.error.trim();
+    }
+
+    if (typeof err?.error?.message === 'string' && err.error.message.trim()) {
+      return err.error.message.trim();
+    }
+
+    if (typeof err?.message === 'string' && err.message.trim()) {
+      return err.message.trim();
+    }
+
+    return fallbackMessage;
+  }
+
+  private async getPdfErrorMessage(err: any, fallbackMessage: string): Promise<string> {
+    if (err?.error instanceof Blob) {
+      try {
+        const text = await err.error.text();
+        if (text) {
+          const parsed = JSON.parse(text);
+          if (typeof parsed?.message === 'string' && parsed.message.trim()) {
+            return parsed.message.trim();
+          }
+          if (typeof parsed?.error === 'string' && parsed.error.trim()) {
+            return parsed.error.trim();
+          }
+        }
+      } catch {
+        return fallbackMessage;
+      }
+    }
+
+    return this.getApiErrorMessage(err, fallbackMessage);
+  }
+
   onSort(column: string): void {
     if (this.sortColumn === column) {
       this.sortDirection = this.sortDirection === 'ASC' ? 'DESC' : 'ASC';
@@ -175,7 +251,6 @@ export class FactureFournisseurComponent implements OnInit {
     return this.sortDirection === 'ASC' ? 'fa-sort-up' : 'fa-sort-down';
   }
 
-  // Filtres avancés
   toggleAdvancedFilters(): void {
     this.showAdvancedFilters = !this.showAdvancedFilters;
   }
@@ -193,10 +268,9 @@ export class FactureFournisseurComponent implements OnInit {
     this.loadFactures(1, this.searchTerm, true);
   }
 
-  // Export CSV
   exportToCSV(): void {
     const headers = ['Numéro', 'Date', 'Fournisseur', 'HT', 'TVA', 'TTC'];
-    const rows = this.factures.map(f => [
+    const rows = this.factures.map((f) => [
       f.facture_num || '',
       f.facture_dat ? new Date(f.facture_dat).toLocaleDateString('fr-FR') : '',
       f.fournisseur || '',
@@ -207,7 +281,7 @@ export class FactureFournisseurComponent implements OnInit {
 
     const csvContent = [
       headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ...rows.map((row) => row.map((cell) => `"${cell}"`).join(','))
     ].join('\n');
 
     const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -219,25 +293,46 @@ export class FactureFournisseurComponent implements OnInit {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
-    this.showNotification('✅ Export CSV réussi !', false);
+
+    this.showNotification('Export CSV reussi.');
   }
 
-  // Imprimer une facture fournisseur
+  addFacture(): void {
+    this.closeActionMenu();
+    this.router.navigate(['/Ajout-Facture-Fournisseur']);
+  }
+
+  toggleActionMenu(factureId: number, event: MouseEvent): void {
+    event.stopPropagation();
+    this.openActionMenuId = this.openActionMenuId === factureId ? null : factureId;
+  }
+
+  closeActionMenu(): void {
+    this.openActionMenuId = null;
+  }
+
+  editFacture(factureId: number): void {
+    if (!factureId) {
+      return;
+    }
+    this.closeActionMenu();
+    this.router.navigate(['/Edit-Facture-Fournisseur', factureId]);
+  }
+
   onPrintFacture(factureId: number): void {
+    this.closeActionMenu();
+
     if (!factureId) {
       Swal.fire({ icon: 'error', title: 'Erreur', text: 'ID de facture introuvable.' });
       return;
     }
-    
+
     Swal.fire({
       title: 'Génération du PDF...',
       allowOutsideClick: false,
-      didOpen: () => {
-        Swal.showLoading();
-      }
+      didOpen: () => Swal.showLoading()
     });
-    
+
     this.achatsService.telechargerPDFFactureFournisseur(factureId).subscribe({
       next: (response: Blob) => {
         Swal.close();
@@ -245,18 +340,20 @@ export class FactureFournisseurComponent implements OnInit {
         const fileURL = URL.createObjectURL(file);
         window.open(fileURL, '_blank');
       },
-      error: (err) => {
+      error: async (err) => {
         Swal.close();
-        Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors de la génération du PDF." });
+        const message = await this.getPdfErrorMessage(err, 'Erreur lors de la génération du PDF.');
+        Swal.fire({ icon: 'error', title: 'Erreur', text: message });
       }
     });
   }
 
-  // Supprimer une facture
   deleteFacture(factureId: number): void {
+    this.closeActionMenu();
+
     Swal.fire({
       title: 'Êtes-vous sûr ?',
-      text: "Cette action est irréversible !",
+      text: "Cette action est irréversible.",
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#d33',
@@ -264,28 +361,290 @@ export class FactureFournisseurComponent implements OnInit {
       confirmButtonText: 'Oui, supprimer',
       cancelButtonText: 'Annuler'
     }).then((result) => {
-      if (result.isConfirmed) {
-        this.achatsService.deleteFactureFournisseur(factureId).subscribe({
-          next: () => {
-            Swal.fire('Supprimé !', 'La facture a été supprimée.', 'success');
-            this.loadFactures(this.currentPage, this.searchTerm);
-          },
-          error: (err) => {
-            Swal.fire('Erreur', 'Impossible de supprimer la facture.', 'error');
-          }
-        });
+      if (!result.isConfirmed) {
+        return;
+      }
+
+      this.achatsService.deleteFactureFournisseur(factureId).subscribe({
+        next: () => {
+          Swal.fire('Supprimé', 'La facture a été supprimée.', 'success');
+          this.loadFactures(this.currentPage, this.searchTerm);
+        },
+        error: (err) => {
+          Swal.fire('Erreur', this.getApiErrorMessage(err, 'Impossible de supprimer la facture.'), 'error');
+        }
+      });
+    });
+  }
+
+  openScanModal(): void {
+    this.showScanModal = true;
+    this.resetScanState();
+  }
+
+  closeScanModal(): void {
+    this.showScanModal = false;
+    this.resetScanState();
+  }
+
+  onScanFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement | null;
+    const files = Array.from(input?.files || []);
+
+    this.selectedScanError = null;
+    this.scanAnalysisResult = null;
+    this.scanAnalysisRawJson = '';
+    this.revokeScanPreviewUrls();
+    this.scanFiles = [];
+
+    if (!files.length) {
+      return;
+    }
+
+    const invalidFile = files.find((file) => !file.type.startsWith('image/'));
+    if (invalidFile) {
+      this.selectedScanError = `Le fichier ${invalidFile.name} n'est pas une image valide.`;
+      if (input) {
+        input.value = '';
+      }
+      return;
+    }
+
+    this.scanFiles = files.map((file) => ({
+      file,
+      previewUrl: URL.createObjectURL(file),
+      status: 'pending',
+      message: 'En attente'
+    }));
+  }
+
+  async analyzeSelectedScan(): Promise<void> {
+    if (!this.scanFiles.length) {
+      this.selectedScanError = 'Aucune image selectionnee.';
+      return;
+    }
+
+    this.loadingScanAnalysis = true;
+    this.selectedScanError = null;
+    this.scanAnalysisResult = null;
+    this.scanAnalysisRawJson = '';
+    this.scanProgressCurrent = 0;
+    this.scanProgressTotal = this.scanFiles.length;
+    this.scanProgressPercent = 0;
+    this.scanProgressLabel = `0 / ${this.scanProgressTotal} image traitée`;
+
+    this.scanFiles = this.scanFiles.map((item) => ({
+      ...item,
+      status: 'pending',
+      message: 'En attente'
+    }));
+
+    const partialResults: FactureFournisseurScanResult[] = [];
+
+    for (let index = 0; index < this.scanFiles.length; index += 1) {
+      const currentItem = this.scanFiles[index];
+      currentItem.status = 'processing';
+      currentItem.message = 'Analyse en cours...';
+      this.scanProgressLabel = `Analyse de ${currentItem.file.name}`;
+      this.cdr.detectChanges();
+
+      try {
+        const response = await firstValueFrom(
+          this.achatsService.analyzeFactureFournisseurScan(currentItem.file)
+        );
+
+        const result = response?.data || null;
+        if (!result) {
+          throw new Error("Aucun resultat d'analyse retourne.");
+        }
+
+        partialResults.push(result as FactureFournisseurScanResult);
+        currentItem.status = 'success';
+        currentItem.message = 'Analyse terminee';
+        this.scanProgressCurrent = index + 1;
+        this.scanProgressPercent = Math.round((this.scanProgressCurrent / this.scanProgressTotal) * 100);
+        this.scanProgressLabel = `${this.scanProgressCurrent} / ${this.scanProgressTotal} image(s) traitée(s)`;
+      } catch (err: any) {
+        currentItem.status = 'error';
+        currentItem.message = this.getApiErrorMessage(err, "Erreur lors de l'analyse.");
+        this.selectedScanError = `Analyse interrompue sur ${currentItem.file.name}: ${currentItem.message}`;
+        this.loadingScanAnalysis = false;
+        this.cdr.detectChanges();
+        return;
+      }
+    }
+
+    const mergedResult = this.mergeScanResults(partialResults);
+    this.scanAnalysisResult = mergedResult;
+    this.scanAnalysisRawJson = JSON.stringify(mergedResult, null, 2);
+    this.loadingScanAnalysis = false;
+    this.scanProgressLabel = `Analyse terminée: ${this.scanProgressTotal} / ${this.scanProgressTotal}`;
+    this.cdr.detectChanges();
+  }
+
+  saveScanResultToDatabase(): void {
+    if (!this.scanAnalysisResult) {
+      this.selectedScanError = "Aucun resultat d'analyse a enregistrer.";
+      return;
+    }
+
+    this.savingScanToDatabase = true;
+    this.selectedScanError = null;
+
+    this.achatsService.createFactureFournisseurFromScan(this.scanAnalysisResult).subscribe({
+      next: (response: any) => {
+        this.savingScanToDatabase = false;
+        this.showNotification(
+          `Facture ${response?.data?.facture_num || ''} enregistree avec succes.`
+        );
+        this.closeScanModal();
+        this.loadFactures(1, this.searchTerm);
+      },
+      error: (err) => {
+        this.savingScanToDatabase = false;
+        this.selectedScanError = this.getApiErrorMessage(err, "Erreur lors de l'enregistrement de la facture.");
+        this.cdr.detectChanges();
       }
     });
   }
 
-  // ===== TRANSFERT COMMANDE → FACTURE =====
-  
+  copyScanJson(): void {
+    if (!this.scanAnalysisRawJson) {
+      return;
+    }
+
+    if (!navigator.clipboard?.writeText) {
+      this.showNotification('Copie indisponible sur ce navigateur.', true);
+      return;
+    }
+
+    navigator.clipboard.writeText(this.scanAnalysisRawJson).then(() => {
+      this.showNotification('JSON copié dans le presse-papiers.');
+    }).catch(() => {
+      this.showNotification('Impossible de copier le JSON.', true);
+    });
+  }
+
+  formatFileSize(size: number): string {
+    if (size >= 1024 * 1024) {
+      return `${(size / (1024 * 1024)).toFixed(2)} Mo`;
+    }
+    if (size >= 1024) {
+      return `${(size / 1024).toFixed(0)} Ko`;
+    }
+    return `${size} o`;
+  }
+
+  getScanStatusClass(status: ScanFileItem['status']): string {
+    switch (status) {
+      case 'processing':
+        return 'badge bg-info';
+      case 'success':
+        return 'badge bg-success';
+      case 'error':
+        return 'badge bg-danger';
+      default:
+        return 'badge bg-secondary';
+    }
+  }
+
+  private mergeScanResults(results: FactureFournisseurScanResult[]): FactureFournisseurScanResult {
+    const pickFirstText = (values: Array<string | null | undefined>): string | null => {
+      const found = values.find((value) => typeof value === 'string' && value.trim().length > 0);
+      return found ? String(found).trim() : null;
+    };
+
+    const pickLongestText = (values: Array<string | null | undefined>): string | null => {
+      const filtered = values
+        .filter((value) => typeof value === 'string' && value.trim().length > 0)
+        .map((value) => String(value).trim());
+
+      if (!filtered.length) {
+        return null;
+      }
+
+      return filtered.sort((left, right) => right.length - left.length)[0];
+    };
+
+    const pickBestNumber = (values: Array<number | null | undefined>): number | null => {
+      const numericValues = values
+        .map((value) => typeof value === 'number' ? value : Number(value))
+        .filter((value) => Number.isFinite(value));
+
+      if (!numericValues.length) {
+        return null;
+      }
+
+      return numericValues.sort((left, right) => right - left)[0];
+    };
+
+    const mergedArticlesMap = new Map<string, FactureFournisseurScanArticle>();
+
+    results.forEach((result) => {
+      (result.articles || []).forEach((article) => {
+        const designation = String(article?.designation || '').trim();
+        const quantite = typeof article?.quantite === 'number' ? article.quantite : Number(article?.quantite);
+        const prix = typeof article?.prix_unitaire === 'number' ? article.prix_unitaire : Number(article?.prix_unitaire);
+        const total = typeof article?.total_ligne === 'number' ? article.total_ligne : Number(article?.total_ligne);
+
+        if (!designation && !Number.isFinite(quantite) && !Number.isFinite(prix) && !Number.isFinite(total)) {
+          return;
+        }
+
+        const key = `${designation.toUpperCase()}|${Number.isFinite(quantite) ? quantite : ''}|${Number.isFinite(prix) ? prix : ''}|${Number.isFinite(total) ? total : ''}`;
+        if (!mergedArticlesMap.has(key)) {
+          mergedArticlesMap.set(key, {
+            designation: designation || null,
+            quantite: Number.isFinite(quantite) ? quantite : null,
+            prix_unitaire: Number.isFinite(prix) ? prix : null,
+            total_ligne: Number.isFinite(total) ? total : null
+          });
+        }
+      });
+    });
+
+    return {
+      fournisseur: pickLongestText(results.map((result) => result.fournisseur)),
+      ice: pickFirstText(results.map((result) => result.ice)),
+      if: pickFirstText(results.map((result) => result.if)),
+      numero_facture: pickLongestText(results.map((result) => result.numero_facture)),
+      date_facture: pickFirstText(results.map((result) => result.date_facture)),
+      total_ht: pickBestNumber(results.map((result) => result.total_ht)),
+      tva: pickBestNumber(results.map((result) => result.tva)),
+      total_ttc: pickBestNumber(results.map((result) => result.total_ttc)),
+      devise: pickFirstText(results.map((result) => result.devise)),
+      articles: Array.from(mergedArticlesMap.values())
+    };
+  }
+
+  private resetScanState(): void {
+    this.loadingScanAnalysis = false;
+    this.savingScanToDatabase = false;
+    this.selectedScanError = null;
+    this.scanAnalysisResult = null;
+    this.scanAnalysisRawJson = '';
+    this.scanProgressCurrent = 0;
+    this.scanProgressTotal = 0;
+    this.scanProgressPercent = 0;
+    this.scanProgressLabel = '';
+    this.revokeScanPreviewUrls();
+    this.scanFiles = [];
+  }
+
+  private revokeScanPreviewUrls(): void {
+    this.scanFiles.forEach((item) => {
+      if (item.previewUrl) {
+        URL.revokeObjectURL(item.previewUrl);
+      }
+    });
+  }
+
   openTransfertModal(): void {
     this.showTransfertModal = true;
     this.loadingCommandes = true;
     this.modalCurrentPage = 1;
     this.modalSearchTerm = '';
-    
+
     this.achatsService.getCommandesNonFacturees().subscribe({
       next: (response: any) => {
         this.commandesNonFacturees = response.data || [];
@@ -293,7 +652,7 @@ export class FactureFournisseurComponent implements OnInit {
         this.loadingCommandes = false;
         this.cdr.detectChanges();
       },
-      error: (err) => {
+      error: () => {
         this.commandesNonFacturees = [];
         this.commandesNonFactureesFiltered = [];
         this.loadingCommandes = false;
@@ -309,21 +668,18 @@ export class FactureFournisseurComponent implements OnInit {
     this.modalSearchTerm = '';
   }
 
-  // Appliquer filtres et tri au modal
   applyModalFiltersAndSort(): void {
     let filtered = [...this.commandesNonFacturees];
 
-    // Filtre par recherche
     if (this.modalSearchTerm.trim()) {
       const search = this.modalSearchTerm.toLowerCase();
-      filtered = filtered.filter(cmd => 
+      filtered = filtered.filter((cmd) =>
         (cmd.numero?.toLowerCase().includes(search)) ||
         (cmd.fournisseur?.toLowerCase().includes(search)) ||
         (cmd.description?.toLowerCase().includes(search))
       );
     }
 
-    // Tri
     filtered.sort((a, b) => {
       let valA = a[this.modalSortColumn];
       let valB = b[this.modalSortColumn];
@@ -339,18 +695,16 @@ export class FactureFournisseurComponent implements OnInit {
         valB = (valB || '').toString().toLowerCase();
       }
 
-      if (this.modalSortDirection === 'ASC') {
-        return valA > valB ? 1 : valA < valB ? -1 : 0;
-      } else {
-        return valA < valB ? 1 : valA > valB ? -1 : 0;
-      }
+      return this.modalSortDirection === 'ASC'
+        ? (valA > valB ? 1 : valA < valB ? -1 : 0)
+        : (valA < valB ? 1 : valA > valB ? -1 : 0);
     });
 
-    // Pagination
     this.modalTotalPages = Math.ceil(filtered.length / this.modalPageSize) || 1;
     if (this.modalCurrentPage > this.modalTotalPages) {
       this.modalCurrentPage = 1;
     }
+
     const start = (this.modalCurrentPage - 1) * this.modalPageSize;
     const end = start + this.modalPageSize;
     this.commandesNonFactureesFiltered = filtered.slice(start, end);
@@ -367,7 +721,9 @@ export class FactureFournisseurComponent implements OnInit {
   }
 
   getModalSortIcon(column: string): string {
-    if (this.modalSortColumn !== column) return 'fa-sort';
+    if (this.modalSortColumn !== column) {
+      return 'fa-sort';
+    }
     return this.modalSortDirection === 'ASC' ? 'fa-sort-up' : 'fa-sort-down';
   }
 
@@ -391,7 +747,7 @@ export class FactureFournisseurComponent implements OnInit {
     if (end - start < maxPages - 1) {
       start = Math.max(1, end - maxPages + 1);
     }
-    for (let i = start; i <= end; i++) {
+    for (let i = start; i <= end; i += 1) {
       pages.push(i);
     }
     return pages;
@@ -404,7 +760,7 @@ export class FactureFournisseurComponent implements OnInit {
   transfererCommande(commandeId: number): void {
     Swal.fire({
       title: 'Créer une facture ?',
-      text: "Cette commande sera transformée en facture fournisseur.",
+      text: 'Cette commande sera transformée en facture fournisseur.',
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#28a745',
@@ -412,29 +768,30 @@ export class FactureFournisseurComponent implements OnInit {
       confirmButtonText: 'Oui, créer la facture',
       cancelButtonText: 'Annuler'
     }).then((result) => {
-      if (result.isConfirmed) {
-        Swal.fire({
-          title: 'Création en cours...',
-          allowOutsideClick: false,
-          didOpen: () => { Swal.showLoading(); }
-        });
-
-        this.achatsService.createFactureFournisseurFromCommande(commandeId).subscribe({
-          next: (response: any) => {
-            Swal.fire({
-              icon: 'success',
-              title: 'Facture créée !',
-              text: `Facture ${response.data?.numero || ''} créée avec succès.`
-            });
-            this.closeTransfertModal();
-            this.loadFactures(1, '');
-          },
-          error: (err) => {
-            Swal.fire('Erreur', err.error?.message || 'Impossible de créer la facture.', 'error');
-          }
-        });
+      if (!result.isConfirmed) {
+        return;
       }
+
+      Swal.fire({
+        title: 'Création en cours...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+      });
+
+      this.achatsService.createFactureFournisseurFromCommande(commandeId).subscribe({
+        next: (response: any) => {
+          Swal.fire({
+            icon: 'success',
+            title: 'Facture créée',
+            text: `Facture ${response.data?.numero || ''} créée avec succès.`
+          });
+          this.closeTransfertModal();
+          this.loadFactures(1, '');
+        },
+        error: (err) => {
+          Swal.fire('Erreur', this.getApiErrorMessage(err, 'Impossible de créer la facture.'), 'error');
+        }
+      });
     });
   }
 }
-

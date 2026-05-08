@@ -1,5 +1,5 @@
-<div class="container py-4">
-  <div class="page-inner">
+<div class="container py-4 contrat-page" [class.contrat-page--detail]="detailMode">
+  <div class="page-inner" [class.page-inner--detail]="detailMode">
 
     <!-- En-tête -->
     <div class="page-header mb-4">
@@ -15,7 +15,7 @@
 
     <!-- Bouton Ajouter Contrat -->
     <div class="row mb-4">
-      <div class="col-12 text-end">
+      <div class="col-12 d-flex justify-content-end gap-2 align-items-center contrat-toolbar">
         <button
           type="button"
           class="btn btn-gradient px-4 py-2 shadow-sm"
@@ -200,9 +200,18 @@
           <option [value]="100" [selected]="pageSize === 100">100 par page</option>
         </select>
       </div>
-      <div class="col-md-4 text-end">
+      <div class="col-md-4 d-flex justify-content-end gap-2 align-items-center">
         <button class="btn btn-outline-info btn-sm" (click)="toggleAdvancedFilters()">
           <i class="fas fa-filter me-1"></i> Filtres avancés
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm"
+          [ngClass]="detailMode ? 'btn-primary' : 'btn-outline-primary'"
+          (click)="toggleDetailMode()"
+        >
+          <i class="fas me-2" [ngClass]="detailMode ? 'fa-compress-alt' : 'fa-expand-alt'"></i>
+          {{ detailMode ? 'Vue compacte' : 'Vue detaillee' }}
         </button>
       </div>
     </div>
@@ -240,7 +249,7 @@
       <div class="col-md-12">
         <div class="card border-0 shadow-sm rounded-3">
           <div class="card-body">
-            <div class="table-responsive" style="position: relative; min-height: 300px;">
+            <div class="table-wrapper" style="position: relative; min-height: 300px;">
               <!-- Loader overlay -->
               <div
                 *ngIf="loading"
@@ -254,61 +263,194 @@
               </div>
 
               <table
-                class="table table-bordered table-striped table-hover"
-                width="100%"
+                class="table table-bordered table-striped table-hover contrat-table"
                 [style.opacity]="loading ? '0.5' : '1'"
               >
                 <thead class="table-light">
                   <tr>
-                    <th (click)="onSort('numero')" class="sortable" style="cursor: pointer;">
+                    <th
+                      #numeroHeader
+                      (click)="onSort('numero')"
+                      class="sortable resizable-column-header column-header"
+                      style="cursor: pointer;"
+                      [style.width.px]="getColumnWidth('numero')">
                       Numéro <i class="fas ms-1" [ngClass]="getSortIcon('numero')"></i>
+                      <span
+                        *ngIf="isResizableColumn('numero')"
+                        class="column-resize-handle"
+                        (click)="$event.stopPropagation()"
+                        (mousedown)="startColumnResize($event, 'numero', numeroHeader)"
+                      ></span>
                     </th>
-                    <th (click)="onSort('date')" class="sortable" style="cursor: pointer;">
+                    <th
+                      #dateHeader
+                      (click)="onSort('date')"
+                      class="sortable resizable-column-header column-header"
+                      style="cursor: pointer;"
+                      [style.width.px]="getColumnWidth('date')">
                       Date <i class="fas ms-1" [ngClass]="getSortIcon('date')"></i>
+                      <span
+                        *ngIf="isResizableColumn('date')"
+                        class="column-resize-handle"
+                        (click)="$event.stopPropagation()"
+                        (mousedown)="startColumnResize($event, 'date', dateHeader)"
+                      ></span>
                     </th>
-                    <th (click)="onSort('client')" class="sortable" style="cursor: pointer;">
+                    <th
+                      #clientHeader
+                      (click)="onSort('client')"
+                      class="sortable resizable-column-header column-header"
+                      style="cursor: pointer;"
+                      [style.width.px]="getColumnWidth('client')">
                       Client <i class="fas ms-1" [ngClass]="getSortIcon('client')"></i>
+                      <span
+                        *ngIf="isResizableColumn('client')"
+                        class="column-resize-handle"
+                        (click)="$event.stopPropagation()"
+                        (mousedown)="startColumnResize($event, 'client', clientHeader)"
+                      ></span>
                     </th>
-                    <th>Description</th>
-                    <th (click)="onSort('date_planif')" class="sortable" style="cursor: pointer;">
+                    <th
+                      *ngIf="isDetailColumnVisible('date_planif')"
+                      #datePlanifHeader
+                      (click)="onSort('date_planif')"
+                      class="sortable resizable-column-header column-header"
+                      style="cursor: pointer;"
+                      [style.width.px]="getColumnWidth('date_planif')">
                       Date planifiée <i class="fas ms-1" [ngClass]="getSortIcon('date_planif')"></i>
+                      <span
+                        *ngIf="isResizableColumn('date_planif')"
+                        class="column-resize-handle"
+                        (click)="$event.stopPropagation()"
+                        (mousedown)="startColumnResize($event, 'date_planif', datePlanifHeader)"
+                      ></span>
                     </th>
-                    <th (click)="onSort('date_expire')" class="sortable" style="cursor: pointer;">
+                    <th
+                      *ngIf="isDetailColumnVisible('date_expire')"
+                      #dateExpireHeader
+                      (click)="onSort('date_expire')"
+                      class="sortable resizable-column-header column-header"
+                      style="cursor: pointer;"
+                      [style.width.px]="getColumnWidth('date_expire')">
                       Date expiration <i class="fas ms-1" [ngClass]="getSortIcon('date_expire')"></i>
+                      <span
+                        *ngIf="isResizableColumn('date_expire')"
+                        class="column-resize-handle"
+                        (click)="$event.stopPropagation()"
+                        (mousedown)="startColumnResize($event, 'date_expire', dateExpireHeader)"
+                      ></span>
                     </th>
-                    <th class="text-center">Statut</th>
-                    <th style="width: 150px;" class="text-center">Actions</th>
+                    <th
+                      *ngIf="isDetailColumnVisible('jours_restants')"
+                      #joursHeader
+                      (click)="onSort('jours_restants')"
+                      class="sortable resizable-column-header column-header"
+                      style="cursor: pointer;"
+                      [style.width.px]="getColumnWidth('jours_restants')">
+                      Jours restants <i class="fas ms-1" [ngClass]="getSortIcon('jours_restants')"></i>
+                      <span
+                        *ngIf="isResizableColumn('jours_restants')"
+                        class="column-resize-handle"
+                        (click)="$event.stopPropagation()"
+                        (mousedown)="startColumnResize($event, 'jours_restants', joursHeader)"
+                      ></span>
+                    </th>
+                    <th
+                      #statutHeader
+                      class="text-center resizable-column-header column-header"
+                      [style.width.px]="getColumnWidth('statut')">
+                      Statut
+                      <span
+                        *ngIf="isResizableColumn('statut')"
+                        class="column-resize-handle"
+                        (click)="$event.stopPropagation()"
+                        (mousedown)="startColumnResize($event, 'statut', statutHeader)"
+                      ></span>
+                    </th>
+                    <th class="text-center" [style.width.px]="getColumnWidth('actions')">Actions</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   <tr *ngIf="!loading && contrats.length === 0">
-                    <td colspan="8" class="text-center py-4">
+                    <td [attr.colspan]="getVisibleColumnCount()" class="text-center py-4">
                       <p class="text-muted mb-0">Aucun contrat trouvé</p>
                     </td>
                   </tr>
 
-                  <tr *ngFor="let contrat of contrats">
-                    <td>{{ contrat.numero }}</td>
-                    <td>{{ formatDate(contrat.date) }}</td>
-                    <td><strong>{{ contrat.client }}</strong></td>
-                    <td>{{ contrat.description || '-' }}</td>
-                    <td>{{ formatDate(contrat.date_planif) }}</td>
-                    <td>{{ formatDate(contrat.date_expire) }}</td>
-                    <td class="text-center">
+                  <tr
+                    *ngFor="let contrat of contrats"
+                    [attr.id]="'contrat-row-' + contrat.id"
+                    [class.action-menu-open]="isActionMenuOpen(contrat)"
+                    [class.notification-highlight-row]="isHighlightedContrat(contrat)">
+                    <td class="cell-numero" [title]="contrat.numero">
+                      <div class="numero-cell">
+                        <button
+                          type="button"
+                          class="btn btn-link p-0 contrat-renewal-btn"
+                          (click)="markContratForRenewal(contrat)"
+                          [title]="isContratMarkedForRenewal(contrat) ? 'Désactiver le renouvellement' : 'Activer le renouvellement'">
+                          <i class="fas fa-bell" [ngClass]="isContratMarkedForRenewal(contrat) ? 'text-success' : 'text-danger'"></i>
+                        </button>
+                        <span>{{ contrat.numero }}</span>
+                      </div>
+                    </td>
+                    <td class="cell-date" [title]="formatDate(contrat.date)">{{ formatDate(contrat.date) }}</td>
+                    <td class="cell-client" [title]="contrat.client"><strong>{{ contrat.client }}</strong></td>
+                    <td *ngIf="isDetailColumnVisible('date_planif')" class="cell-date" [title]="formatDate(contrat.date_planif)">{{ formatDate(contrat.date_planif) }}</td>
+                    <td *ngIf="isDetailColumnVisible('date_expire')" class="cell-date" [title]="formatDate(contrat.date_expire)">{{ formatDate(contrat.date_expire) }}</td>
+                    <td *ngIf="isDetailColumnVisible('jours_restants')" class="cell-remaining-days">
+                      <span [ngClass]="getRemainingDaysBadgeClass(contrat)">
+                        {{ getRemainingDaysLabel(contrat) }}
+                      </span>
+                    </td>
+                    <td class="text-center cell-status">
                       <span *ngIf="!contrat.facture_id" class="badge bg-danger">Facturable</span>
                       <span *ngIf="contrat.facture_id" class="badge bg-success">Facturée</span>
                     </td>
-                    <td class="text-center">
-                      <button *ngIf="!contrat.facture_id" class="btn btn-sm btn-outline-success me-1" (click)="facturerContrat(contrat)" title="Facturer">
-                        <i class="fas fa-file-invoice"></i>
-                      </button>
-                      <button class="btn btn-sm btn-outline-info me-1" (click)="editContrat(contrat)" title="Modifier">
-                        <i class="fas fa-edit"></i>
-                      </button>
-                      <button class="btn btn-sm btn-outline-danger" (click)="removeContrat(contrat)" title="Supprimer">
-                        <i class="fas fa-trash-alt"></i>
-                      </button>
+                    <td class="text-center cell-actions">
+                      <div class="contract-action-menu actions-cell">
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-primary action-dropdown-toggle"
+                          [attr.aria-expanded]="isActionMenuOpen(contrat)"
+                          (click)="toggleActionMenu(contrat, $event)"
+                          title="Actions">
+                          <i class="fas fa-cog me-1"></i> Action
+                          <i class="fas ms-2" [ngClass]="isActionMenuOpen(contrat) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                        </button>
+                        <div
+                          *ngIf="isActionMenuOpen(contrat)"
+                          class="contract-action-menu__panel shadow-sm"
+                          (click)="$event.stopPropagation()">
+                          <button
+                            *ngIf="canRenewContrat(contrat)"
+                            type="button"
+                            class="contract-action-menu__item contract-action-menu__item--success"
+                            (click)="renewContratFromRow(contrat, $event)">
+                            <i class="fas fa-sync-alt"></i> Renouveler
+                          </button>
+                          <button
+                            *ngIf="!contrat.facture_id"
+                            type="button"
+                            class="contract-action-menu__item contract-action-menu__item--success"
+                            (click)="closeActionMenu(); facturerContrat(contrat)">
+                            <i class="fas fa-file-invoice"></i> Facturer
+                          </button>
+                          <button
+                            type="button"
+                            class="contract-action-menu__item"
+                            (click)="closeActionMenu(); editContrat(contrat)">
+                            <i class="fas fa-edit"></i> Modifier
+                          </button>
+                          <button
+                            type="button"
+                            class="contract-action-menu__item contract-action-menu__item--danger"
+                            (click)="closeActionMenu(); removeContrat(contrat)">
+                            <i class="fas fa-trash-alt"></i> Supprimer
+                          </button>
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
@@ -357,4 +499,3 @@
 
   <router-outlet></router-outlet>
 </div>
-

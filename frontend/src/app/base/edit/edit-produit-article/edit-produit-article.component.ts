@@ -41,6 +41,14 @@ export class EditProduitArticleComponent implements OnInit {
   // Nomenclature
   nomenclature: any[] = [];
   isLoadingNomenclature = false;
+  articleUnites: any[] = [];
+  articleStocks: any[] = [];
+  articleCodes: any[] = [];
+  depots: any[] = [];
+  fournisseurs: any[] = [];
+  isSavingUnites = false;
+  isSavingStocks = false;
+  isSavingCodes = false;
 
   composantSearch = '';
   filteredComposants: any[] = [];
@@ -70,6 +78,11 @@ export class EditProduitArticleComponent implements OnInit {
       unites: this.baseService.getUnite().pipe(catchError(() => of([]))),
       articles: this.baseService.getProduit().pipe(catchError(() => of([]))),
       nomenclature: this.baseService.getArticleNomenclature(this.article_id).pipe(catchError(() => of({ data: [] }))),
+      articleUnites: this.baseService.getArticleUnites(this.article_id).pipe(catchError(() => of({ data: [] }))),
+      articleStocks: this.baseService.getArticleStocks(this.article_id).pipe(catchError(() => of({ data: [] }))),
+      articleCodes: this.baseService.getArticleCodes(this.article_id).pipe(catchError(() => of({ data: [] }))),
+      depots: this.baseService.getDepots().pipe(catchError(() => of({ data: [] }))),
+      fournisseurs: this.baseService.getFournisseur().pipe(catchError(() => of({ data: [] }))),
     }).subscribe({
       next: (res: any) => {
         this.article = res.article;
@@ -82,6 +95,27 @@ export class EditProduitArticleComponent implements OnInit {
         const list = res.articles?.data || res.articles || [];
         this.allArticles = Array.isArray(list) ? list : [];
         this.nomenclature = res.nomenclature?.data || res.nomenclature || [];
+        this.articleUnites = (res.articleUnites?.data || res.articleUnites || []).map((x: any) => ({
+          unite_id: Number(x.unite_id) || null,
+          fact: Number(x.fact) || 0
+        }));
+        this.articleStocks = (res.articleStocks?.data || res.articleStocks || []).map((x: any) => ({
+          depot_id: Number(x.depot_id) || null,
+          stock_min: Number(x.stock_min) || 0,
+          stock_max: Number(x.stock_max) || 0,
+          perissable: !!Number(x.perissable)
+        }));
+        this.articleCodes = (res.articleCodes?.data || res.articleCodes || []).map((x: any) => ({
+          ligne: Number(x.ligne) || 0,
+          code: x.code || '',
+          part_id: Number(x.part_id) || null,
+          description: x.description || ''
+        }));
+        this.depots = res.depots?.data || res.depots || [];
+        this.fournisseurs = res.fournisseurs?.data || res.fournisseurs || [];
+        if (this.articleUnites.length === 0) this.addArticleUniteLine();
+        if (this.articleStocks.length === 0) this.addArticleStockLine();
+        if (this.articleCodes.length === 0) this.addArticleCodeLine();
         this.isLoading = false;
       },
       error: () => {
@@ -325,5 +359,127 @@ export class EditProduitArticleComponent implements OnInit {
       });
     });
   }
-}
 
+  addArticleUniteLine(): void {
+    this.articleUnites.push({
+      unite_id: null,
+      fact: 0
+    });
+  }
+
+  removeArticleUniteLine(index: number): void {
+    this.articleUnites.splice(index, 1);
+    this.persistArticleUnites(false);
+  }
+
+  saveArticleUnites(): void {
+    this.persistArticleUnites(true);
+  }
+
+  private persistArticleUnites(showToast: boolean): void {
+    this.isSavingUnites = true;
+    this.baseService.saveArticleUnites(this.article_id, this.articleUnites).subscribe({
+      next: () => {
+        this.isSavingUnites = false;
+        if (showToast) {
+          Swal.fire({ icon: 'success', title: 'Enregistré', text: 'Article unité sauvegardé avec succès.' });
+        }
+        this.baseService.getArticleUnites(this.article_id).subscribe((res: any) => {
+          this.articleUnites = (res?.data || []).map((x: any) => ({
+            unite_id: Number(x.unite_id) || null,
+            fact: Number(x.fact) || 0
+          }));
+        });
+      },
+      error: (err) => {
+        this.isSavingUnites = false;
+        Swal.fire({ icon: 'error', title: 'Erreur', text: err?.error?.message || 'Erreur lors de la sauvegarde des unités.' });
+      }
+    });
+  }
+
+  addArticleStockLine(): void {
+    this.articleStocks.push({
+      depot_id: null,
+      stock_min: 0,
+      stock_max: 0,
+      perissable: false
+    });
+  }
+
+  removeArticleStockLine(index: number): void {
+    this.articleStocks.splice(index, 1);
+    this.persistArticleStocks(false);
+  }
+
+  saveArticleStocks(): void {
+    this.persistArticleStocks(true);
+  }
+
+  private persistArticleStocks(showToast: boolean): void {
+    this.isSavingStocks = true;
+    this.baseService.saveArticleStocks(this.article_id, this.articleStocks).subscribe({
+      next: () => {
+        this.isSavingStocks = false;
+        if (showToast) {
+          Swal.fire({ icon: 'success', title: 'Enregistré', text: 'Article stock sauvegardé avec succès.' });
+        }
+        this.baseService.getArticleStocks(this.article_id).subscribe((res: any) => {
+          this.articleStocks = (res?.data || []).map((x: any) => ({
+            depot_id: Number(x.depot_id) || null,
+            stock_min: Number(x.stock_min) || 0,
+            stock_max: Number(x.stock_max) || 0,
+            perissable: !!Number(x.perissable)
+          }));
+        });
+      },
+      error: (err) => {
+        this.isSavingStocks = false;
+        Swal.fire({ icon: 'error', title: 'Erreur', text: err?.error?.message || 'Erreur lors de la sauvegarde du stock.' });
+      }
+    });
+  }
+
+  addArticleCodeLine(): void {
+    const nextLigne = (this.articleCodes || []).reduce((max: number, x: any) => Math.max(max, Number(x?.ligne) || 0), 0) + 1;
+    this.articleCodes.push({
+      ligne: nextLigne,
+      code: '',
+      part_id: null,
+      description: ''
+    });
+  }
+
+  removeArticleCodeLine(index: number): void {
+    this.articleCodes.splice(index, 1);
+    this.persistArticleCodes(false);
+  }
+
+  saveArticleCodes(): void {
+    this.persistArticleCodes(true);
+  }
+
+  private persistArticleCodes(showToast: boolean): void {
+    this.isSavingCodes = true;
+    this.baseService.saveArticleCodes(this.article_id, this.articleCodes).subscribe({
+      next: () => {
+        this.isSavingCodes = false;
+        if (showToast) {
+          Swal.fire({ icon: 'success', title: 'Enregistré', text: 'Article fournisseur sauvegardé avec succès.' });
+        }
+        this.baseService.getArticleCodes(this.article_id).subscribe((res: any) => {
+          this.articleCodes = (res?.data || []).map((x: any) => ({
+            ligne: Number(x.ligne) || 0,
+            code: x.code || '',
+            part_id: Number(x.part_id) || null,
+            description: x.description || ''
+          }));
+        });
+      },
+      error: (err) => {
+        this.isSavingCodes = false;
+        Swal.fire({ icon: 'error', title: 'Erreur', text: err?.error?.message || 'Erreur lors de la sauvegarde des fournisseurs.' });
+      }
+    });
+  }
+}

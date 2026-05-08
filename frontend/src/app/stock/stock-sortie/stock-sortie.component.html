@@ -156,7 +156,7 @@
                         </h5>
                     </div>
                     <div class="card-body">
-                        <div class="table-responsive" style="position: relative; min-height: 400px;">
+                        <div class="table-responsive stock-table-wrap" style="position: relative; min-height: 400px;">
                             <!-- Loader -->
                             <div *ngIf="loading"
                                 class="text-center my-4"
@@ -169,7 +169,7 @@
 
                             <table
                                 id="stockSortieTable"
-                                class="table table-bordered table-striped table-hover"
+                                class="table table-bordered table-striped table-hover stock-list-table"
                                 width="100%"
                                 [style.opacity]="loading ? '0.5' : '1'">
                                 <thead class="table-light">
@@ -187,8 +187,8 @@
                                             <i class="fas ms-1" [ngClass]="getSortIcon('client')"></i>
                                         </th>
                                         <th>Description</th>
-                                        <th>Total HT</th>
-                                        <th style="width: 150px;" class="text-center">Actions</th>
+                                        <th class="text-center">Statut</th>
+                                        <th style="width: 180px;" class="text-center">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -200,21 +200,52 @@
 
                                     <!-- Lignes principales -->
                                     <ng-container *ngFor="let achat of achats; let i = index">
-                                        <tr class="cursor-pointer" (click)="toggleRowExpansion(achat, i)">
-                                            <td>
+                                        <tr class="cursor-pointer" (click)="toggleSortieRowExpansion(achat, i)">
+                                            <td class="stock-numero-cell">
                                                 <i class="fas me-2" [class.fa-chevron-right]="!expandedRows[i]" [class.fa-chevron-down]="expandedRows[i]"></i>
                                                 {{ achat.numero }}
                                             </td>
-                                            <td>{{ achat.date ? (achat.date | date:'dd/MM/yyyy') : '-' }}</td>
-                                            <td>{{ achat.client || achat.client_nom || '-' }}</td>
-                                            <td>{{ achat.description || '-' }}</td>
-                                            <td class="text-end">{{ achat.total_ht | number:'1.2-2' }} dh</td>
-                                            <td class="text-center">
-                                                <button class="btn btn-sm btn-primary"
-                                                        (click)="$event.stopPropagation(); editSortieStock(achat.document_id)">
-                                                    <i class="fas fa-edit"></i>
-                                                    Modifier
-                                                </button>
+                                            <td class="stock-date-cell">{{ achat.date ? (achat.date | date:'dd/MM/yyyy') : '-' }}</td>
+                                            <td class="stock-partner-cell" [title]="getClientDisplay(achat)">{{ getClientDisplay(achat) }}</td>
+                                            <td class="stock-description-cell" [title]="achat.description || '-'">{{ achat.description || '-' }}</td>
+                                            <td class="text-center stock-status-cell">
+                                                <span class="badge" [ngClass]="getTransferStatusBadgeClass(achat)">
+                                                    {{ getTransferStatusLabel(achat) }}
+                                                </span>
+                                            </td>
+                                            <td class="text-center stock-action-cell">
+                                                <div class="dropdown" (click)="$event.stopPropagation()">
+                                                    <button class="btn btn-sm btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                                        <i class="fas fa-bolt me-1"></i> Actions
+                                                    </button>
+                                                    <ul class="dropdown-menu dropdown-menu-end">
+                                                        <li>
+                                                            <button class="dropdown-item" type="button" (click)="editSortieStock(achat.document_id)">
+                                                                <i class="fas fa-edit me-2"></i> Edit
+                                                            </button>
+                                                        </li>
+                                                        <li>
+                                                            <button class="dropdown-item"
+                                                                    type="button"
+                                                                    [disabled]="isTransferredToLivraison(achat)"
+                                                                    [class.text-muted]="isTransferredToLivraison(achat)"
+                                                                    (click)="transfererVersLivraison(achat, $event)">
+                                                                <i class="fas me-2" [ngClass]="isTransferredToLivraison(achat) ? 'fa-check-circle' : 'fa-exchange-alt'"></i>
+                                                                {{ isTransferredToLivraison(achat) ? 'Deja transfere en BL' : 'Transfert vers BL' }}
+                                                            </button>
+                                                        </li>
+                                                        <li *ngIf="isTransferredToLivraison(achat)">
+                                                            <button class="dropdown-item" type="button" (click)="viewLivraison(achat, $event)">
+                                                                <i class="fas fa-eye me-2"></i> Voir BL
+                                                            </button>
+                                                        </li>
+                                                        <li>
+                                                            <button class="dropdown-item" type="button" (click)="imprimerSortieStock(achat.document_id, $event)">
+                                                                <i class="fas fa-print me-2"></i> Impression
+                                                            </button>
+                                                        </li>
+                                                    </ul>
+                                                </div>
                                             </td>
                                         </tr>
 
@@ -224,7 +255,7 @@
                                                 <div class="p-3">
                                                     <div class="row mb-3">
                                                         <div class="col-md-6">
-                                                            <strong>Client:</strong> {{ achat.client || achat.client_nom }}
+                                                            <strong>Client:</strong> {{ getClientDisplay(achat) }}
                                                         </div>
                                                         <div class="col-md-6 text-end">
                                                             <strong>Date:</strong> {{ achat.date | date:'dd/MM/yyyy' }}
@@ -242,30 +273,29 @@
                                                     </h6>
 
                                                     <div class="table-responsive">
-                                                        <table class="table table-sm table-bordered">
+                                                        <table class="table table-sm table-bordered stock-detail-table">
                                                             <thead class="table-light">
                                                                 <tr>
-                                                                    <th style="width: 40%;">Article</th>
+                                                                    <th style="width: 52%;">Designation</th>
+                                                                    <th style="width: 28%;">Rubrique</th>
                                                                     <th style="width: 20%;" class="text-center">Quantité</th>
-                                                                    <th style="width: 20%;" class="text-end">Prix</th>
-                                                                    <th style="width: 20%;" class="text-end">Total HT</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
                                                                 <tr *ngIf="isLoadingDetails(achat.document_id)">
-                                                                    <td colspan="4" class="detail-loading">
+                                                                    <td colspan="3" class="detail-loading">
                                                                         <small>Chargement des détails...</small>
                                                                     </td>
                                                                 </tr>
                                                                 <tr *ngFor="let detail of getAchatDetails(achat.document_id)">
-                                                                    <td>{{ detail.article_nom || detail.designation }}</td>
-                                                                    <td class="text-center">{{ detail.quantite }}</td>
-                                                                    <td class="text-end">{{ detail.prix | number:'1.2-2' }} dh</td>
-                                                                    <td class="text-end">{{ (detail.quantite * detail.prix) | number:'1.2-2' }} dh</td>
+                                                                    <td>{{ detail.designation || detail.article_nom || detail.description || '-' }}</td>
+                                                                    <td>{{ detail.rubrique_nom || '-' }}</td>
+                                                                    <td class="text-center">{{ detail.qte || detail.quantite || 0 }}</td>
                                                                 </tr>
-                                                                <tr *ngIf="getAchatDetails(achat.document_id).length > 0" class="table-secondary fw-bold">
-                                                                    <td colspan="3" class="text-end">Total:</td>
-                                                                    <td class="text-end">{{ achat.total_ht | number:'1.2-2' }} dh</td>
+                                                                <tr *ngIf="!isLoadingDetails(achat.document_id) && getAchatDetails(achat.document_id).length === 0">
+                                                                    <td colspan="3" class="detail-loading">
+                                                                        <small>Aucune ligne de detail.</small>
+                                                                    </td>
                                                                 </tr>
                                                             </tbody>
                                                         </table>

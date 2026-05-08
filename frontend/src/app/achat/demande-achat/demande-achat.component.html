@@ -55,6 +55,10 @@
                                     <label for="Date" class="form-label">Date Création</label>
                                     <input type="datetime-local" class="form-control" id="date" formControlName="date" />
                                 </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="date_fin" class="form-label">Date livraison</label>
+                                    <input type="date" class="form-control" id="date_fin" formControlName="date_fin" />
+                                </div>
                                 <div class="col-md-12 mb-3">
                                     <label for="Description" class="form-label">Description</label>
                                     <input type="text" class="form-control" id="description" placeholder="Ex: Description"
@@ -231,6 +235,26 @@
                                                 </div>
                                             </div>
                                         </th>
+                                        <th *ngIf="columnVisibility.date_fin" 
+                                            (click)="onSort('date_fin')" 
+                                            (contextmenu)="showColumnContextMenu($event, 'date_fin')"
+                                            class="sortable column-header" 
+                                            style="cursor: pointer; width: 125px;"
+                                            [style.width]="columnWidths.date_fin"
+                                            [class.pinned-column]="isColumnPinned('date_fin')">
+                                            <div class="d-flex align-items-center justify-content-between">
+                                                <span>Date livraison</span>
+                                                <div class="d-flex align-items-center gap-1">
+                                                    <i *ngIf="isColumnPinned('date_fin')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
+                                                    <i class="fas ms-1" [ngClass]="getSortIcon('date_fin')"></i>
+                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
+                                                            (click)="openColumnMenu($event, 'date_fin')"
+                                                            style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
+                                                        <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </th>
                                         <th *ngIf="columnVisibility.fournisseur" 
                                             (click)="onSort('fournisseur')" 
                                             (contextmenu)="showColumnContextMenu($event, 'fournisseur')"
@@ -284,6 +308,11 @@
                                                    [(ngModel)]="columnFilters.date" (change)="onColumnFilterChange('date', $any($event.target).value)"
                                                    style="font-size: 0.85rem;">
                                         </th>
+                                        <th *ngIf="columnVisibility.date_fin" style="padding: 4px; position: relative;">
+                                            <input type="date" class="form-control form-control-sm filter-input"
+                                                   [(ngModel)]="columnFilters.date_fin" (change)="onColumnFilterChange('date_fin', $any($event.target).value)"
+                                                   style="font-size: 0.85rem;">
+                                        </th>
                                         <th *ngIf="columnVisibility.fournisseur" style="padding: 4px; position: relative;">
                                             <input type="text" class="form-control form-control-sm filter-input" placeholder="Rechercher..."
                                                    [(ngModel)]="columnFilters.fournisseur" (input)="onColumnFilterChange('fournisseur', $any($event.target).value)"
@@ -317,6 +346,7 @@
                                     <tr *ngFor="let da of demandesAchat; let i = index">
                                         <td *ngIf="columnVisibility.numero">{{ da.numero }}</td>
                                         <td *ngIf="columnVisibility.date">{{ da.date ? (da.date | date:'dd/MM/yyyy') : '-' }}</td>
+                                        <td *ngIf="columnVisibility.date_fin">{{ da.date_fin ? (da.date_fin | date:'dd/MM/yyyy') : '-' }}</td>
                                         <td *ngIf="columnVisibility.fournisseur">{{ da.fournisseur || '-' }}</td>
                                         <td *ngIf="columnVisibility.description">{{ da.description || '-' }}</td>
                                         <td class="text-center">
@@ -416,4 +446,3 @@
     <span>Réinitialiser les colonnes</span>
   </div>
 </div>
-

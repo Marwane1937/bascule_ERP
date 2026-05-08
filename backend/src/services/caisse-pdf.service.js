@@ -89,11 +89,185 @@ function drawRoundedRectOutline(doc, x, y, width, height, radius, options = {}) 
   doc.restore();
 }
 
+function normalizePdfNumber(value, defaultValue = 0) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : defaultValue;
+}
+
+function formatPdfCurrency(value) {
+  return `${normalizePdfNumber(value, 0).toFixed(2)} DH`;
+}
+
+function formatSignedAmountWords(amount) {
+  const normalizedAmount = normalizePdfNumber(amount, 0);
+  const amountWords = formatAmount(Math.abs(normalizedAmount)).words;
+  return normalizedAmount < 0 ? `moins ${amountWords}` : amountWords;
+}
+
+function switchToBufferedPage(doc, pageIndex) {
+  const pageRange = doc.bufferedPageRange();
+  if (!pageRange || pageRange.count <= 0) {
+    return false;
+  }
+
+  const start = Number.isFinite(pageRange.start) ? pageRange.start : 0;
+  const end = start + pageRange.count - 1;
+  if (pageIndex < start || pageIndex > end) {
+    return false;
+  }
+
+  doc.switchToPage(pageIndex);
+  return true;
+}
+
+function ensureCaissePageSpace(doc, currentY, requiredHeight, context) {
+  const firstPageLimit = context.footerY - context.footerHeight - 10;
+  const otherPageLimit = 760;
+  const currentLimit = context.pageNumber === 1 ? firstPageLimit : otherPageLimit;
+
+  if (currentY + requiredHeight <= currentLimit) {
+    return { y: currentY, pageBreak: false };
+  }
+
+  doc.addPage();
+  context.pageNumber += 1;
+  return { y: 50, pageBreak: true };
+}
+
+function drawCaisseSummaryCard(doc, x, y, width, height, label, value, fillColor) {
+  drawRoundedRectOutline(doc, x, y, width, height, 8, {
+    fillColor,
+    strokeColor: fillColor,
+    lineWidth: 1
+  });
+
+  doc.font('Helvetica-Bold')
+    .fontSize(8)
+    .fillColor('#FFFFFF')
+    .text(label.toUpperCase(), x + 10, y + 10, { width: width - 20 });
+
+  doc.font('Helvetica-Bold')
+    .fontSize(14)
+    .text(formatPdfCurrency(value), x + 10, y + 28, { width: width - 20 });
+}
+
+function drawCaisseSectionHeader(doc, title, color, currentY, layout) {
+  doc.fontSize(12).font('Helvetica-Bold').fillColor(color).text(title, 50, currentY);
+  const tableTop = currentY + 18;
+  doc.rect(50, tableTop, layout.tableWidth, layout.headerHeight).fill(color);
+  doc.fontSize(9).font('Helvetica-Bold').fillColor('#FFFFFF');
+
+  layout.headers.forEach((header, index) => {
+    const align = index === 2 ? 'center' : index >= 3 ? 'right' : 'left';
+    const padding = index >= 2 ? 3 : 4;
+    doc.text(header, layout.colX[index] + padding, tableTop + 7, {
+      width: layout.colWidths[index] - (padding * 2),
+      align
+    });
+  });
+
+  return tableTop + layout.headerHeight;
+}
+
+function drawCaisseDetailsSection(doc, title, color, details, startY, context, affectation, emptyMessage) {
+  const layout = {
+    tableWidth: 495,
+    headerHeight: 24,
+    colWidths: [185, 140, 55, 55, 60],
+    colX: [50, 235, 375, 430, 485],
+    headers: ['Rubrique', 'Employe', 'Quantite', 'Montant', 'Total']
+  };
+
+  let sectionSpace = ensureCaissePageSpace(doc, startY, 44, context);
+  let currentY = drawCaisseSectionHeader(doc, title, color, sectionSpace.y, layout);
+
+  if (!details.length) {
+    const emptySpace = ensureCaissePageSpace(doc, currentY, 26, context);
+    currentY = emptySpace.y;
+    if (emptySpace.pageBreak) {
+      currentY = drawCaisseSectionHeader(doc, title, color, currentY, layout);
+    }
+
+    doc.fontSize(10).font('Helvetica').fillColor('#666666').text(emptyMessage, 55, currentY + 6);
+    return { currentY: currentY + 30, total: 0 };
+  }
+
+  let totalSection = 0;
+
+  details.forEach((detail, index) => {
+    const quantite = normalizePdfNumber(detail?.quantite, 1);
+    const montant = normalizePdfNumber(detail?.montant, 0);
+    const total = quantite * montant;
+    totalSection += total;
+
+    const rubriqueText = String(detail?.rubrique || detail?.description || '-').trim() || '-';
+    const employeText = String(detail?.employe_nom_complet || detail?.employe || affectation || '-').trim() || '-';
+
+    doc.fontSize(9).font('Helvetica');
+    const rubriqueHeight = doc.heightOfString(rubriqueText, { width: layout.colWidths[0] - 8 });
+    const employeHeight = doc.heightOfString(employeText, { width: layout.colWidths[1] - 8 });
+    const rowHeight = Math.max(20, Math.max(rubriqueHeight, employeHeight) + 8);
+
+    const rowSpace = ensureCaissePageSpace(doc, currentY, rowHeight + 28, context);
+    currentY = rowSpace.y;
+    if (rowSpace.pageBreak) {
+      currentY = drawCaisseSectionHeader(doc, title, color, currentY, layout);
+    }
+
+    if (index % 2 === 0) {
+      doc.rect(50, currentY, layout.tableWidth, rowHeight).fill('#F5F5F5');
+    }
+
+    doc.fontSize(9).font('Helvetica').fillColor('#000000');
+    doc.text(rubriqueText, layout.colX[0] + 4, currentY + 6, {
+      width: layout.colWidths[0] - 8,
+      align: 'left'
+    });
+    doc.text(employeText, layout.colX[1] + 4, currentY + 6, {
+      width: layout.colWidths[1] - 8,
+      align: 'left'
+    });
+
+    const numberY = rowHeight > 20 ? currentY + (rowHeight / 2) - 4 : currentY + 6;
+    doc.text(quantite.toString(), layout.colX[2] + 2, numberY, {
+      width: layout.colWidths[2] - 4,
+      align: 'center'
+    });
+    doc.text(montant.toFixed(2), layout.colX[3] + 2, numberY, {
+      width: layout.colWidths[3] - 4,
+      align: 'right'
+    });
+    doc.text(total.toFixed(2), layout.colX[4] + 2, numberY, {
+      width: layout.colWidths[4] - 4,
+      align: 'right'
+    });
+
+    currentY += rowHeight;
+  });
+
+  const totalSpace = ensureCaissePageSpace(doc, currentY + 6, 28, context);
+  currentY = totalSpace.y;
+  if (totalSpace.pageBreak) {
+    currentY = drawCaisseSectionHeader(doc, title, color, currentY, layout);
+  }
+
+  currentY += 6;
+  doc.rect(50, currentY, layout.tableWidth, 24).fill('#D9DEE7');
+  doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000');
+  doc.text(`TOTAL ${title.toUpperCase()}:`, layout.colX[0] + 4, currentY + 7);
+  doc.text(totalSection.toFixed(2), layout.colX[4] + 2, currentY + 7, {
+    width: layout.colWidths[4] - 4,
+    align: 'right'
+  });
+
+  return { currentY: currentY + 32, total: totalSection };
+}
+
 async function genererCaissePDF(caisseData, options = {}) {
   return new Promise((resolve, reject) => {
     try {
 
-      const doc = new PDFDocument({ size: 'A4', margin: 50 });
+      const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
       const fileName = `caisse_${caisseData.numero || caisseData.id}_${Date.now()}.pdf`;
       const folderPath = path.join(__dirname, '..', 'public', 'caisses');
 
@@ -114,6 +288,8 @@ async function genererCaissePDF(caisseData, options = {}) {
       // === EN-TÊTE ENTREPRISE (même format que facturation) ===
       // Récupérer la taille du logo depuis la configuration
       const logoSize = options.documentSociete?.logoSize || { width: 100, height: null };
+      const configuredLogoTop = Number(options.documentSociete?.logoTop);
+      const logoTop = Number.isFinite(configuredLogoTop) ? configuredLogoTop : 14;
       const imageOptions = { width: logoSize.width };
       if (logoSize.height) {
         imageOptions.height = logoSize.height;
@@ -123,15 +299,15 @@ async function genererCaissePDF(caisseData, options = {}) {
       if (options.documentSociete && options.documentSociete.logo) {
         try {
           const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-          doc.image(logoBuffer, 50, 20, imageOptions);
+          doc.image(logoBuffer, 50, logoTop, imageOptions);
         } catch (error) {
           console.warn('Erreur affichage logo personnalisé, utilisation du logo par défaut:', error);
-          const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
+          const logoPath = options.documentSociete?.logoPath;
+          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop, imageOptions);
         }
       } else {
-        const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-        if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
+        const logoPath = options.documentSociete?.logoPath;
+        if (fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop, imageOptions);
       }
 
       // Utiliser l'en-tête personnalisé si disponible - à côté du logo
@@ -323,11 +499,7 @@ async function genererCaissePDF(caisseData, options = {}) {
       // === PIED DE PAGE ===
       // Dessiner le footer UNIQUEMENT sur la première page (page 0)
       // Utiliser switchToPage pour retourner à la première page avant doc.end()
-      const pageRange = doc.bufferedPageRange();
-      if (pageRange && pageRange.count > 0) {
-        // Retourner à la première page (index 0)
-        doc.switchToPage(0);
-      }
+      switchToBufferedPage(doc, 0);
 
       const footerLineSpacing = 5;
       const separatorLineY = footerY + 2;
@@ -377,6 +549,157 @@ async function genererCaissePDF(caisseData, options = {}) {
 }
 
 // Générer un rapport PDF avec plusieurs caisses (plage de dates)
+async function genererCaisseJourneePDF(caisseData, options = {}) {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
+      const fileName = `caisse_journee_${caisseData.numero || caisseData.id}_${Date.now()}.pdf`;
+      const folderPath = path.join(__dirname, '..', 'public', 'caisses');
+
+      if (!fs.existsSync(folderPath)) {
+        fs.mkdirSync(folderPath, { recursive: true });
+      }
+
+      const filePath = path.join(folderPath, fileName);
+      const stream = fs.createWriteStream(filePath);
+      doc.pipe(stream);
+
+      const logoSize = options.documentSociete?.logoSize || { width: 100, height: null };
+      const configuredLogoTop = Number(options.documentSociete?.logoTop);
+      const logoTop = Number.isFinite(configuredLogoTop) ? configuredLogoTop : 14;
+      const imageOptions = { width: logoSize.width };
+      if (logoSize.height) {
+        imageOptions.height = logoSize.height;
+      }
+
+      if (options.documentSociete?.logo) {
+        try {
+          const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
+          doc.image(logoBuffer, 50, logoTop, imageOptions);
+        } catch (error) {
+          const logoPath = options.documentSociete?.logoPath;
+          if (fs.existsSync(logoPath)) {
+            doc.image(logoPath, 50, logoTop, imageOptions);
+          }
+        }
+      } else {
+        const logoPath = options.documentSociete?.logoPath;
+        if (fs.existsSync(logoPath)) {
+          doc.image(logoPath, 50, logoTop, imageOptions);
+        }
+      }
+
+      if (options.documentSociete?.entete) {
+        const entete = options.documentSociete.entete;
+        if (typeof entete === 'object' || (typeof entete === 'string' && entete.trim())) {
+          renderFormattedText(doc, entete, {
+            startX: 160,
+            startY: 20,
+            defaultFontSize: 10,
+            defaultColor: '#046ba7',
+            defaultFont: 'Helvetica-Bold',
+            defaultAlign: 'left',
+            defaultLineSpacing: 12,
+            width: 435
+          });
+        }
+      }
+
+      doc.rect(40, 100, 520, 1).fill('#000');
+      doc.fontSize(18)
+        .font('Helvetica-Bold')
+        .fillColor('#000')
+        .text('ETAT JOURNEE CAISSE - RECETTES / DEPENSES', 50, 120);
+
+      let yPos = 170;
+      doc.fontSize(10).font('Helvetica');
+      drawRoundedRectOutline(doc, 50, yPos, 495, 80, 8);
+
+      doc.font('Helvetica-Bold').text('Numero:', 60, yPos + 10);
+      doc.font('Helvetica').text(caisseData.numero || 'N/A', 130, yPos + 10);
+      doc.font('Helvetica-Bold').text('Date:', 60, yPos + 25);
+      doc.font('Helvetica').text(caisseData.date ? new Date(caisseData.date).toLocaleDateString('fr-FR') : 'N/A', 130, yPos + 25);
+      doc.font('Helvetica-Bold').text('Description:', 60, yPos + 40);
+      doc.font('Helvetica').text(caisseData.description || '-', 130, yPos + 40, { width: 350 });
+      doc.font('Helvetica-Bold').text('Affectation:', 60, yPos + 55);
+      doc.font('Helvetica').text(caisseData.affectation || '-', 130, yPos + 55);
+      doc.font('Helvetica-Bold').text('Etat:', 350, yPos + 10);
+      doc.font('Helvetica').text(caisseData.etat === 1 || caisseData.etat === '1' ? 'Cloturee' : 'Ouverte', 400, yPos + 10);
+
+      const pageHeight = 842;
+      const bottomMargin = 40;
+      const footerHeight = 50;
+      const footerY = pageHeight - bottomMargin - footerHeight;
+      const pageContext = { pageNumber: 1, footerY, footerHeight };
+
+      const allDetails = Array.isArray(caisseData.details) ? caisseData.details : [];
+      const recetteDetails = allDetails.filter((detail) => Number(detail?.sens) !== -1);
+      const depenseDetails = allDetails.filter((detail) => Number(detail?.sens) === -1);
+      const totalRecettes = normalizePdfNumber(
+        caisseData.total_recettes,
+        recetteDetails.reduce((sum, detail) => sum + (normalizePdfNumber(detail?.quantite, 0) * normalizePdfNumber(detail?.montant, 0)), 0)
+      );
+      const totalDepenses = normalizePdfNumber(
+        caisseData.total_depenses,
+        depenseDetails.reduce((sum, detail) => sum + (normalizePdfNumber(detail?.quantite, 0) * normalizePdfNumber(detail?.montant, 0)), 0)
+      );
+      const fond = normalizePdfNumber(caisseData.fond, 0);
+      const soldeNet = normalizePdfNumber(caisseData.solde_net, fond + totalRecettes - totalDepenses);
+
+      const summaryY = 265;
+      const summaryWidth = 117;
+      const summaryHeight = 54;
+      const summaryGap = 9;
+      drawCaisseSummaryCard(doc, 50, summaryY, summaryWidth, summaryHeight, 'Fond de caisse', fond, '#475569');
+      drawCaisseSummaryCard(doc, 50 + (summaryWidth + summaryGap), summaryY, summaryWidth, summaryHeight, 'Total recettes', totalRecettes, '#16A34A');
+      drawCaisseSummaryCard(doc, 50 + ((summaryWidth + summaryGap) * 2), summaryY, summaryWidth, summaryHeight, 'Total depenses', totalDepenses, '#DC2626');
+      drawCaisseSummaryCard(doc, 50 + ((summaryWidth + summaryGap) * 3), summaryY, summaryWidth, summaryHeight, 'Solde net', soldeNet, '#0284C7');
+
+      let currentY = 340;
+      const recetteSection = drawCaisseDetailsSection(doc, 'Recettes', '#16A34A', recetteDetails, currentY, pageContext, caisseData.affectation, 'Aucune ligne de recette pour cette journee.');
+      currentY = recetteSection.currentY + 10;
+      const depenseSection = drawCaisseDetailsSection(doc, 'Depenses', '#DC2626', depenseDetails, currentY, pageContext, caisseData.affectation, 'Aucune ligne de depense pour cette journee.');
+      currentY = depenseSection.currentY + 12;
+
+      switchToBufferedPage(doc, 0);
+
+      const separatorLineY = footerY + 2;
+      const footerStartY = separatorLineY + 8;
+      doc.rect(0, footerY, 595, footerHeight).fill('#FFFFFF');
+      doc.strokeColor('#000').lineWidth(1.5);
+      doc.moveTo(50, separatorLineY).lineTo(545, separatorLineY).stroke();
+
+      if (options.documentSociete?.pied_page) {
+        const piedPage = options.documentSociete.pied_page;
+        if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
+          renderFormattedText(doc, piedPage, {
+            startX: 50,
+            startY: footerStartY,
+            defaultFontSize: 7,
+            defaultColor: '#000000',
+            defaultFont: 'Helvetica',
+            defaultAlign: 'center',
+            defaultLineSpacing: 5,
+            width: 495
+          });
+        }
+      }
+
+      doc.end();
+
+      stream.on('finish', () => resolve(filePath));
+      stream.on('error', (error) => {
+        console.error('[genererCaisseJourneePDF] Erreur lors de l\'ecriture du fichier:', error);
+        reject(error);
+      });
+    } catch (error) {
+      console.error('[genererCaisseJourneePDF] Erreur dans la generation du PDF:', error);
+      console.error('[genererCaisseJourneePDF] Stack:', error.stack);
+      reject(error);
+    }
+  });
+}
+
 async function genererRapportCaissePDF(donnees, options = {}) {
   return new Promise(async (resolve, reject) => {
     try {
@@ -399,6 +722,8 @@ async function genererRapportCaissePDF(donnees, options = {}) {
       // === ENTÊTE ENTREPRISE (même format que facturation) ===
       // Récupérer la taille du logo depuis la configuration
       const logoSize2 = options.documentSociete?.logoSize || { width: 100, height: null };
+      const configuredLogoTop2 = Number(options.documentSociete?.logoTop);
+      const logoTop2 = Number.isFinite(configuredLogoTop2) ? configuredLogoTop2 : 14;
       const imageOptions2 = { width: logoSize2.width };
       if (logoSize2.height) {
         imageOptions2.height = logoSize2.height;
@@ -408,15 +733,15 @@ async function genererRapportCaissePDF(donnees, options = {}) {
       if (options.documentSociete && options.documentSociete.logo) {
         try {
           const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-          doc.image(logoBuffer, 50, 20, imageOptions2);
+          doc.image(logoBuffer, 50, logoTop2, imageOptions2);
         } catch (error) {
           console.warn('Erreur affichage logo personnalisé, utilisation du logo par défaut:', error);
-          const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions2);
+          const logoPath = options.documentSociete?.logoPath;
+          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop2, imageOptions2);
         }
       } else {
-        const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-        if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions2);
+        const logoPath = options.documentSociete?.logoPath;
+        if (fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop2, imageOptions2);
       }
 
       // Utiliser l'en-tête personnalisé si disponible - à côté du logo
@@ -512,7 +837,7 @@ async function genererRapportCaissePDF(donnees, options = {}) {
 
       for (const docItem of documents) {
         try {
-          const documentData = await caisseModel.getCaisseDocumentById(docItem.id);
+          const documentData = await caisseModel.getCaisseDocumentById(docItem.id, options.sequelizeConnection || null);
           if (documentData && documentData.details && documentData.details.length > 0) {
             // Filtrer les détails par employé si employeId est fourni
             const detailsToProcess = employeId
@@ -528,7 +853,7 @@ async function genererRapportCaissePDF(donnees, options = {}) {
                 ...detail,
                 document_numero: docItem.numero,
                 document_date: docItem.date,
-                document_sens: docItem.sens
+                document_sens: detail.sens
               });
             });
           }
@@ -1038,9 +1363,11 @@ async function genererCaissePDFByEmploye(caisseData, employeId, options = {}) {
       doc.pipe(stream);
 
       // === EN-TÊTE ===
-      const logoPath = path.join(__dirname, '..', 'public', 'Cactus.png');
+      const configuredLogoTopResume = Number(options.documentSociete?.logoTop);
+      const logoTopResume = Number.isFinite(configuredLogoTopResume) ? configuredLogoTopResume : 24;
+      const logoPath = options.documentSociete?.logoPath || path.join(__dirname, '..', 'public', 'Cactus.png');
       if (fs.existsSync(logoPath)) {
-        doc.image(logoPath, 50, 30, { width: 70 });
+        doc.image(logoPath, 50, logoTopResume, { width: 70 });
       }
 
       // Utiliser l'en-tête personnalisé si disponible - à côté du logo
@@ -1682,7 +2009,7 @@ async function genererBonDeCaissePDF(bonDeCaisseData, options = {}) {
 async function genererRapportCaisseGroup2000_3000PDF(donnees, options = {}) {
   return new Promise(async (resolve, reject) => {
     try {
-      const doc = new PDFDocument({ size: 'A4', margin: 50 });
+      const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
       const fileName = `rapport_rubriques_${donnees.dateFrom || 'all'}_${donnees.dateTo || 'all'}_${Date.now()}.pdf`;
       const folderPath = path.join(__dirname, '..', 'public', 'caisses');
 
@@ -1697,6 +2024,8 @@ async function genererRapportCaisseGroup2000_3000PDF(donnees, options = {}) {
       // === ENTÊTE ENTREPRISE ===
       // Récupérer la taille du logo depuis la configuration
       const logoSize3 = options.documentSociete?.logoSize || { width: 100, height: null };
+      const configuredLogoTop3 = Number(options.documentSociete?.logoTop);
+      const logoTop3 = Number.isFinite(configuredLogoTop3) ? configuredLogoTop3 : 14;
       const imageOptions3 = { width: logoSize3.width };
       if (logoSize3.height) {
         imageOptions3.height = logoSize3.height;
@@ -1705,14 +2034,14 @@ async function genererRapportCaisseGroup2000_3000PDF(donnees, options = {}) {
       if (options.documentSociete && options.documentSociete.logo) {
         try {
           const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-          doc.image(logoBuffer, 50, 20, imageOptions3);
+          doc.image(logoBuffer, 50, logoTop3, imageOptions3);
         } catch (error) {
-          const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions3);
+          const logoPath = options.documentSociete?.logoPath;
+          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop3, imageOptions3);
         }
       } else {
-        const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-        if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions3);
+        const logoPath = options.documentSociete?.logoPath;
+        if (fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop3, imageOptions3);
       }
 
       if (options.documentSociete && options.documentSociete.entete) {
@@ -1832,10 +2161,7 @@ async function genererRapportCaisseGroup2000_3000PDF(donnees, options = {}) {
       }
 
       // === FOOTER ===
-      const pageRange = doc.bufferedPageRange();
-      if (pageRange && pageRange.count > 0) {
-        doc.switchToPage(0);
-      }
+      switchToBufferedPage(doc, 0);
 
       const footerY = 842 - 40 - 50;
       doc.rect(0, footerY, 595, 50).fill('#FFFFFF');
@@ -1956,6 +2282,8 @@ async function genererInterventionPDF(interventionId, options = {}) {
       const drawDocumentHeader = () => {
         // Récupérer la taille du logo depuis la configuration
         const logoSize4 = options.documentSociete?.logoSize || { width: 100, height: null };
+        const configuredLogoTop4 = Number(options.documentSociete?.logoTop);
+        const logoTop4 = Number.isFinite(configuredLogoTop4) ? configuredLogoTop4 : 14;
         const imageOptions4 = { width: logoSize4.width };
         if (logoSize4.height) {
           imageOptions4.height = logoSize4.height;
@@ -1965,20 +2293,20 @@ async function genererInterventionPDF(interventionId, options = {}) {
         if (options.documentSociete && options.documentSociete.logo) {
           try {
             const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-            doc.image(logoBuffer, 50, 20, imageOptions4);
+            doc.image(logoBuffer, 50, logoTop4, imageOptions4);
           } catch (error) {
             console.warn('[genererInterventionPDF] Erreur affichage logo personnalisé, utilisation du logo par défaut:', error);
             // Fallback au logo par défaut si besoin
-            const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
+            const logoPath = options.documentSociete?.logoPath;
             if (fs.existsSync(logoPath)) {
-              doc.image(logoPath, 50, 20, imageOptions4);
+              doc.image(logoPath, 50, logoTop4, imageOptions4);
             }
           }
         } else {
           // Fallback au logo par défaut si pas de configuration
-          const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
+          const logoPath = options.documentSociete?.logoPath;
           if (fs.existsSync(logoPath)) {
-            doc.image(logoPath, 50, 20, imageOptions4);
+            doc.image(logoPath, 50, logoTop4, imageOptions4);
           }
         }
 
@@ -2186,6 +2514,7 @@ async function genererInterventionPDF(interventionId, options = {}) {
 
 module.exports = {
   genererCaissePDF,
+  genererCaisseJourneePDF,
   genererRapportCaissePDF,
   genererRapportCaissePDFByEmploye,
   genererCaissePDFByEmploye,

@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+﻿import { Injectable } from '@angular/core';
 import { AuthService, UserPermission } from './auth.service';
 import { MenuItem, MenuCategory } from './user-permissions.service';
 
@@ -13,6 +13,7 @@ export class PermissionsService {
     '/Fournisseur': 'Fournisseur',
     '/Commercial': 'Commercial',
     '/Produit': 'Produit',
+    '/Warehouse': 'Warehouse',
     '/Famille': 'Famille',
     '/Ville': 'Ville',
     '/Banque': 'Banque',
@@ -32,9 +33,11 @@ export class PermissionsService {
     '/Reglement': 'Règlements',
     '/Finance/Bordereau-Remise': 'Bordereau de Remise',
     '/Caisse': 'Caisse',
-    '/Caisse-Recettes': 'Recettes',
-    '/Caisse-Depenses': 'Dépenses',
-    '/Stock/Entree': 'Entrée Stock',
+    '/Caisse-Recette-Depense': 'Recette/Dépense',
+    '/Caisse-Recettes': 'Recette/Dépense',
+    '/Caisse-Depenses': 'Recette/Dépense',
+    '/Stock/Preparation': 'Préparation',
+    '/Stock/Entrepot': 'Entrepôt',
     '/Stock/Sortie': 'Sortie Stock',
     '/Stock/Inventaire': 'Inventaire Stock',
     '/Stock/Historique': 'Historique Stock',
@@ -51,28 +54,28 @@ export class PermissionsService {
 
   constructor(private authService: AuthService) {}
 
-  // Helper pour vérifier l'accès (gère différents formats)
+  // Helper pour vÃ©rifier l'accÃ¨s (gÃ¨re diffÃ©rents formats)
   private checkAccess(access: number | boolean | string | undefined): boolean {
     if (access === undefined || access === null) {
       return false;
     }
     
-    // Si c'est déjà un booléen true, retourner true immédiatement
+    // Si c'est dÃ©jÃ  un boolÃ©en true, retourner true immÃ©diatement
     if (access === true) {
       return true;
     }
     
-    // Si c'est déjà un booléen false, retourner false immédiatement
+    // Si c'est dÃ©jÃ  un boolÃ©en false, retourner false immÃ©diatement
     if (access === false) {
       return false;
     }
     
-    // Si c'est déjà un nombre 1, retourner true
+    // Si c'est dÃ©jÃ  un nombre 1, retourner true
     if (access === 1) {
       return true;
     }
     
-    // Si c'est déjà un nombre 0, retourner false
+    // Si c'est dÃ©jÃ  un nombre 0, retourner false
     if (access === 0) {
       return false;
     }
@@ -84,38 +87,29 @@ export class PermissionsService {
     return hasAccess;
   }
 
-  // Vérifier si l'utilisateur a accès à une route
+  // VÃ©rifier si l'utilisateur a accÃ¨s Ã  une route
   /**
-   * Vérifier si l'utilisateur a une permission spécifique
+   * VÃ©rifier si l'utilisateur a une permission spÃ©cifique
    */
   hasPermission(permission: string): boolean {
-    const permissions = this.authService.getUserPermissions();
-    const hasPermission = permissions.some(p => 
-      p.menu_item === permission && this.checkAccess(p.access)
-    );
-    
-    // Les admins ont tous les droits (type === 1)
-    const currentUser = this.authService.getCurrentUser();
-    const isAdmin = currentUser && currentUser.type === 1;
-    
-    return hasPermission || isAdmin || false;
+    return this.authService.hasPermission(permission);
   }
 
   hasAccessToRoute(route: string): boolean {
     const menuName = this.routeToMenuNameMap[route];
     if (!menuName) {
-      // Si la route n'est pas dans le mapping, autoriser par défaut (pour les routes publiques)
+      // Si la route n'est pas dans le mapping, autoriser par dÃ©faut (pour les routes publiques)
       return true;
     }
     return this.authService.hasPermission(menuName);
   }
 
-  // Filtrer les catégories de menu selon les permissions
+  // Filtrer les catÃ©gories de menu selon les permissions
   filterMenuCategories(categories: MenuCategory[]): MenuCategory[] {
     const permissions = this.authService.getUserPermissions();
     const currentUser = this.authService.getCurrentUser();
     
-    // Si l'utilisateur est admin (type 1), afficher toutes les catégories
+    // Si l'utilisateur est admin (type 1), afficher toutes les catÃ©gories
     if (currentUser && currentUser.type === 1) {
       return categories;
     }
@@ -140,7 +134,7 @@ export class PermissionsService {
           return dbName === itemName;
         });
         
-        // Si pas trouvé, chercher avec comparaison insensible à la casse
+        // Si pas trouvÃ©, chercher avec comparaison insensible Ã  la casse
         if (!permission) {
           permission = permissions.find(p => {
             const dbName = String(p.menu_item || '').trim().toLowerCase();
@@ -149,7 +143,7 @@ export class PermissionsService {
           });
         }
         
-        // Si pas trouvé, chercher une permission pour la catégorie (pour compatibilité)
+        // Si pas trouvÃ©, chercher une permission pour la catÃ©gorie (pour compatibilitÃ©)
         if (!permission) {
           permission = permissions.find(p => {
             const dbName = String(p.menu_item || '').trim();
@@ -158,8 +152,9 @@ export class PermissionsService {
           });
         }
         
-        // Gérer les deux formats : 1/0 (int) ou true/false (bool) ou '1'/'0' (string)
-        const hasAccess = permission ? this.checkAccess(permission.access) : false;
+        // GÃ©rer les alias hÃ©ritÃ©s comme Recettes/DÃ©penses -> Caisse
+        const hasAccess = this.authService.hasPermission(String(item.name || '').trim())
+          || (permission ? this.checkAccess(permission.access) : false);
         
         return hasAccess;
       });
@@ -168,14 +163,13 @@ export class PermissionsService {
         ...category,
         items: filteredItems
       };
-    }).filter(category => category.items.length > 0); // Retirer les catégories vides
+    }).filter(category => category.items.length > 0); // Retirer les catÃ©gories vides
     
     return filtered;
   }
 
-  // Filtrer les items d'une catégorie selon les permissions
+  // Filtrer les items d'une catÃ©gorie selon les permissions
   filterMenuItems(items: MenuItem[]): MenuItem[] {
-    const permissions = this.authService.getUserPermissions();
     const currentUser = this.authService.getCurrentUser();
     
     // Si l'utilisateur est admin, tout autoriser
@@ -183,11 +177,7 @@ export class PermissionsService {
       return items;
     }
 
-    return items.filter(item => {
-      const permission = permissions.find(p => p.menu_item === item.name);
-      // Utiliser checkAccess pour gérer les différents formats (booléen, nombre, string)
-      return permission ? this.checkAccess(permission.access) : false;
-    });
+    return items.filter(item => this.authService.hasPermission(item.name));
   }
 }
 

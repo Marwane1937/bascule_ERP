@@ -139,3 +139,15 @@ body.black-mode-active .main-panel {
     margin-bottom: 0.5rem;
   }
 }
+
+.swal2-container.contrat-success-toast-container {
+  z-index: 30050 !important;
+}
+
+.swal2-container.contrat-success-toast-container.swal2-top-end {
+  inset: 12px 12px auto auto !important;
+}
+
+.swal2-popup.contrat-success-toast {
+  margin-top: 0 !important;
+}

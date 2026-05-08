@@ -1,17 +1,17 @@
-const UserPermission = require('../models/user_permissions.model');
+﻿const UserPermission = require('../models/user_permissions.model');
 const User = require('../models/user.model');
 const { getConnection } = require('../config/database');
 const databaseSwitchService = require('./database-switch.service');
 
 class UserPermissionsService {
-  // Récupérer toutes les permissions d'un utilisateur
+  // RÃ©cupÃ©rer toutes les permissions d'un utilisateur
   async getUserPermissions(userId, sequelizeConnection = null) {
     try {
-      //console.log('[UserPermissionsService] 🔍 Récupération permissions pour userId:', userId);
-      //console.log('[UserPermissionsService] 🔍 Connexion fournie:', !!sequelizeConnection);
+      //console.log('[UserPermissionsService] ðŸ” RÃ©cupÃ©ration permissions pour userId:', userId);
+      //console.log('[UserPermissionsService] ðŸ” Connexion fournie:', !!sequelizeConnection);
 
       if (!userId) {
-        throw new Error('userId est requis pour récupérer les permissions');
+        throw new Error('userId est requis pour rÃ©cupÃ©rer les permissions');
       }
 
       // Utiliser la connexion fournie, sinon getConnection() pour avoir la connexion active
@@ -21,12 +21,12 @@ class UserPermissionsService {
         throw new Error('Aucune connexion Sequelize disponible');
       }
 
-      // console.log('[UserPermissionsService] 🔍 Base de données utilisée:', sequelize.config?.database || sequelize.getDatabaseName?.() || 'Non spécifiée');
-      // console.log('[UserPermissionsService] 🔍 Exécution requête SQL...');
-      // console.log('[UserPermissionsService] 🔍 Requête: SELECT id, user_id, menu_item, access FROM user_permissions WHERE user_id = :userId');
-      // console.log('[UserPermissionsService] 🔍 Paramètres: userId =', userId);
+      // console.log('[UserPermissionsService] ðŸ” Base de donnÃ©es utilisÃ©e:', sequelize.config?.database || sequelize.getDatabaseName?.() || 'Non spÃ©cifiÃ©e');
+      // console.log('[UserPermissionsService] ðŸ” ExÃ©cution requÃªte SQL...');
+      // console.log('[UserPermissionsService] ðŸ” RequÃªte: SELECT id, user_id, menu_item, access FROM user_permissions WHERE user_id = :userId');
+      // console.log('[UserPermissionsService] ðŸ” ParamÃ¨tres: userId =', userId);
 
-      // Vérifier d'abord si la table existe (pour SQL Server)
+      // VÃ©rifier d'abord si la table existe (pour SQL Server)
       try {
         const tableCheck = await sequelize.query(
           `SELECT COUNT(*) as count FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'user_permissions' AND TABLE_SCHEMA = 'dbo'`,
@@ -34,21 +34,21 @@ class UserPermissionsService {
             type: sequelize.QueryTypes.SELECT
           }
         );
-        // console.log('[UserPermissionsService] 🔍 Vérification table user_permissions:', tableCheck);
+        // console.log('[UserPermissionsService] ðŸ” VÃ©rification table user_permissions:', tableCheck);
         const tableExists = tableCheck && tableCheck.length > 0 && (tableCheck[0].count > 0 || tableCheck[0].count === 1);
-        //  console.log('[UserPermissionsService] 🔍 Table user_permissions existe:', tableExists);
+        //  console.log('[UserPermissionsService] ðŸ” Table user_permissions existe:', tableExists);
 
         if (!tableExists) {
-          console.warn('[UserPermissionsService] ⚠️ La table user_permissions n\'existe pas dans cette base de données');
-          console.warn('[UserPermissionsService] ⚠️ Base de données:', sequelize.config?.database || 'Non spécifiée');
+          console.warn('[UserPermissionsService] âš ï¸ La table user_permissions n\'existe pas dans cette base de donnÃ©es');
+          console.warn('[UserPermissionsService] âš ï¸ Base de donnÃ©es:', sequelize.config?.database || 'Non spÃ©cifiÃ©e');
           return [];
         }
       } catch (tableCheckError) {
-        console.warn('[UserPermissionsService] ⚠️ Impossible de vérifier l\'existence de la table:', tableCheckError.message);
-        // On continue quand même, peut-être que la requête fonctionnera
+        console.warn('[UserPermissionsService] âš ï¸ Impossible de vÃ©rifier l\'existence de la table:', tableCheckError.message);
+        // On continue quand mÃªme, peut-Ãªtre que la requÃªte fonctionnera
       }
 
-      // Exécuter la requête pour récupérer les permissions
+      // ExÃ©cuter la requÃªte pour rÃ©cupÃ©rer les permissions
       const permissions = await sequelize.query(
         `SELECT id, user_id, menu_item, access FROM user_permissions WHERE user_id = :userId`,
         {
@@ -57,23 +57,23 @@ class UserPermissionsService {
         }
       );
 
-      //   console.log('[UserPermissionsService] ✅ Requête exécutée avec succès');
-      //   console.log('[UserPermissionsService] ✅ Permissions trouvées:', permissions.length);
+      //   console.log('[UserPermissionsService] âœ… RequÃªte exÃ©cutÃ©e avec succÃ¨s');
+      //   console.log('[UserPermissionsService] âœ… Permissions trouvÃ©es:', permissions.length);
 
       if (permissions.length > 0) {
-        console.log('[UserPermissionsService] 📋 Permissions:', JSON.stringify(permissions, null, 2));
+        console.log('[UserPermissionsService] ðŸ“‹ Permissions:', JSON.stringify(permissions, null, 2));
       } else {
-        console.warn('[UserPermissionsService] ⚠️ Aucune permission trouvée pour userId:', userId);
-        console.warn('[UserPermissionsService] ⚠️ Vérifiez que la table user_permissions existe et contient des données pour cet utilisateur');
+        console.warn('[UserPermissionsService] âš ï¸ Aucune permission trouvÃ©e pour userId:', userId);
+        console.warn('[UserPermissionsService] âš ï¸ VÃ©rifiez que la table user_permissions existe et contient des donnÃ©es pour cet utilisateur');
       }
 
       return permissions;
     } catch (error) {
-      console.error('[UserPermissionsService] ❌ Erreur récupération permissions:', error);
-      console.error('[UserPermissionsService] ❌ Message:', error.message);
-      console.error('[UserPermissionsService] ❌ Code:', error.code);
-      console.error('[UserPermissionsService] ❌ Nom:', error.name);
-      console.error('[UserPermissionsService] ❌ Stack trace:', error.stack);
+      console.error('[UserPermissionsService] âŒ Erreur rÃ©cupÃ©ration permissions:', error);
+      console.error('[UserPermissionsService] âŒ Message:', error.message);
+      console.error('[UserPermissionsService] âŒ Code:', error.code);
+      console.error('[UserPermissionsService] âŒ Nom:', error.name);
+      console.error('[UserPermissionsService] âŒ Stack trace:', error.stack);
 
       // Si c'est une erreur de table inexistante, retourner un tableau vide au lieu de throw
       if (error.message && (
@@ -81,8 +81,8 @@ class UserPermissionsService {
         error.message.includes('Table') && error.message.includes("doesn't exist") ||
         error.message.includes('relation') && error.message.includes('does not exist')
       )) {
-        console.warn('[UserPermissionsService] ⚠️ La table user_permissions n\'existe pas dans cette base de données');
-        console.warn('[UserPermissionsService] ⚠️ Retour d\'un tableau vide');
+        console.warn('[UserPermissionsService] âš ï¸ La table user_permissions n\'existe pas dans cette base de donnÃ©es');
+        console.warn('[UserPermissionsService] âš ï¸ Retour d\'un tableau vide');
         return [];
       }
 
@@ -90,13 +90,13 @@ class UserPermissionsService {
     }
   }
 
-  // Mettre à jour les permissions d'un utilisateur
+  // Mettre Ã  jour les permissions d'un utilisateur
   async updateUserPermissions(userId, permissions, sequelizeConnection = null) {
     try {
       // Utiliser la connexion fournie, sinon getConnection() pour avoir la connexion active
       const sequelize = sequelizeConnection || getConnection();
 
-      // Vérifier que l'utilisateur existe
+      // VÃ©rifier que l'utilisateur existe
       const User = sequelizeConnection
         ? (sequelizeConnection.models && sequelizeConnection.models.User
           ? sequelizeConnection.models.User
@@ -112,7 +112,7 @@ class UserPermissionsService {
       );
 
       if (!user || user.length === 0) {
-        throw new Error('Utilisateur non trouvé');
+        throw new Error('Utilisateur non trouvÃ©');
       }
 
       // Supprimer toutes les permissions existantes pour cet utilisateur
@@ -124,10 +124,10 @@ class UserPermissionsService {
         }
       );
 
-      // Insérer TOUTES les permissions (avec access = 0 ou 1) pour préserver l'état
+      // InsÃ©rer TOUTES les permissions (avec access = 0 ou 1) pour prÃ©server l'Ã©tat
       if (permissions && permissions.length > 0) {
 
-        // Utiliser des paramètres pour éviter l'injection SQL
+        // Utiliser des paramÃ¨tres pour Ã©viter l'injection SQL
         const insertPromises = permissions.map(permission => {
           // Normaliser la valeur d'access (convertir true/false en 1/0)
           let accessValue = permission.access;
@@ -154,10 +154,10 @@ class UserPermissionsService {
       } else {
       }
 
-      // Retourner les permissions mises à jour
+      // Retourner les permissions mises Ã  jour
       return await this.getUserPermissions(userId, sequelizeConnection);
     } catch (error) {
-      console.error('Erreur mise à jour permissions:', error);
+      console.error('Erreur mise Ã  jour permissions:', error);
       throw error;
     }
   }
@@ -175,6 +175,7 @@ class UserPermissionsService {
           { name: 'Véhicule', route: '/Vehicule' },
           { name: 'Commercial', route: '/Commercial' },
           { name: 'Produit', route: '/Produit' },
+          { name: 'Warehouse', route: '/Warehouse' },
           { name: 'Famille', route: '/Famille' },
           { name: 'Ville', route: '/Ville' },
           { name: 'Banque', route: '/Banque' },
@@ -216,13 +217,16 @@ class UserPermissionsService {
           { name: 'Facture Fournisseur', route: '/Facture-Fournisseur' },
           { name: 'pdf_facture_fournisseur_normal', route: '' },
           { name: 'Réception', route: '/Reception' },
-          { name: 'pdf_reception_normal', route: '' }
+          { name: 'pdf_reception_normal', route: '' },
+          { name: 'Reporting Achats', route: '/Achat/Reporting' }
         ]
       },
       {
         category: 'Stock',
         icon: 'fas fa-boxes',
         items: [
+          { name: 'Préparation', route: '/Stock/Preparation' },
+          { name: 'Entrepôt', route: '/Stock/Entrepot' },
           { name: 'Entrée de stock', route: '/Stock/Entree' },
           { name: 'Sortie de stock', route: '/Stock/Sortie' },
           { name: 'Inventaire', route: '/Stock/Inventaire' },
@@ -247,8 +251,7 @@ class UserPermissionsService {
           { name: 'Bordereau de Remise', route: '/Finance/Bordereau-Remise' },
           { name: 'pdf_bordereau_remise_normal', route: '' },
           { name: 'Caisse', route: '/Caisse' },
-          { name: 'Recettes', route: '/Caisse-Recettes' },
-          { name: 'Dépenses', route: '/Caisse-Depenses' },
+          { name: 'Recette/Dépense', route: '/Caisse-Recette-Depense' },
           { name: 'Reporting Finance', route: '/Finance/Reporting' }
         ]
       },
@@ -287,15 +290,15 @@ class UserPermissionsService {
     ];
   }
 
-  // Déconnecter un utilisateur (invalider ses tokens)
+  // DÃ©connecter un utilisateur (invalider ses tokens)
   async disconnectUser(userId) {
     try {
-      // Cette fonction peut être étendue pour gérer les tokens JWT
-      // Pour l'instant, on retourne juste un succès
-      // Dans une implémentation complète, on pourrait stocker les tokens blacklistés
+      // Cette fonction peut Ãªtre Ã©tendue pour gÃ©rer les tokens JWT
+      // Pour l'instant, on retourne juste un succÃ¨s
+      // Dans une implÃ©mentation complÃ¨te, on pourrait stocker les tokens blacklistÃ©s
       return { success: true, message: 'Utilisateur déconnecté avec succès' };
     } catch (error) {
-      console.error('Erreur déconnexion utilisateur:', error);
+      console.error('Erreur dÃ©connexion utilisateur:', error);
       throw error;
     }
   }

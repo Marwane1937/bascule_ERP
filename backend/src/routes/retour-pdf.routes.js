@@ -100,7 +100,7 @@ router.post('/generate', authenticateToken, checkPdfPermission('retour'), async 
       return res.status(400).json({ success: false, message: 'document_id invalide' });
     }
 
-    const retourData = await getEmailDataByDocumentId(docId);
+    const retourData = await getEmailDataByDocumentId(docId, null, { forceDocumentType: 'RETOUR' });
 
     if (!retourData || retourData.length === 0) {
       console.error('❌ Retour introuvable pour document_id:', docId);
@@ -187,7 +187,7 @@ router.post('/send-whatsapp', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'document_id invalide' });
     }
 
-    const retourData = await getEmailDataByDocumentId(docId);
+    const retourData = await getEmailDataByDocumentId(docId, null, { forceDocumentType: 'RETOUR' });
     if (!retourData || retourData.length === 0) {
       return res.status(404).json({ success: false, message: 'Retour introuvable' });
     }
@@ -316,6 +316,5 @@ router.post('/send-whatsapp', authenticateToken, async (req, res) => {
 });
 
 module.exports = router;
-
 
 

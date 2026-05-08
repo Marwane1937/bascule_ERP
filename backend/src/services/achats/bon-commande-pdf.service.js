@@ -218,6 +218,9 @@ class BonCommandeAchatPdfService {
         // === ENTÊTE ENTREPRISE ===
         // Récupérer la taille du logo depuis la configuration
         const logoSize = options.documentSociete?.logoSize || { width: 100, height: null };
+        const configuredLogoTop = Number(options.documentSociete?.logoTop);
+        const logoTop = Number.isFinite(configuredLogoTop) ? configuredLogoTop : 14;
+        const headerShift = Math.max(0, 14 - logoTop);
         const imageOptions = { width: logoSize.width };
         if (logoSize.height) {
           imageOptions.height = logoSize.height;
@@ -226,15 +229,15 @@ class BonCommandeAchatPdfService {
         if (options.documentSociete && options.documentSociete.logo) {
           try {
             const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-            doc.image(logoBuffer, 50, 20, imageOptions);
+            doc.image(logoBuffer, 50, logoTop, imageOptions);
           } catch (error) {
             console.warn('Erreur affichage logo personnalisé, utilisation du logo par défaut:', error);
-            const logoPath = path.join(__dirname, '..', '..', 'public', 'logo-bascule.jpg');
-            if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
+            const logoPath = options.documentSociete?.logoPath;
+            if (fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop, imageOptions);
           }
         } else {
-          const logoPath = path.join(__dirname, '..', '..', 'public', 'logo-bascule.jpg');
-          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
+          const logoPath = options.documentSociete?.logoPath;
+          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop, imageOptions);
         }
 
         // Utiliser l'en-tête personnalisé si disponible - à côté du logo
@@ -244,7 +247,7 @@ class BonCommandeAchatPdfService {
           if (typeof entete === 'object' || (typeof entete === 'string' && entete.trim())) {
             renderFormattedText(doc, entete, {
               startX: 160,
-              startY: 20,
+              startY: Math.max(8, 20 - headerShift),
               defaultFontSize: 10,
               defaultColor: '#046ba7',
               defaultFont: 'Helvetica-Bold',
@@ -256,13 +259,15 @@ class BonCommandeAchatPdfService {
         }
 
         // Ligne de séparation horizontale
-        doc.rect(40, 100, 520, 1).fill('#000');
+        const separatorY = Math.max(48, 100 - headerShift);
+        doc.rect(40, separatorY, 520, 1).fill('#000');
 
         // === TITRE BON DE COMMANDE ACHAT ===
-        doc.fontSize(18).font('Helvetica-Bold').fillColor('#046ba7').text('BON DE COMMANDE', 50, 120);
+        const titleY = separatorY + 20;
+        doc.fontSize(18).font('Helvetica-Bold').fillColor('#046ba7').text('BON DE COMMANDE', 50, titleY);
 
         // === BLOC FOURNISSEUR ===
-        const fournisseurTop = 110;
+        const fournisseurTop = Math.max(separatorY + 10, 110 - headerShift);
         const fournisseurBoxWidth = 250;
         const fournisseurBoxHeight = 60;
         const fournisseurBoxX = 310;
@@ -276,7 +281,7 @@ class BonCommandeAchatPdfService {
         doc.text(`ICE : ${commandeData[0]?.ice || ''}`, fournisseurBoxX + 10, fournisseurTop + 40);
 
         // === TABLEAU D'EN-TÊTE ===
-        const infoTableY = 190;
+        const infoTableY = Math.max(fournisseurTop + fournisseurBoxHeight + 12, titleY + 42);
         const infoTableHeaderHeight = 25;
         const infoTableRowHeight = 20;
         const infoTableTotalHeight = infoTableHeaderHeight + infoTableRowHeight;
@@ -709,4 +714,3 @@ class BonCommandeAchatPdfService {
 }
 
 module.exports = new BonCommandeAchatPdfService();
-

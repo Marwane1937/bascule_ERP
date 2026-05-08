@@ -30,7 +30,15 @@
 
 .table-responsive {
   max-height: 70vh;
-  overflow-y: auto;
+  overflow: auto;
+}
+
+.vente-reporting-page .page-inner {
+  max-width: none;
+}
+
+.vente-reporting-page .table {
+  min-width: 1180px;
 }
 
 .table th {
@@ -136,14 +144,6 @@
 }
 
 /* Style pour les montants négatifs/positifs */
-.text-end .text-success:before {
-  content: "+";
-}
-
-.text-end .text-danger:before {
-  content: "-";
-}
-
 /* Animation de chargement */
 @keyframes pulse {
   0% { opacity: 1; }
@@ -158,6 +158,23 @@
 /* Style pour les tableaux denses */
 .table-sm th, .table-sm td {
   padding: 0.5rem 0.25rem;
+}
+
+.reporting-autocomplete {
+  top: calc(100% + 2px);
+  left: 0;
+  z-index: 1050;
+  max-height: 240px;
+  overflow-y: auto;
+  border-radius: 0 0 6px 6px;
+}
+
+.reporting-autocomplete-item {
+  cursor: pointer;
+}
+
+.reporting-autocomplete-item:hover {
+  background-color: #eef5ff;
 }
 
 /* === BOUTONS D'EXPORT MODERNES === */
@@ -223,13 +240,3 @@
   transform: translateY(0);
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
-
-
-
-
-
-
-
-
-
-

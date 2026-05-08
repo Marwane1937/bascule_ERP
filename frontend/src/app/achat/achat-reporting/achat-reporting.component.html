@@ -1,0 +1,241 @@
+<div class="container-fluid py-4 achat-reporting-page">
+  <div class="page-inner">
+    <div class="page-header mb-4">
+      <h3 class="fw-bold text-dark">Reporting Achats</h3>
+    </div>
+
+    <ul class="nav nav-tabs mb-4" role="tablist">
+      <li class="nav-item">
+        <button class="nav-link" [class.active]="activeTab === 'factures-fournisseur'" (click)="switchTab('factures-fournisseur')" type="button">
+          <i class="fas fa-file-invoice me-2"></i>Factures fournisseur
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" [class.active]="activeTab === 'achats-fournisseurs'" (click)="switchTab('achats-fournisseurs')" type="button">
+          <i class="fas fa-users me-2"></i>Achats par fournisseur
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" [class.active]="activeTab === 'achats-articles'" (click)="switchTab('achats-articles')" type="button">
+          <i class="fas fa-box me-2"></i>Achats par article
+        </button>
+      </li>
+    </ul>
+
+    <div class="tab-content">
+      <div class="tab-pane fade" [class.show]="activeTab === 'factures-fournisseur'" [class.active]="activeTab === 'factures-fournisseur'">
+        <div class="row mb-3">
+          <div class="col-md-3">
+            <div class="position-relative">
+              <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input class="form-control" placeholder="Rechercher fournisseur..."
+                       [(ngModel)]="facturesFournisseurSearchTerm"
+                       (ngModelChange)="onFournisseurInput('factures-fournisseur', $event)"
+                       (focus)="showFournisseurAutocomplete('factures-fournisseur', facturesFournisseurSearchTerm)"
+                       (blur)="hideAutocompleteDelayed()"
+                       (keyup.enter)="onFacturesSearch()" autocomplete="off">
+                <button class="btn btn-primary" (click)="onFacturesSearch()"><i class="fas fa-search"></i></button>
+              </div>
+              <ul *ngIf="activeAutocomplete === 'factures-fournisseur' && fournisseurSuggestions.length > 0" class="list-group position-absolute w-100 shadow reporting-autocomplete">
+                <li class="list-group-item list-group-item-action reporting-autocomplete-item" *ngFor="let f of fournisseurSuggestions" (mousedown)="selectFournisseur('factures-fournisseur', f)">
+                  <div class="fw-semibold">{{ f.fournisseur_nom }}</div>
+                  <div class="small text-muted">{{ f.nombre_factures || 0 }} facture(s) - {{ formatCurrency(f.total_ttc || 0) }}</div>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div class="col-md-2"><input type="date" class="form-control" [(ngModel)]="facturesFournisseurDateFrom" (change)="getFacturesFournisseur()"></div>
+          <div class="col-md-2"><input type="date" class="form-control" [(ngModel)]="facturesFournisseurDateTo" (change)="getFacturesFournisseur()"></div>
+          <div class="col-md-2">
+            <select class="form-select" [(ngModel)]="facturesFournisseurPageSize" (change)="getFacturesFournisseur()">
+              <option [value]="10">10 par page</option>
+              <option [value]="25">25 par page</option>
+              <option [value]="50">50 par page</option>
+              <option [value]="100">100 par page</option>
+            </select>
+          </div>
+          <div class="col-md-3 text-end">
+            <div class="btn-export-group">
+              <button class="btn-export-pdf" (click)="exportFacturesFournisseur('pdf')" title="Exporter PDF">
+                <i class="fas fa-file-pdf"></i> PDF
+              </button>
+              <button class="btn-export-excel" (click)="exportFacturesFournisseur('excel')" title="Exporter Excel">
+                <i class="fas fa-file-excel"></i> Excel
+              </button>
+              <button class="btn btn-outline-primary" (click)="getFacturesFournisseur()"><i class="fas fa-sync-alt"></i> Actualiser</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h5 class="mb-0">Factures fournisseur</h5></div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                  <tr>
+                    <th>Facture</th><th>Date</th><th>Fournisseur</th><th class="text-end">HT</th><th class="text-end">TVA</th><th class="text-end">TTC</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngIf="facturesFournisseurLoading"><td colspan="6" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>
+                  <tr *ngIf="!facturesFournisseurLoading && facturesFournisseur.length === 0"><td colspan="6" class="text-center text-muted py-4">Aucune donnée trouvée</td></tr>
+                  <tr *ngFor="let item of facturesFournisseur">
+                    <td><strong>{{ item.facture_num || '-' }}</strong></td>
+                    <td>{{ formatDate(item.facture_dat) }}</td>
+                    <td>{{ item.fournisseur_nom || '-' }}</td>
+                    <td class="text-end">{{ formatCurrency(item.total_ht || 0) }}</td>
+                    <td class="text-end">{{ formatCurrency(item.total_tva || 0) }}</td>
+                    <td class="text-end fw-semibold">{{ formatCurrency(item.total_ttc || 0) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mt-3" *ngIf="facturesFournisseurTotalPages > 1">
+              <div class="text-muted">{{ getDisplayRange(facturesFournisseurCurrentPage, facturesFournisseurPageSize, facturesFournisseurTotalRecords) }} sur {{ facturesFournisseurTotalRecords }}</div>
+              <div>
+                <button class="btn btn-sm btn-outline-secondary me-1" [disabled]="facturesFournisseurCurrentPage === 1" (click)="changePage('factures-fournisseur', facturesFournisseurCurrentPage - 1)">Précédent</button>
+                <button class="btn btn-sm btn-outline-secondary" [disabled]="facturesFournisseurCurrentPage === facturesFournisseurTotalPages" (click)="changePage('factures-fournisseur', facturesFournisseurCurrentPage + 1)">Suivant</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-pane fade" [class.show]="activeTab === 'achats-fournisseurs'" [class.active]="activeTab === 'achats-fournisseurs'">
+        <div class="row mb-3">
+          <div class="col-md-3">
+            <div class="position-relative">
+              <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input class="form-control" placeholder="Rechercher fournisseur..."
+                       [(ngModel)]="achatsFournisseursSearchTerm"
+                       (ngModelChange)="onFournisseurInput('achats-fournisseurs', $event)"
+                       (focus)="showFournisseurAutocomplete('achats-fournisseurs', achatsFournisseursSearchTerm)"
+                       (blur)="hideAutocompleteDelayed()"
+                       (keyup.enter)="onFournisseursSearch()" autocomplete="off">
+                <button class="btn btn-primary" (click)="onFournisseursSearch()"><i class="fas fa-search"></i></button>
+              </div>
+              <ul *ngIf="activeAutocomplete === 'achats-fournisseurs' && fournisseurSuggestions.length > 0" class="list-group position-absolute w-100 shadow reporting-autocomplete">
+                <li class="list-group-item list-group-item-action reporting-autocomplete-item" *ngFor="let f of fournisseurSuggestions" (mousedown)="selectFournisseur('achats-fournisseurs', f)">
+                  <div class="fw-semibold">{{ f.fournisseur_nom }}</div>
+                  <div class="small text-muted">{{ f.nombre_factures || 0 }} facture(s) - {{ formatCurrency(f.total_ttc || 0) }}</div>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div class="col-md-2"><input type="date" class="form-control" [(ngModel)]="achatsFournisseursDateFrom" (change)="getAchatsFournisseurs()"></div>
+          <div class="col-md-2"><input type="date" class="form-control" [(ngModel)]="achatsFournisseursDateTo" (change)="getAchatsFournisseurs()"></div>
+          <div class="col-md-2">
+            <select class="form-select" [(ngModel)]="achatsFournisseursPageSize" (change)="getAchatsFournisseurs()">
+              <option [value]="10">10 par page</option><option [value]="25">25 par page</option><option [value]="50">50 par page</option><option [value]="100">100 par page</option>
+            </select>
+          </div>
+          <div class="col-md-3 text-end">
+            <div class="btn-export-group">
+              <button class="btn-export-pdf" (click)="exportAchatsFournisseurs('pdf')" title="Exporter PDF">
+                <i class="fas fa-file-pdf"></i> PDF
+              </button>
+              <button class="btn-export-excel" (click)="exportAchatsFournisseurs('excel')" title="Exporter Excel">
+                <i class="fas fa-file-excel"></i> Excel
+              </button>
+              <button class="btn btn-outline-primary" (click)="getAchatsFournisseurs()"><i class="fas fa-sync-alt"></i> Actualiser</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h5 class="mb-0">Achats par fournisseur</h5></div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-striped table-hover">
+                <thead class="table-dark"><tr><th>Fournisseur</th><th class="text-end">Factures</th><th>Dernière facture</th><th class="text-end">HT</th><th class="text-end">TVA</th><th class="text-end">TTC</th><th class="text-end">Moyenne</th></tr></thead>
+                <tbody>
+                  <tr *ngIf="achatsFournisseursLoading"><td colspan="7" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>
+                  <tr *ngIf="!achatsFournisseursLoading && achatsFournisseurs.length === 0"><td colspan="7" class="text-center text-muted py-4">Aucune donnée trouvée</td></tr>
+                  <tr *ngFor="let item of achatsFournisseurs">
+                    <td><strong>{{ item.fournisseur_nom || '-' }}</strong></td>
+                    <td class="text-end">{{ item.nombre_factures || 0 }}</td>
+                    <td>{{ formatDate(item.derniere_facture_date) || '-' }}</td>
+                    <td class="text-end">{{ formatCurrency(item.total_ht || 0) }}</td>
+                    <td class="text-end">{{ formatCurrency(item.total_tva || 0) }}</td>
+                    <td class="text-end fw-semibold">{{ formatCurrency(item.total_ttc || 0) }}</td>
+                    <td class="text-end">{{ formatCurrency(item.montant_moyen || 0) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-pane fade" [class.show]="activeTab === 'achats-articles'" [class.active]="activeTab === 'achats-articles'">
+        <div class="row mb-3">
+          <div class="col-md-3">
+            <div class="position-relative">
+              <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input class="form-control" placeholder="Rechercher article..."
+                       [(ngModel)]="achatsArticlesSearchTerm"
+                       (ngModelChange)="onArticleInput($event)"
+                       (focus)="showArticleAutocomplete(achatsArticlesSearchTerm)"
+                       (blur)="hideAutocompleteDelayed()"
+                       (keyup.enter)="onArticlesSearch()" autocomplete="off">
+                <button class="btn btn-primary" (click)="onArticlesSearch()"><i class="fas fa-search"></i></button>
+              </div>
+              <ul *ngIf="activeAutocomplete === 'achats-articles' && articleSuggestions.length > 0" class="list-group position-absolute w-100 shadow reporting-autocomplete">
+                <li class="list-group-item list-group-item-action reporting-autocomplete-item" *ngFor="let a of articleSuggestions" (mousedown)="selectArticle(a)">
+                  <div class="fw-semibold">{{ a.article_nom }}</div>
+                  <div class="small text-muted">{{ a.article_cod || '-' }} - {{ a.famille_nom || '-' }}</div>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div class="col-md-2"><input type="date" class="form-control" [(ngModel)]="achatsArticlesDateFrom" (change)="getAchatsArticles()"></div>
+          <div class="col-md-2"><input type="date" class="form-control" [(ngModel)]="achatsArticlesDateTo" (change)="getAchatsArticles()"></div>
+          <div class="col-md-2">
+            <select class="form-select" [(ngModel)]="achatsArticlesPageSize" (change)="getAchatsArticles()">
+              <option [value]="10">10 par page</option><option [value]="25">25 par page</option><option [value]="50">50 par page</option><option [value]="100">100 par page</option>
+            </select>
+          </div>
+          <div class="col-md-3 text-end">
+            <div class="btn-export-group">
+              <button class="btn-export-pdf" (click)="exportAchatsArticles('pdf')" title="Exporter PDF">
+                <i class="fas fa-file-pdf"></i> PDF
+              </button>
+              <button class="btn-export-excel" (click)="exportAchatsArticles('excel')" title="Exporter Excel">
+                <i class="fas fa-file-excel"></i> Excel
+              </button>
+              <button class="btn btn-outline-primary" (click)="getAchatsArticles()"><i class="fas fa-sync-alt"></i> Actualiser</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h5 class="mb-0">Achats par article</h5></div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-striped table-hover">
+                <thead class="table-dark"><tr><th>Code</th><th>Article</th><th>Famille</th><th class="text-end">Quantité</th><th class="text-end">HT</th><th class="text-end">TVA</th><th class="text-end">TTC</th></tr></thead>
+                <tbody>
+                  <tr *ngIf="achatsArticlesLoading"><td colspan="7" class="text-center py-4"><div class="spinner-border text-primary"></div></td></tr>
+                  <tr *ngIf="!achatsArticlesLoading && achatsArticles.length === 0"><td colspan="7" class="text-center text-muted py-4">Aucune donnée trouvée</td></tr>
+                  <tr *ngFor="let item of achatsArticles">
+                    <td><strong>{{ item.article_cod || '-' }}</strong></td>
+                    <td>{{ item.article_nom || '-' }}</td>
+                    <td>{{ item.famille_nom || '-' }}</td>
+                    <td class="text-end">{{ item.quantite || 0 }}</td>
+                    <td class="text-end">{{ formatCurrency(item.total_ht || 0) }}</td>
+                    <td class="text-end">{{ formatCurrency(item.total_tva || 0) }}</td>
+                    <td class="text-end fw-semibold">{{ formatCurrency(item.total_ttc || 0) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

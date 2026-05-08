@@ -169,6 +169,7 @@ export class UsersComponent implements OnInit, AfterViewInit {
       if (result.isConfirmed) {
         this.userService.createUser(result.value).subscribe({
           next: (response: any) => {
+            this.cleanupOverlayArtifacts();
             Swal.fire({
               title: 'Succès',
               text: 'Utilisateur créé avec succès',
@@ -177,6 +178,7 @@ export class UsersComponent implements OnInit, AfterViewInit {
             this.getUsers();
           },
           error: (error: any) => {
+            this.cleanupOverlayArtifacts();
             Swal.fire({
               title: 'Erreur',
               text: 'Impossible de créer l\'utilisateur',
@@ -184,8 +186,22 @@ export class UsersComponent implements OnInit, AfterViewInit {
             });
           }
         });
+      } else {
+        this.cleanupOverlayArtifacts();
       }
     });
+  }
+
+  private cleanupOverlayArtifacts(): void {
+    try {
+      Swal.close();
+      $('body').removeClass('swal2-shown swal2-height-auto modal-open');
+      $('body').css({ overflow: '', 'padding-right': '' });
+      $('.swal2-container').remove();
+      $('.modal-backdrop').remove();
+    } catch {
+      // Nettoyage best-effort
+    }
   }
 
   editUser(user: User): void {

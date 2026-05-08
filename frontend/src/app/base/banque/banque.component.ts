@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import Swal from 'sweetalert2';
+import { environment } from 'src/environments/environment';
 
 @Component({
   selector: 'app-banque',
@@ -8,6 +9,7 @@ import Swal from 'sweetalert2';
   styleUrls: ['./banque.component.css']
 })
 export class BanqueComponent implements OnInit {
+  private readonly apiUrl = environment.apiUrl;
   banques: any[] = [];
   loading: boolean = true;
 
@@ -50,7 +52,7 @@ export class BanqueComponent implements OnInit {
       orderDirection: this.sortDirection
     };
 
-    this.http.get('http://localhost:3500/api/banques', { params }).subscribe({
+    this.http.get(`${this.apiUrl}/banques`, { params }).subscribe({
       next: (response: any) => {
         this.banques = response?.data || [];
         this.totalRecords = response?.pagination?.total || 0;
@@ -153,8 +155,8 @@ export class BanqueComponent implements OnInit {
     }
 
     const url = this.isEditMode
-      ? `http://localhost:3500/api/banques/${this.currentBanque.id}`
-      : 'http://localhost:3500/api/banques';
+      ? `${this.apiUrl}/banques/${this.currentBanque.id}`
+      : `${this.apiUrl}/banques`;
 
     const method = this.isEditMode ? 'put' : 'post';
 
@@ -185,7 +187,7 @@ export class BanqueComponent implements OnInit {
       cancelButtonText: 'Annuler'
     }).then((result) => {
       if (result.isConfirmed) {
-        this.http.delete(`http://localhost:3500/api/banques/${banque.id}`).subscribe({
+        this.http.delete(`${this.apiUrl}/banques/${banque.id}`).subscribe({
           next: () => {
             Swal.fire('Succès', 'Banque supprimée avec succès', 'success');
             this.getBanques();

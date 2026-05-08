@@ -3,50 +3,59 @@ const router = express.Router();
 const sortieStockController = require('../../controllers/stock/sortie-stock.controller');
 const { authenticateToken } = require('../../middleware/auth.middleware');
 const databaseInjector = require('../../middleware/database-injector.middleware');
+const path = require('path');
+const fs = require('fs');
 
-// Middleware pour injecter la connexion appropri√©e
+// Middleware pour injecter la connexion appropriÈe
 router.use(databaseInjector.injectConnection.bind(databaseInjector));
 
-// Cr√©er un router s√©par√© pour les routes publiques (sans authentification)
+// CrÈer un router sÈparÈ pour les routes publiques (sans authentification)
 const publicRouter = express.Router();
 
 // Servir un PDF de sortie de stock directement via GET (route publique)
 publicRouter.get('/:filename', async (req, res) => {
   try {
     const { filename } = req.params;
-    const path = require('path');
-    const fs = require('fs');
 
-    // V√©rifier que le nom de fichier est valide (√©viter les attaques path traversal)
+    // VÈrifier que le nom de fichier est valide (Èviter les attaques path traversal)
     if (!filename || !filename.endsWith('.pdf') || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
       return res.status(400).json({ success: false, message: 'Nom de fichier invalide' });
+    }
+
+    const cacheKey = `sorties-stock/${filename}`;
+
+    // PrioritÈ au cache mÈmoire (compatibilitÈ avec l'ancien comportement)
+    if (global.pdfCache && global.pdfCache.has(cacheKey)) {
+      const cached = global.pdfCache.get(cacheKey);
+      if (cached && cached.buffer) {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+        res.setHeader('Content-Length', cached.buffer.length);
+        return res.send(cached.buffer);
+      }
     }
 
     const sortiesStockDir = path.join(__dirname, '..', '..', 'public', 'sorties-stock');
     const pdfPath = path.join(sortiesStockDir, filename);
 
-    // V√©rifier si le fichier existe
     if (!fs.existsSync(pdfPath)) {
       return res.status(404).json({ success: false, message: 'PDF introuvable' });
     }
 
-    // Servir le fichier PDF
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-    const fileStream = fs.createReadStream(pdfPath);
-    fileStream.pipe(res);
-
+    return fs.createReadStream(pdfPath).pipe(res);
   } catch (error) {
-    console.error('Erreur lors de la r√©cup√©ration du PDF sortie de stock :', error);
+    console.error('Erreur lors de la rÈcupÈration du PDF sortie de stock :', error);
     return res.status(500).json({
       success: false,
-      message: 'Erreur r√©cup√©ration PDF sortie de stock',
+      message: 'Erreur rÈcupÈration PDF sortie de stock',
       error: error.message
     });
   }
 });
 
-// Toutes les autres routes n√©cessitent une authentification
+// Toutes les autres routes nÈcessitent une authentification
 router.use(authenticateToken);
 
 // Routes pour CRUD sortie de stock
@@ -55,71 +64,51 @@ router.get('/next-sortie-stock-numero', sortieStockController.getNextSortieStock
 router.get('/sortie-stock/:id', sortieStockController.getSortieStock);
 router.post('/sortie-stock', sortieStockController.createSortieStock);
 router.put('/sortie-stock/:id', sortieStockController.updateSortieStock);
+router.post('/sortie-stock/transfer-to-livraison', sortieStockController.transferSortieStockToLivraison);
 router.post('/sortie-stock/save', sortieStockController.saveDetail);
 router.post('/sortie-stock/info', sortieStockController.saveInfo);
 router.post('/sortie-stock/delete-lignes', sortieStockController.deleteLignesParIds);
 
-// G√©n√©rer un PDF de sortie de stock
+// GÈnÈrer un PDF de sortie de stock
 router.post('/sortie-stock/generate-pdf', authenticateToken, async (req, res) => {
   try {
     const { document_id, withStamp } = req.body;
     const sequelize = req.sequelize || require('../../config/database').getConnection();
 
     const sortieStockData = await sortieStockController.getSortieStockDataForPdf(document_id, sequelize);
-
     if (!sortieStockData || sortieStockData.length === 0) {
       return res.status(404).json({ success: false, message: 'Sortie de stock introuvable' });
     }
 
-    // R√©cup√©rer les informations du document_societe si disponibles
-    const documentSociete = req.body.documentSociete || null;
+    const pdfConfigService = require('../../services/pdf-config.service');
+    const documentSociete = req.body.documentSociete || pdfConfigService.getDocumentSociete();
 
     const sortieStockPdfService = require('../../services/stock/sortie-stock-pdf.service');
     const pdfPath = await sortieStockPdfService.genererPDF(sortieStockData, {
       withStamp: !!withStamp,
-      documentSociete: documentSociete
+      documentSociete
     });
-
-    const path = require('path');
-    const fs = require('fs');
-    
-    // Lire le PDF en m√©moire et le supprimer imm√©diatement
-    const pdfBuffer = fs.readFileSync(pdfPath);
-    fs.unlinkSync(pdfPath);
 
     const fileName = path.basename(pdfPath);
-    const protocol = req.protocol || 'http';
-    const host = req.get('host') || 'localhost';
-    const baseUrl = process.env.BASE_URL || `${protocol}://${host}`;
-    const pdfUrl = `${baseUrl}/api/stock/sortie-stock/${fileName}`;
-
-    if (!global.pdfCache) {
-      global.pdfCache = new Map();
-    }
-    global.pdfCache.set(`sorties-stock/${fileName}`, {
-      buffer: pdfBuffer,
-      timestamp: Date.now()
-    });
-    setTimeout(() => {
-      if (global.pdfCache) {
-        global.pdfCache.delete(`sorties-stock/${fileName}`);
-      }
-    }, 5 * 60 * 1000);
+    const forwardedProto = req.headers['x-forwarded-proto']?.toString()?.split(',')?.[0]?.trim();
+    const forwardedHost = req.headers['x-forwarded-host']?.toString()?.split(',')?.[0]?.trim();
+    const protocol = forwardedProto || req.protocol || 'http';
+    const host = forwardedHost || req.get('host') || 'localhost';
+    const baseUrl = (process.env.BASE_URL || `${protocol}://${host}`).replace(/\/+$/, '');
+    const pdfUrl = `${baseUrl}/sorties-stock/${encodeURIComponent(fileName)}`;
 
     return res.json({ success: true, pdfUrl });
   } catch (error) {
-    console.error('Erreur g√©n√©ration PDF sortie de stock :', error);
+    console.error('Erreur gÈnÈration PDF sortie de stock :', error);
     return res.status(500).json({
       success: false,
-      message: 'Erreur g√©n√©ration PDF sortie de stock',
+      message: 'Erreur gÈnÈration PDF sortie de stock',
       error: error.message
     });
   }
 });
 
-// Exporter les deux routers : router (prot√©g√©) et publicRouter (public)
 module.exports = {
-  router, // Routes avec authentification (/api/stock/*)
-  publicRouter // Routes publiques (/sorties-stock/*)
+  router,
+  publicRouter
 };
-

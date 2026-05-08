@@ -43,7 +43,7 @@ export class EditSortieStockComponent implements OnInit {
     description: 'Description de l\'entrée de stock',
   };
 
-  produits = [{
+  produits: any[] = [{
     id: 0,
     designation: '',
     article_id: 0,
@@ -54,13 +54,17 @@ export class EditSortieStockComponent implements OnInit {
     total: 0,
     reducMode: 'montant',
     articleSearch: '',
+    depot_id: null,
+    depot_nom: '',
     rubrique_id: null,
     rubrique_nom: ''
   }]
 
+  depots: any[] = [];
   rubriques: any[] = []; // Liste des rubriques (group_id = 7000)
 
   filteredArticles: { [key: number]: any[] } = {}; // Liste filtrée d'articles par index de ligne
+  highlightedArticleIndex: { [key: number]: number } = {};
 
   selectedInfo = {
     document_id: this.route.snapshot.paramMap.get('document_id')!,
@@ -121,7 +125,8 @@ export class EditSortieStockComponent implements OnInit {
       produits: this.baseService.getProduit(),
       clients: this.baseService.getClient(),
       SortieStock: this.stockService.getSortieStockById(id),
-      rubriques: this.listesService.getListesByGroupId(7000)
+      rubriques: this.listesService.getListesByGroupId(7000),
+      depots: this.baseService.getDepots().pipe(catchError(() => of([])))
     }).subscribe({
       next: (data) => {
         // Traitement des produits
@@ -144,7 +149,7 @@ export class EditSortieStockComponent implements OnInit {
         } else {
           clientsData = [];
         }
-        this.clients = clientsData;
+        this.clients = this.filterPartnersByType(clientsData, 1);
         this.filteredClients = [...this.clients];
         
         // Traitement des rubriques
@@ -156,7 +161,25 @@ export class EditSortieStockComponent implements OnInit {
             rubriquesData = (data.rubriques as any).data;
           }
         }
-        this.rubriques = rubriquesData;
+        this.rubriques = (rubriquesData || []).map((r: any) => ({
+          ...r,
+          id: Number(r?.id ?? r?.ID ?? r?.Id),
+          nom: r?.nom ?? r?.Nom ?? ''
+        }));
+
+        let depotsData: any[] = [];
+        if (data.depots) {
+          if (Array.isArray(data.depots)) {
+            depotsData = data.depots;
+          } else if ((data.depots as any).data && Array.isArray((data.depots as any).data)) {
+            depotsData = (data.depots as any).data;
+          }
+        }
+        this.depots = (depotsData || []).map((d: any) => ({
+          ...d,
+          id: Number(d?.id ?? d?.depot_id ?? d?.ID ?? d?.Id),
+          nom: d?.nom ?? d?.name ?? d?.label ?? ''
+        })).filter((d: any) => Number.isFinite(d.id));
         
         // Traitement de l'entrée de stock (après que clients soient prêts)
         this.processSortieStockData(data.SortieStock);
@@ -181,6 +204,15 @@ export class EditSortieStockComponent implements OnInit {
   }
 
   // Traitement des données d'entrée de stock après chargement parallèle
+  private isPartnerOfType(partner: any, expectedType: number): boolean {
+    const partnerType = Number(partner?.type ?? partner?.part_type ?? partner?.partenaire_type);
+    return !Number.isFinite(partnerType) || partnerType === expectedType;
+  }
+
+  private filterPartnersByType(partners: any[], expectedType: number): any[] {
+    return (Array.isArray(partners) ? partners : []).filter((partner: any) => this.isPartnerOfType(partner, expectedType));
+  }
+
   private processSortieStockData(response: any): void {
     const data = response?.data || response;
 
@@ -229,7 +261,7 @@ export class EditSortieStockComponent implements OnInit {
         }
 
         const articleTrouve = this.produits1.find((a: any) => +a.article_id === +d.article_id);
-        const rubriqueTrouvee = this.rubriques.find((r: any) => r.id === d.rubrique_id);
+        const rubriqueTrouvee = this.rubriques.find((r: any) => +r.id === +d.rubrique_id);
 
         return {
           id: d.id,
@@ -242,7 +274,9 @@ export class EditSortieStockComponent implements OnInit {
           reducMode: 'montant',
           taxe: d.tva || 0.2,
           total: 0, // Total retiré
-          rubrique_id: d.rubrique_id || null,
+          depot_id: d.depot_id != null ? Number(d.depot_id) : null,
+          depot_nom: d.depot_nom || '',
+          rubrique_id: d.rubrique_id != null ? Number(d.rubrique_id) : null,
           rubrique_nom: d.rubrique_nom || rubriqueTrouvee?.nom || ''
         };
       });
@@ -434,7 +468,7 @@ export class EditSortieStockComponent implements OnInit {
           const designation = detail.designation || detail.description || produitTrouve?.article_nom || '';
 
           // Trouver la rubrique correspondante
-          const rubriqueTrouvee = this.rubriques.find((r: any) => r.id === detail.rubrique_id);
+          const rubriqueTrouvee = this.rubriques.find((r: any) => +r.id === +detail.rubrique_id);
 
           return {
             id: detail.id ?? detail.detail_id ?? 0,
@@ -447,7 +481,9 @@ export class EditSortieStockComponent implements OnInit {
             taxe: +taxe,
             total: 0,
             articleSearch: produitTrouve ? produitTrouve.article_nom : (designation || ''),
-            rubrique_id: detail.rubrique_id || null,
+            depot_id: detail.depot_id != null ? Number(detail.depot_id) : null,
+            depot_nom: detail.depot_nom || '',
+            rubrique_id: detail.rubrique_id != null ? Number(detail.rubrique_id) : null,
             rubrique_nom: rubriqueTrouvee?.nom || ''
           };
         });
@@ -464,6 +500,8 @@ export class EditSortieStockComponent implements OnInit {
             total: 0,
             reducMode: 'montant',
             articleSearch: '',
+            depot_id: null,
+            depot_nom: '',
             rubrique_id: null,
             rubrique_nom: ''
           }];
@@ -652,6 +690,8 @@ export class EditSortieStockComponent implements OnInit {
       total: 0,
       reducMode: 'montant',
       articleSearch: '',
+      depot_id: null,
+      depot_nom: '',
       rubrique_id: null,
       rubrique_nom: ''
     });
@@ -701,6 +741,7 @@ export class EditSortieStockComponent implements OnInit {
   onArticleSearchChange(index: number, term: string) {
     if (!term) {
       this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
       return;
     }
 
@@ -708,6 +749,7 @@ export class EditSortieStockComponent implements OnInit {
 
     if (term.length === 0) {
       this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
       return;
     }
 
@@ -717,6 +759,7 @@ export class EditSortieStockComponent implements OnInit {
         this.filteredArticles[index] = this.produits1.filter((article: any) =>
           article.article_nom && article.article_nom.toLowerCase().includes(term)
         );
+        this.highlightedArticleIndex[index] = this.filteredArticles[index].length ? 0 : -1;
       });
       return;
     }
@@ -724,12 +767,45 @@ export class EditSortieStockComponent implements OnInit {
     this.filteredArticles[index] = this.produits1.filter((article: any) =>
       article.article_nom && article.article_nom.toLowerCase().includes(term)
     );
+    this.highlightedArticleIndex[index] = this.filteredArticles[index].length ? 0 : -1;
+  }
+
+  onArticleSearchKeydown(index: number, event: KeyboardEvent) {
+    const articles = this.filteredArticles[index] || [];
+    if (!articles.length) return;
+
+    const currentIndex = this.highlightedArticleIndex[index] ?? -1;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.highlightedArticleIndex[index] = currentIndex < articles.length - 1 ? currentIndex + 1 : 0;
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.highlightedArticleIndex[index] = currentIndex > 0 ? currentIndex - 1 : articles.length - 1;
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const selectedArticle = articles[currentIndex >= 0 ? currentIndex : 0];
+      if (selectedArticle) this.selectArticle(index, selectedArticle);
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
+    }
   }
 
   selectArticle(index: number, article: any) {
     this.produits[index].article_id = article.article_id;
     this.produits[index].articleSearch = article.article_nom;
     this.filteredArticles[index] = [];
+    this.highlightedArticleIndex[index] = -1;
 
     // Mettre à jour les autres propriétés
     this.produits[index].designation = article.article_nom;
@@ -743,13 +819,29 @@ export class EditSortieStockComponent implements OnInit {
   onRubriqueChange(index: number) {
     const produit = this.produits[index];
     if (produit.rubrique_id) {
-      const rubriqueTrouvee = this.rubriques.find((r: any) => r.id === produit.rubrique_id);
+      const rubriqueId = Number(produit.rubrique_id);
+      const rubriqueTrouvee = this.rubriques.find((r: any) => Number(r.id) === rubriqueId);
       produit.rubrique_nom = rubriqueTrouvee?.nom || '';
     } else {
       produit.rubrique_nom = '';
     }
     // Forcer la détection des changements pour mettre à jour l'affichage
     this.cdr.detectChanges();
+  }
+
+  onDepotChange(index: number) {
+    const produit = this.produits[index];
+    if (!produit) return;
+
+    if (produit.depot_id != null && produit.depot_id !== '') {
+      const depotId = Number(produit.depot_id);
+      const depotTrouve = this.depots.find((d: any) => Number(d.id) === depotId);
+      produit.depot_id = Number.isFinite(depotId) ? depotId : null;
+      produit.depot_nom = depotTrouve?.nom || '';
+    } else {
+      produit.depot_id = null;
+      produit.depot_nom = '';
+    }
   }
 
   AllClients() {
@@ -765,7 +857,7 @@ export class EditSortieStockComponent implements OnInit {
           clientsData = [];
         }
 
-        this.clients = clientsData;
+        this.clients = this.filterPartnersByType(clientsData, 1);
         this.filteredClients = [...this.clients];
       },
       error: (err) => {
@@ -808,6 +900,7 @@ export class EditSortieStockComponent implements OnInit {
           qte: p.qte,
           tva: desiredTax,
           document_id,
+          depot_id: p.depot_id || null,
           rubrique_id: p.rubrique_id || null,
           update_mode: 'I'
         };
@@ -823,6 +916,7 @@ export class EditSortieStockComponent implements OnInit {
         p.designation !== pOriginal.designation ||
         p.article_id !== pOriginal.article_id ||
         p.qte !== pOriginal.qte ||
+        p.depot_id !== pOriginal.depot_id ||
         p.rubrique_id !== pOriginal.rubrique_id ||
         desiredTax !== pOriginal.taxe
       );
@@ -836,6 +930,7 @@ export class EditSortieStockComponent implements OnInit {
           qte: p.qte,
           tva: desiredTax,
           document_id,
+          depot_id: p.depot_id || null,
           rubrique_id: p.rubrique_id || null,
           update_mode: 'U',
         };
@@ -1164,4 +1259,3 @@ export class EditSortieStockComponent implements OnInit {
     });
   }
 }
-

@@ -1,11 +1,16 @@
-const livraisonModel = require('../../models/ventes/livraison.model');
+﻿const livraisonModel = require('../../models/ventes/livraison.model');
 const { getCompteurFormate } = require('../compteur.service');
+const {
+  getVenteDocumentQuillCandidates,
+  loadQuillRowsByDocument,
+  mergeDetailsWithQuill
+} = require('../../models/ventes/quill-table.helper');
 
 // Obtenir toutes les livraisons avec pagination
 const getLivraisons = async (options = {}, sequelizeConnection = null) => {
   try {
     const result = await livraisonModel.getAllLivraisons(options, sequelizeConnection);
-    // Si le résultat contient déjà data et pagination, le retourner tel quel
+    // Si le r?sultat contient d?j? data et pagination, le retourner tel quel
     if (result && result.data && result.pagination) {
       return result;
     }
@@ -34,45 +39,58 @@ const getLivraisons = async (options = {}, sequelizeConnection = null) => {
   }
 };
 
-// Obtenir toutes les commandes non livrées (pour la pop-up de transfert)
+const getLivraisonLocationByNumero = async (numero, options = {}, sequelizeConnection = null) => {
+  const location = await livraisonModel.getLivraisonLocationByNumero(numero, options, sequelizeConnection);
+  if (!location) {
+    throw new Error('Livraison non trouvée');
+  }
+  return location;
+};
+
+// Obtenir toutes les commandes non livr?es (pour la pop-up de transfert)
 const getCommandesNonLivrees = async (sequelizeConnection = null) => {
   return await livraisonModel.getAllCommandesNonLivrees(sequelizeConnection);
+};
+
+const getCommandeProgress = async (commandeId, sequelizeConnection = null) => {
+  return await livraisonModel.getCommandeProgress(commandeId, sequelizeConnection);
 };
 
 // Obtenir une livraison par ID
 const getLivraison = async (id, sequelizeConnection = null) => {
   const livraison = await livraisonModel.getLivraisonById(id, sequelizeConnection);
   if (!livraison) {
-    throw new Error('Livraison non trouvée');
+    throw new Error('Livraison non trouv?e');
   }
   return livraison;
 };
 
-// Générer le prochain numéro de livraison avec le compteur (sans incrémenter pour l'affichage)
+// G?n?rer le prochain num?ro de livraison avec le compteur (sans incr?menter pour l'affichage)
 const getNextLivraisonNumero = async (sequelizeConnection = null) => {
   const { getCompteurFormatePreview } = require('../compteur.service');
-  // Utiliser Preview pour ne pas incrémenter avant la création réelle
+  // Utiliser Preview pour ne pas incr?menter avant la cr?ation r?elle
   const numeroFormate = await getCompteurFormatePreview('BLC', 'BL', sequelizeConnection);
   return { numero: numeroFormate };
 };
 
-// Créer une nouvelle livraison dans stock (avec etat=1 et type=2) - le compteur est géré dans addLivraisonFromCommande maintenant
+// Cr?er une nouvelle livraison dans stock (avec etat=1 et type=2) - le compteur est g?r? dans addLivraisonFromCommande maintenant
 const createLivraison = async (livraisonData, sequelizeConnection = null) => {
 
-  // Passer numero vide pour que addLivraisonFromCommande génère automatiquement depuis le compteur
+  // Passer numero vide pour que addLivraisonFromCommande g?n?re automatiquement depuis le compteur
   const stockId = await livraisonModel.addLivraisonFromCommande({
-    numero: '', // Vide pour génération automatique
+    numero: '', // Vide pour g?n?ration automatique
     date: livraisonData.date || null,
     description: livraisonData.description || null,
     part_id: livraisonData.part_id || null,
     contact_id: livraisonData.contact_id || null,
+    depot_id: livraisonData.depot_id || null,
     type: 2, // Type = 2 pour livraison
-    etat: 1, // État = 1
-    parent: null // Pas de parent pour une livraison créée manuellement
+    etat: 1, // Etat = 1
+    parent: null // Pas de parent pour une livraison cr?e manuellement
   }, sequelizeConnection);
 
 
-  // Récupérer le numéro depuis la base de données
+  // R?cup?rer le num?ro depuis la base de donn?es
   const sequelize = sequelizeConnection || require('../../config/database').getConnection();
   const [livraison] = await sequelize.query(
     'SELECT numero FROM stock WHERE id = :id',
@@ -92,10 +110,10 @@ const createLivraison = async (livraisonData, sequelizeConnection = null) => {
   };
 };
 
-// Transférer une commande vers une livraison
+// Transf?rer une commande vers une livraison
 const transfererCommandeVersLivraison = async (commandeId, sequelizeConnection = null) => {
 
-  // Récupérer la commande originale depuis vente_document
+  // R?cup?rer la commande originale depuis vente_document
   const sequelize = sequelizeConnection || require('../../config/database').getConnection();
 
   const [commande] = await sequelize.query(
@@ -107,25 +125,26 @@ const transfererCommandeVersLivraison = async (commandeId, sequelizeConnection =
   );
 
   if (!commande || commande.length === 0) {
-    throw new Error('Commande non trouvée');
+    throw new Error('Commande non trouv?e');
   }
 
   const commandeData = Array.isArray(commande) ? commande[0] : commande;
 
-  // Créer la nouvelle livraison dans stock avec type = 2, etat = 1, et parent = document_id de la commande
-  // Le compteur est géré dans addLivraisonFromCommande maintenant
+  // Cr?er la nouvelle livraison dans stock avec type = 2, etat = 1, et parent = document_id de la commande
+  // Le compteur est g?r? dans addLivraisonFromCommande maintenant
   const stockId = await livraisonModel.addLivraisonFromCommande({
-    numero: '', // Vide pour génération automatique
+    numero: '', // Vide pour g?n?ration automatique
     date: commandeData.date,
     description: commandeData.description,
     part_id: commandeData.part_id,
     contact_id: commandeData.contact_id,
+    depot_id: commandeData.depot_id || commandeData.adresse_id || null,
     type: 2, // Type = 2 pour livraison depuis commande
-    etat: 1, // État = 1
+    etat: 1, // Etat = 1
     parent: commandeId // Stocker le document_id de la commande dans parent
   }, sequelizeConnection);
 
-  // Récupérer le numéro depuis la base de données
+  // R?cup?rer le num?ro depuis la base de donn?es
   const [livraisonResult] = await sequelize.query(
     'SELECT numero FROM stock WHERE id = :id',
     {
@@ -136,8 +155,8 @@ const transfererCommandeVersLivraison = async (commandeId, sequelizeConnection =
   const livraisonData = Array.isArray(livraisonResult) ? livraisonResult[0] : livraisonResult;
   const numeroFormate = livraisonData?.numero || '';
 
-  // Copier les détails de la commande dans stock_detail
-  // Sequelize avec QueryTypes.SELECT retourne directement le tableau de résultats (comme dans devis.model.js)
+  // Copier les d?tails de la commande dans stock_detail
+  // Sequelize avec QueryTypes.SELECT retourne directement le tableau de r?sultats (comme dans devis.model.js)
   const details = await sequelize.query(
     'SELECT * FROM vente_document_detail WHERE document_id = :id',
     {
@@ -147,23 +166,33 @@ const transfererCommandeVersLivraison = async (commandeId, sequelizeConnection =
   );
 
   if (!Array.isArray(details)) {
-    console.error('❌ Erreur: details n\'est pas un tableau. Type:', typeof details, 'Valeur:', JSON.stringify(details));
-    throw new Error('Erreur lors de la récupération des détails de la commande: details is not iterable');
+    console.error('Erreur Erreur: details n\'est pas un tableau. Type:', typeof details, 'Valeur:', JSON.stringify(details));
+    throw new Error('Erreur lors de la r?cup?ration des d?tails de la commande: details is not iterable');
   }
 
   if (details.length === 0) {
-    console.warn('⚠️ Aucun détail trouvé pour la commande:', commandeId);
+    console.warn('Attention Aucun d?tail trouv? pour la commande:', commandeId);
   } else {
   }
 
-  for (const detail of details) {
+  const detailsWithDesignation = mergeDetailsWithQuill(
+    details,
+    await loadQuillRowsByDocument(sequelize, commandeId, getVenteDocumentQuillCandidates(2)),
+    {
+      detailIdField: 'id',
+      designationField: 'designation',
+      fallbackFields: ['description']
+    }
+  );
+
+  for (const detail of detailsWithDesignation) {
     await livraisonModel.saveDetailStock({
       stock_id: stockId,
       article_id: detail.article_id,
       quantite: detail.quantite || detail.qte || 0,
       prix: detail.prix || detail.pu || 0,
       taux_tva: detail.taux_tva || detail.tva || 0,
-      description: detail.description || '',
+      description: detail.designation || detail.description || '',
       remise: detail.remise != null ? detail.remise : 0,
       remise_montant: detail.remise_montant != null ? detail.remise_montant : 0
     }, sequelizeConnection);
@@ -176,15 +205,23 @@ const transfererCommandeVersLivraison = async (commandeId, sequelizeConnection =
   };
 };
 
-// Mettre à jour une livraison
+// Mettre ? jour une livraison
 const updateLivraison = async (id, livraisonData, sequelizeConnection = null) => {
   await livraisonModel.updateLivraison(id, livraisonData, sequelizeConnection);
   return await livraisonModel.getLivraisonById(id, sequelizeConnection);
 };
 
-// Sauvegarder les détails d'une livraison (traitement en lot)
+// Sauvegarder les d?tails d'une livraison (traitement en lot)
 const saveDetail = async ({ lignes }, sequelizeConnection = null) => {
   return await livraisonModel.saveDetailLines(lignes, sequelizeConnection);
+};
+
+const saveComposition = async ({ documentId, lignes }, sequelizeConnection = null) => {
+  return await livraisonModel.saveCompositionLines(documentId, lignes, sequelizeConnection);
+};
+
+const saveLots = async ({ documentId, lignes }, sequelizeConnection = null) => {
+  return await livraisonModel.saveLotDetailLines(documentId, lignes, sequelizeConnection);
 };
 
 // Sauvegarder les informations d'une livraison
@@ -197,37 +234,45 @@ const deleteLivraison = async (ids, sequelizeConnection = null) => {
   await livraisonModel.deleteLivraison(ids, sequelizeConnection);
 };
 
-// Supprimer des lignes de détail
+// Supprimer des lignes de d?tail
 const deleteLignesParIds = async (ligneIds, sequelizeConnection = null) => {
   await livraisonModel.deleteLignesParIds(ligneIds, sequelizeConnection);
 };
 
-// Récupérer les données de la livraison pour la popup
+// R?cup?rer les donn?es de la livraison pour la popup
 const getLivraisonDataForTransfer = async (stockId, sequelizeConnection = null) => {
   return await livraisonModel.getLivraisonDataForTransfer(stockId, sequelizeConnection);
 };
 
-// Transférer une livraison vers la facturation
+// Transf?rer une livraison vers la facturation
 const transfererLivraisonVersFacturation = async (stockId, factureDate, partId, sequelizeConnection = null) => {
   return await livraisonModel.transfererLivraisonVersFacturation(stockId, factureDate, partId, sequelizeConnection);
 };
 
-// Transférer une commande vers la facturation (crée deux fois dans stock/stock_detail ET dans facture/facture_souche)
+const transfererLivraisonsVersFacturation = async (stockIds, factureDate, partId, sequelizeConnection = null) => {
+  return await livraisonModel.transfererLivraisonsVersFacturation(stockIds, factureDate, partId, sequelizeConnection);
+};
+// Transf?rer une commande vers la facturation (cr?e deux fois dans stock/stock_detail ET dans facture/facture_souche)
 const transfererCommandeVersFacturation = async (commandeId, factureDate, partId, sequelizeConnection = null) => {
   return await livraisonModel.transfererCommandeVersFacturation(commandeId, factureDate, partId, sequelizeConnection);
 };
 
 module.exports = {
   getLivraisons,
+  getLivraisonLocationByNumero,
   getCommandesNonLivrees,
+  getCommandeProgress,
   getLivraison,
   getNextLivraisonNumero,
   getLivraisonDataForTransfer,
   createLivraison,
   transfererCommandeVersLivraison,
   transfererLivraisonVersFacturation,
+  transfererLivraisonsVersFacturation,
   updateLivraison,
   saveDetail,
+  saveComposition,
+  saveLots,
   saveInfo,
   deleteLivraison,
   deleteLignesParIds,

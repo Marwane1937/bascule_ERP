@@ -4,6 +4,11 @@ const databaseSwitchService = require('../../services/database-switch.service');
 const exonerationService = require('../../services/base/partenaire-exoneration.service');
 const conditionService = require('../../services/base/partenaire-condition.service');
 
+const parsePartnerId = (value) => {
+  const id = parseInt(value, 10);
+  return Number.isInteger(id) && id > 0 ? id : null;
+};
+
 const getClients = async (req, res) => {
   try {
     console.log('[getClients Controller] 📥 Requête reçue pour récupérer les clients');
@@ -132,7 +137,16 @@ const getContacts = async (req, res) => {
   }
 };
 
-const getContactsPaged = async (req, res) => {
+const getContactsAutocomplete = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const data = await clientService.getContactsAutocomplete(sequelize);
+    res.json({ success: true, data: data || [] });
+  } catch (err) {
+    console.error('[ClientController] Erreur autocomplete contacts:', err);
+    res.status(500).json({ success: false, message: err.message, data: [] });
+  }
+};const getContactsPaged = async (req, res) => {
   try {
     const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
     const options = {
@@ -174,6 +188,14 @@ const createContact = async (req, res) => {
     const newContact = await clientService.createContact(req.body, sequelize);
     res.status(201).json(newContact);
   } catch (err) {
+    const status = err.status || 500;
+    if (status === 409) {
+      return res.status(409).json({
+        message: err.message || 'Code ou nom commercial existe deja',
+        ...(err.details || {})
+      });
+    }
+
     res.status(500).json({ message: err.message });
   }
 };
@@ -184,6 +206,14 @@ const editContact = async (req, res) => {
     const updated = await clientService.editContact(req.params.id, req.body, sequelize);
     res.json(updated);
   } catch (err) {
+    const status = err.status || 500;
+    if (status === 409) {
+      return res.status(409).json({
+        message: err.message || 'Code ou nom commercial existe deja',
+        ...(err.details || {})
+      });
+    }
+
     res.status(500).json({ message: err.message });
   }
 };
@@ -271,6 +301,114 @@ const getClient = async (req, res) => {
   }
 };
 
+
+const getClientStatistics = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const partnerId = parsePartnerId(req.params.id);
+    if (!partnerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Identifiant client invalide'
+      });
+    }
+
+    const data = await clientService.getClientStatistics(partnerId, sequelize);
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.json({
+      success: true,
+      data
+    });
+  } catch (err) {
+    console.error('[ClientController] Erreur stats client:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors du chargement des statistiques client'
+    });
+  }
+};
+
+const getFournisseurStatistics = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const partnerId = parsePartnerId(req.params.id);
+    if (!partnerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Identifiant fournisseur invalide'
+      });
+    }
+
+    const data = await clientService.getFournisseurStatistics(partnerId, sequelize);
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.json({
+      success: true,
+      data
+    });
+  } catch (err) {
+    console.error('[ClientController] Erreur stats fournisseur:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors du chargement des statistiques fournisseur'
+    });
+  }
+};
+
+const checkClientUniqueness = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const { code = '', nom = '', excludeId = null } = req.query;
+    const data = await clientService.checkClientUniqueness({ code, nom, excludeId }, sequelize);
+    res.json({
+      success: true,
+      data
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la verification unicite client'
+    });
+  }
+};
+
+const checkFournisseurUniqueness = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const { code = '', nom = '', excludeId = null } = req.query;
+    const data = await clientService.checkFournisseurUniqueness({ code, nom, excludeId }, sequelize);
+    res.json({
+      success: true,
+      data
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la verification unicite fournisseur'
+    });
+  }
+};
+
+const checkCommercialUniqueness = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const { code = '', nom = '', excludeId = null } = req.query;
+    const data = await clientService.checkCommercialUniqueness({ code, nom, excludeId }, sequelize);
+    res.json({
+      success: true,
+      data
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la verification unicite commercial'
+    });
+  }
+};
+
 const getClientDetails = async (req, res) => {
   try {
     const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
@@ -302,6 +440,14 @@ const createClient = async (req, res) => {
     const newClient = await clientService.createClient(req.body, sequelize);
     res.status(201).json(newClient);
   } catch (err) {
+    const status = err.status || 500;
+    if (status === 409) {
+      return res.status(409).json({
+        message: err.message || 'Code ou nom client existe deja',
+        ...(err.details || {})
+      });
+    }
+
     res.status(500).json({ message: err.message });
   }
 };
@@ -312,6 +458,14 @@ const createFournisseur = async (req, res) => {
     const newFournisseur = await clientService.createFournisseur(req.body, sequelize);
     res.status(201).json(newFournisseur);
   } catch (err) {
+    const status = err.status || 500;
+    if (status === 409) {
+      return res.status(409).json({
+        message: err.message || 'Code ou nom fournisseur existe deja',
+        ...(err.details || {})
+      });
+    }
+
     res.status(500).json({ message: err.message });
   }
 };
@@ -581,6 +735,7 @@ module.exports = {
   getFournisseursPaged,
   getFournisseurs,
   getContacts,
+  getContactsAutocomplete,
   getContactsPaged,
   getContact,
   createContact,
@@ -588,6 +743,11 @@ module.exports = {
   archiveContact,
   deleteContact,
   getClient,
+  getClientStatistics,
+  getFournisseurStatistics,
+  checkClientUniqueness,
+  checkFournisseurUniqueness,
+  checkCommercialUniqueness,
   createClient,
   createFournisseur,
   createClientDetails,
@@ -609,3 +769,5 @@ module.exports = {
   updatePartenaireCondition,
   deletePartenaireConditions
 };
+
+

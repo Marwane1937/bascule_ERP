@@ -105,7 +105,8 @@ class BordereauRemisePdfService {
           imageOptions.height = logoSize.height;
         }
         
-        let logoY = 20;
+        const configuredLogoTop = Number(documentSociete?.logoTop);
+        let logoY = Number.isFinite(configuredLogoTop) ? configuredLogoTop : 14;
         if (documentSociete && documentSociete.logo) {
           try {
             const logoBuffer = Buffer.from(documentSociete.logo, 'base64');

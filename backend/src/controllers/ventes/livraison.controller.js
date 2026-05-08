@@ -26,6 +26,43 @@ const getLivraisons = async (req, res) => {
   }
 };
 
+const getLivraisonLocationByNumero = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const numero = String(req.params.numero || '').trim();
+    const options = {
+      pageSize: req.query.pageSize || 25,
+      orderBy: req.query.orderBy || 'date',
+      orderDirection: req.query.orderDirection || 'DESC'
+    };
+
+    if (!numero) {
+      return res.status(400).json({
+        success: false,
+        message: 'numero de livraison invalide'
+      });
+    }
+
+    const location = await livraisonService.getLivraisonLocationByNumero(numero, options, sequelize);
+    res.json({
+      success: true,
+      data: location
+    });
+  } catch (err) {
+    console.error('[getLivraisonLocationByNumero] Erreur:', err);
+    if (err?.message && err.message.toLowerCase().includes('non trouv')) {
+      return res.status(404).json({
+        success: false,
+        message: err.message
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la récupération de la position de livraison'
+    });
+  }
+};
+
 const getCommandesNonLivrees = async (req, res) => {
   try {
     const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
@@ -43,6 +80,40 @@ const getCommandesNonLivrees = async (req, res) => {
     res.status(500).json({
       success: false,
       message: err.message || 'Erreur lors de la récupération des commandes non livrées'
+    });
+  }
+};
+
+const getCommandeProgress = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const commandeId = parseInt(req.params.commandeId, 10);
+
+    if (!Number.isInteger(commandeId) || commandeId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de commande invalide'
+      });
+    }
+
+    const progress = await livraisonService.getCommandeProgress(commandeId, sequelize);
+
+    if (!progress) {
+      return res.status(404).json({
+        success: false,
+        message: 'Commande introuvable'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: progress
+    });
+  } catch (err) {
+    console.error('[getCommandeProgress] Erreur:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la récupération de la progression de commande'
     });
   }
 };
@@ -160,6 +231,30 @@ const transfererLivraisonVersFacturation = async (req, res) => {
   }
 };
 
+const transfererLivraisonsVersFacturation = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const { stockIds, factureDate, partId } = req.body;
+
+    if (!Array.isArray(stockIds) || stockIds.length === 0) {
+      return res.status(400).json({ message: 'stockIds est requis' });
+    }
+
+    if (!factureDate) {
+      return res.status(400).json({ message: 'factureDate est requis' });
+    }
+
+    if (!partId) {
+      return res.status(400).json({ message: 'partId est requis' });
+    }
+
+    const result = await livraisonService.transfererLivraisonsVersFacturation(stockIds, factureDate, partId, sequelize);
+    res.json(result);
+  } catch (err) {
+    console.error('[transfererLivraisonsVersFacturation] Erreur:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
 const transfererCommandeVersFacturation = async (req, res) => {
   try {
     const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
@@ -258,6 +353,56 @@ const saveDetail = async (req, res) => {
   }
 };
 
+const saveComposition = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const { document_id, lignes } = req.body;
+
+    if (!document_id) {
+      return res.status(400).json({ message: 'document_id requis' });
+    }
+
+    if (!Array.isArray(lignes) || lignes.length === 0) {
+      return res.status(400).json({ message: 'Tableau de compositions requis' });
+    }
+
+    const results = await livraisonService.saveComposition({ documentId: document_id, lignes }, sequelize);
+
+    res.json({
+      message: `${results.filter((row) => row?.success).length} composition(s) traitee(s) avec succes`,
+      results
+    });
+  } catch (err) {
+    console.error('[saveComposition] Erreur:', err);
+    res.status(500).json({ message: err.message || 'Erreur interne' });
+  }
+};
+
+const saveLots = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const { document_id, lignes } = req.body;
+
+    if (!document_id) {
+      return res.status(400).json({ message: 'document_id requis' });
+    }
+
+    if (!Array.isArray(lignes) || lignes.length === 0) {
+      return res.status(400).json({ message: 'Tableau de lots requis' });
+    }
+
+    const results = await livraisonService.saveLots({ documentId: document_id, lignes }, sequelize);
+
+    res.json({
+      message: `${results.filter((row) => row?.success).length} lot(s) traite(s) avec succes`,
+      results
+    });
+  } catch (err) {
+    console.error('[saveLots] Erreur:', err);
+    res.status(500).json({ message: err.message || 'Erreur interne' });
+  }
+};
+
 const saveInfo = async (req, res) => {
   try {
     const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
@@ -298,18 +443,22 @@ const deleteLignesParIds = async (req, res) => {
 
 module.exports = {
   getLivraisons,
+  getLivraisonLocationByNumero,
   getCommandesNonLivrees,
+  getCommandeProgress,
   getLivraison,
   getNextLivraisonNumero,
   getLivraisonDataForTransfer,
   createLivraison,
   transfererCommandeVersLivraison,
   transfererLivraisonVersFacturation,
+  transfererLivraisonsVersFacturation,
   transfererCommandeVersFacturation,
   updateLivraison,
   saveDetail,
+  saveComposition,
+  saveLots,
   saveInfo,
   deleteLivraison,
   deleteLignesParIds
 };
-

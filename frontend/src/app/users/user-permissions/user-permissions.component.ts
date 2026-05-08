@@ -260,6 +260,7 @@ export class UserPermissionsComponent implements OnInit {
       next: (response: any) => {
         if (response.success) {
           this.userPermissions = response.data || [];
+          this.syncLegacyRecetteDepensePermission();
           // S'assurer que toutes les permissions sont initialisées pour chaque item de menu
           this.initializePermissions();
         } else {
@@ -286,9 +287,7 @@ export class UserPermissionsComponent implements OnInit {
     this.safeMenuCategories.forEach(category => {
       category.items.forEach(item => {
         // Vérifier si une permission existe déjà pour cet item
-        const existingPermission = this.userPermissions.find(
-          p => p.menu_item === item.name
-        );
+        const existingPermission = this.findPermissionForMenuItem(item.name);
 
         if (!existingPermission) {
           // Si aucune permission n'existe, créer une entrée avec access = 0
@@ -303,13 +302,10 @@ export class UserPermissionsComponent implements OnInit {
   }
 
   hasPermission(menuItemName: string): boolean {
-    const permission = this.userPermissions.find(p => p.menu_item === menuItemName);
-    if (!permission) {
-      return false;
-    }
-    // Gérer les différents formats : 1, true, '1', 'true'
-    const access = permission.access;
-    return access === 1 || access === true || access === '1' || access === 'true';
+    const aliases = this.getMenuItemAliases(menuItemName);
+    return this.userPermissions.some(permission =>
+      aliases.includes(permission.menu_item) && this.isPermissionEnabled(permission.access)
+    );
   }
 
   togglePermission(menuItemName: string): void {
@@ -318,20 +314,7 @@ export class UserPermissionsComponent implements OnInit {
     // Vérifier l'état actuel AVANT de modifier
     const isCurrentlyActive = this.hasPermission(menuItemName);
     const newAccessValue = isCurrentlyActive ? 0 : 1;
-
-    const existingPermission = this.userPermissions.find(p => p.menu_item === menuItemName);
-    
-    if (existingPermission) {
-      // Mettre à jour la permission existante
-      existingPermission.access = newAccessValue;
-    } else {
-      // Créer une nouvelle permission
-      this.userPermissions.push({
-        user_id: this.selectedUser.id,
-        menu_item: menuItemName,
-        access: newAccessValue
-      });
-    }
+    this.setPermissionAccess(menuItemName, newAccessValue);
 
     // Si on décoche une interface parente, décocher aussi tous ses enfants PDF
     if (newAccessValue === 0 && this.selectedUser) {
@@ -345,7 +328,6 @@ export class UserPermissionsComponent implements OnInit {
             if (childPermission) {
               childPermission.access = 0;
             } else {
-              // Créer une permission avec access = 0 pour les enfants PDF
               this.userPermissions.push({
                 user_id: selectedUserId,
                 menu_item: child.name,
@@ -389,24 +371,13 @@ export class UserPermissionsComponent implements OnInit {
   }
 
   // Cocher/Décocher tous les items d'une catégorie (incluant les enfants)
-  toggleCategoryPermissions(category: any): void {
+  toggleCategoryPermissions(category: any, isChecked: boolean): void {
     if (!this.selectedUser) return;
 
-    const allChecked = this.isAllCategoryItemsChecked(category);
-    const newAccessValue = allChecked ? 0 : 1;
+    const newAccessValue = isChecked ? 1 : 0;
 
     const toggleItem = (item: any) => {
-      const existingPermission = this.userPermissions.find(p => p.menu_item === item.name);
-      
-      if (existingPermission) {
-        existingPermission.access = newAccessValue;
-      } else {
-        this.userPermissions.push({
-          user_id: this.selectedUser!.id,
-          menu_item: item.name,
-          access: newAccessValue
-        });
-      }
+      this.setPermissionAccess(item.name, newAccessValue);
 
       // Si l'item a des enfants, les cocher aussi
       if (item.isParent && item.children) {
@@ -426,6 +397,8 @@ export class UserPermissionsComponent implements OnInit {
       });
       return;
     }
+
+    this.syncLegacyRecetteDepensePermission();
 
     // S'assurer que toutes les permissions sont présentes (y compris celles avec access = 0)
     const allPermissions: any[] = [];
@@ -515,6 +488,60 @@ export class UserPermissionsComponent implements OnInit {
       return 1;
     }
     return 0;
+  }
+
+  getMenuItemDisplayName(menuItemName: string): string {
+    return menuItemName;
+  }
+
+  private getMenuItemAliases(menuItemName: string): string[] {
+    return menuItemName === 'Recette/Dépense' ? ['Recette/Dépense', 'Recettes', 'Dépenses'] : [menuItemName];
+  }
+
+  private isPermissionEnabled(access: any): boolean {
+    return access === 1 || access === true || access === '1' || access === 'true';
+  }
+
+  private findPermissionForMenuItem(menuItemName: string): UserPermission | undefined {
+    const aliases = this.getMenuItemAliases(menuItemName);
+    return this.userPermissions.find(permission => aliases.includes(permission.menu_item));
+  }
+
+  private setPermissionAccess(menuItemName: string, access: number): void {
+    if (!this.selectedUser) {
+      return;
+    }
+
+    const existingPermission = this.userPermissions.find(permission => permission.menu_item === menuItemName);
+    if (existingPermission) {
+      existingPermission.access = access;
+    } else {
+      this.userPermissions.push({
+        user_id: this.selectedUser.id,
+        menu_item: menuItemName,
+        access
+      });
+    }
+
+    if (menuItemName === 'Recette/Dépense') {
+      this.userPermissions.forEach(permission => {
+        if (permission.menu_item === 'Recettes' || permission.menu_item === 'Dépenses') {
+          permission.access = 0;
+        }
+      });
+    }
+  }
+
+  private syncLegacyRecetteDepensePermission(): void {
+    if (!this.selectedUser) {
+      return;
+    }
+
+    const legacyRecetteDepenseAccess = this.userPermissions.some(permission =>
+      this.getMenuItemAliases('Recette/Dépense').includes(permission.menu_item) && this.isPermissionEnabled(permission.access)
+    );
+
+    this.setPermissionAccess('Recette/Dépense', legacyRecetteDepenseAccess ? 1 : 0);
   }
 
   resetPassword(): void {
@@ -669,5 +696,12 @@ export class UserPermissionsComponent implements OnInit {
       }
     });
   }
-}
 
+  trackByCategory(index: number, category: any): string {
+    return category?.category || String(index);
+  }
+
+  trackByMenuItem(index: number, item: any): string {
+    return item?.name || String(index);
+  }
+}

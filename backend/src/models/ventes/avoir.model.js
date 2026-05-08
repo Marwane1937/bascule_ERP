@@ -1,5 +1,325 @@
 const { getConnection } = require('../../config/database');
 
+const PAYMENT_ACTIONS = ['CREDIT_CLIENT', 'REMBOURSEMENT', 'COMPENSATION'];
+
+const normalizePaymentAction = (value) => {
+  const action = String(value || 'CREDIT_CLIENT').trim().toUpperCase();
+  return PAYMENT_ACTIONS.includes(action) ? action : 'CREDIT_CLIENT';
+};
+
+const toDecimal = (value, fallback = 0) => {
+  if (value === null || value === undefined || value === '') {
+    return fallback;
+  }
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : fallback;
+};
+
+const toInteger = (value, fallback = null) => {
+  if (value === null || value === undefined || value === '') {
+    return fallback;
+  }
+  const numericValue = Number.parseInt(value, 10);
+  return Number.isFinite(numericValue) ? numericValue : fallback;
+};
+
+const getPaymentStatus = (action) => {
+  switch (action) {
+    case 'REMBOURSEMENT':
+      return 'A_REMBOURSER';
+    case 'COMPENSATION':
+      return 'A_COMPENSER';
+    case 'CREDIT_CLIENT':
+    default:
+      return 'CREDIT_OUVERT';
+  }
+};
+
+const ensureAvoirPaymentTreatmentTable = async (sequelize, transaction = null) => {
+  await sequelize.query(
+    `IF NOT EXISTS (
+        SELECT 1
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_NAME = 'avoir_traitement_paiement'
+      )
+      BEGIN
+        CREATE TABLE avoir_traitement_paiement (
+          id INT IDENTITY(1,1) PRIMARY KEY,
+          avoir_facture_id INT NOT NULL,
+          avoir_facture_ind INT NULL,
+          type_action NVARCHAR(30) NOT NULL,
+          montant DECIMAL(18, 2) NOT NULL DEFAULT 0,
+          facture_compensation_id INT NULL,
+          facture_compensation_ind INT NULL,
+          statut NVARCHAR(30) NOT NULL,
+          note NVARCHAR(255) NULL,
+          cr_date DATETIME NOT NULL DEFAULT GETDATE()
+        )
+      END`,
+    { transaction }
+  );
+
+  await sequelize.query(
+    `IF COL_LENGTH('avoir_traitement_paiement', 'mode_reglement_id') IS NULL
+      ALTER TABLE avoir_traitement_paiement ADD mode_reglement_id INT NULL;
+
+     IF COL_LENGTH('avoir_traitement_paiement', 'caisse_document_id') IS NULL
+      ALTER TABLE avoir_traitement_paiement ADD caisse_document_id INT NULL;`,
+    { transaction }
+  );
+};
+
+const getInvoicePaymentInfo = async (sequelize, transaction, factureId) => {
+  const [paymentInfo] = await sequelize.query(
+    `SELECT
+       COUNT(1) AS lettrage_count,
+       ISNULL(SUM(montant), 0) AS montant_regle
+     FROM regle_facture
+     WHERE facture_id = :factureId
+       AND ISNULL(facture_ind, 1) = 1`,
+    {
+      replacements: { factureId },
+      type: sequelize.QueryTypes.SELECT,
+      transaction
+    }
+  );
+
+  return paymentInfo || { lettrage_count: 0, montant_regle: 0 };
+};
+
+const assertInvoiceHasPayment = async (sequelize, transaction, factureId) => {
+  const paymentInfo = await getInvoicePaymentInfo(sequelize, transaction, factureId);
+  if (Number(paymentInfo?.lettrage_count || 0) <= 0 && toDecimal(paymentInfo?.montant_regle, 0) <= 0) {
+    throw new Error('La facture selectionnee n est pas encore encaissee');
+  }
+
+  return paymentInfo;
+};
+
+const insertRefundExpenseLine = async (sequelize, transaction, payload) => {
+  const caisseDocumentId = toInteger(payload.caisse_remboursement_id || payload.caisse_document_id);
+  const amount = toDecimal(payload.montant_traitement, 0);
+
+  if (!caisseDocumentId) {
+    throw new Error('La caisse de remboursement est requise');
+  }
+
+  const [caisse] = await sequelize.query(
+    `SELECT TOP 1 id, etat
+     FROM caisse_document
+     WHERE id = :caisseDocumentId`,
+    {
+      replacements: { caisseDocumentId },
+      type: sequelize.QueryTypes.SELECT,
+      transaction
+    }
+  );
+
+  if (!caisse) {
+    throw new Error('Caisse de remboursement introuvable');
+  }
+
+  const etat = caisse.etat !== null && caisse.etat !== undefined ? String(caisse.etat).trim().toUpperCase() : '';
+  if (etat) {
+    throw new Error('La caisse de remboursement doit etre ouverte');
+  }
+
+  const [lineInfo] = await sequelize.query(
+    `SELECT ISNULL(MAX(ligne), 0) + 1 AS next_ligne
+     FROM caisse_document_detail
+     WHERE document_id = :caisseDocumentId`,
+    {
+      replacements: { caisseDocumentId },
+      type: sequelize.QueryTypes.SELECT,
+      transaction
+    }
+  );
+
+  await sequelize.query(
+    `INSERT INTO caisse_document_detail (
+       document_id, ligne, rubrique_id, unite_id, quantite, montant,
+       description, parent, type, etat, cr_date, user_id, employe_id, sens
+     )
+     VALUES (
+       :documentId, :ligne, NULL, NULL, 1, :montant,
+       :description, :parent, NULL, 1, GETDATE(), :userId, NULL, -1
+     )`,
+    {
+      replacements: {
+        documentId: caisseDocumentId,
+        ligne: Number(lineInfo?.next_ligne || 1),
+        montant: amount,
+        description: payload.description || `Remboursement avoir ${payload.avoir_num || ''}`.trim(),
+        parent: payload.avoir_facture_id || null,
+        userId: payload.user_id || null
+      },
+      type: sequelize.QueryTypes.INSERT,
+      transaction
+    }
+  );
+
+  await sequelize.query(
+    `UPDATE caisse_document
+     SET montant = ISNULL(fond, 0)
+       + ISNULL((
+           SELECT SUM(ISNULL(quantite, 0) * ISNULL(montant, 0))
+           FROM caisse_document_detail
+           WHERE document_id = :caisseDocumentId
+             AND ISNULL(sens, 1) = 1
+         ), 0)
+       - ISNULL((
+           SELECT SUM(ISNULL(quantite, 0) * ISNULL(montant, 0))
+           FROM caisse_document_detail
+           WHERE document_id = :caisseDocumentId
+             AND sens = -1
+         ), 0)
+     WHERE id = :caisseDocumentId`,
+    {
+      replacements: { caisseDocumentId },
+      type: sequelize.QueryTypes.UPDATE,
+      transaction
+    }
+  );
+
+  return { caisse_document_id: caisseDocumentId };
+};
+
+const applyInvoiceCompensation = async (sequelize, transaction, payload) => {
+  const sourceFactureId = toInteger(payload.facture_id || payload.avoir_facture_id);
+  const targetFactureId = toInteger(payload.facture_compensation_id);
+  const targetFactureInd = toInteger(payload.facture_compensation_ind, 1);
+
+  if (!sourceFactureId || !targetFactureId) {
+    throw new Error('La facture de compensation est requise');
+  }
+
+  if (sourceFactureId === targetFactureId) {
+    throw new Error('La facture de compensation doit etre differente de la facture d origine');
+  }
+
+  const [targetInvoice] = await sequelize.query(
+    `SELECT TOP 1 document_id, solde
+     FROM v_pre_regle_facture
+     WHERE document_id = :targetFactureId
+     ORDER BY date DESC`,
+    {
+      replacements: { targetFactureId },
+      type: sequelize.QueryTypes.SELECT,
+      transaction
+    }
+  );
+
+  if (!targetInvoice || toDecimal(targetInvoice.solde, 0) <= 0) {
+    throw new Error('La facture a compenser doit etre non encaissee');
+  }
+
+  await assertInvoiceHasPayment(sequelize, transaction, sourceFactureId);
+
+  const updateResult = await sequelize.query(
+    `UPDATE regle_facture
+     SET facture_id = :targetFactureId,
+         facture_ind = :targetFactureInd
+     WHERE facture_id = :sourceFactureId
+       AND ISNULL(facture_ind, 1) = 1`,
+    {
+      replacements: {
+        sourceFactureId,
+        targetFactureId,
+        targetFactureInd
+      },
+      type: sequelize.QueryTypes.UPDATE,
+      transaction
+    }
+  );
+
+  return {
+    facture_compensation_id: targetFactureId,
+    facture_compensation_ind: targetFactureInd,
+    regle_facture_update: updateResult
+  };
+};
+
+const insertAvoirPaymentTreatment = async (sequelize, transaction, payload) => {
+  await ensureAvoirPaymentTreatmentTable(sequelize, transaction);
+
+  const action = normalizePaymentAction(payload.traitement_paiement);
+  const amount = toDecimal(
+    payload.montant_traitement,
+    toDecimal(payload.montant_ttc, 0)
+  );
+
+  if ((action === 'REMBOURSEMENT' || action === 'COMPENSATION') && amount <= 0) {
+    throw new Error('Le montant du traitement du paiement doit etre superieur a zero');
+  }
+
+  if (action === 'COMPENSATION' && !payload.facture_compensation_id) {
+    throw new Error('La facture de compensation est requise');
+  }
+
+  const modeReglementId = toInteger(payload.mode_reglement_id || payload.reference_remboursement);
+  const caisseDocumentId = toInteger(payload.caisse_remboursement_id || payload.caisse_document_id);
+
+  if (action === 'REMBOURSEMENT' && !modeReglementId) {
+    throw new Error('Le mode de remboursement est requis');
+  }
+
+  if (action === 'REMBOURSEMENT' && !caisseDocumentId) {
+    throw new Error('La caisse de remboursement est requise');
+  }
+
+  await sequelize.query(
+    `INSERT INTO avoir_traitement_paiement (
+        avoir_facture_id,
+        avoir_facture_ind,
+        type_action,
+        montant,
+        facture_compensation_id,
+        facture_compensation_ind,
+        mode_reglement_id,
+        caisse_document_id,
+        statut,
+        note
+      )
+      VALUES (
+        :avoirFactureId,
+        :avoirFactureInd,
+        :typeAction,
+        :montant,
+        :factureCompensationId,
+        :factureCompensationInd,
+        :modeReglementId,
+        :caisseDocumentId,
+        :statut,
+        :note
+      )`,
+    {
+      replacements: {
+        avoirFactureId: payload.avoir_facture_id,
+        avoirFactureInd: payload.avoir_facture_ind || null,
+        typeAction: action,
+        montant: Math.max(amount, 0),
+        factureCompensationId: payload.facture_compensation_id || null,
+        factureCompensationInd: payload.facture_compensation_ind || null,
+        modeReglementId,
+        caisseDocumentId,
+        statut: getPaymentStatus(action),
+        note: payload.note_traitement || null
+      },
+      transaction
+    }
+  );
+
+  return {
+    traitement_paiement: action,
+    montant_traitement: Math.max(amount, 0),
+    statut_traitement: getPaymentStatus(action),
+    facture_compensation_id: payload.facture_compensation_id || null,
+    facture_compensation_ind: payload.facture_compensation_ind || null,
+    mode_reglement_id: modeReglementId,
+    caisse_document_id: caisseDocumentId
+  };
+};
+
 // Récupérer tous les avoirs avec pagination (sens = -1 dans facture_souche)
 // Optimisé avec COUNT(*) OVER() pour éviter une requête séparée de comptage
 const getAllAvoirs = async (options = {}, sequelizeConnection = null) => {
@@ -33,9 +353,12 @@ const getAllAvoirs = async (options = {}, sequelizeConnection = null) => {
     }
 
     // Requête unique avec COUNT(*) OVER() pour obtenir le total sans requête séparée
+    await ensureAvoirPaymentTreatmentTable(sequelize);
+
     const query = `
       SELECT 
         facture_id,
+        facture_ind,
         facture_num,
         facture_dat,
         nom,
@@ -44,10 +367,18 @@ const getAllAvoirs = async (options = {}, sequelizeConnection = null) => {
         facture_ht,
         facture_tva,
         facture_ttc,
+        traitement_paiement,
+        montant_traitement,
+        statut_traitement,
+        facture_compensation_id,
+        facture_compensation_ind,
+        mode_reglement_id,
+        caisse_document_id,
         total_count
       FROM (
         SELECT 
           f.facture_id,
+          f.facture_ind,
           f.facture_num,
           f.facture_dat,
           p.nom,
@@ -59,11 +390,32 @@ const getAllAvoirs = async (options = {}, sequelizeConnection = null) => {
           ISNULL(f.facture_ht, 0) AS facture_ht,
           ISNULL(f.facture_tva, 0) AS facture_tva,
           ISNULL(f.facture_ht, 0) + ISNULL(f.facture_tva, 0) AS facture_ttc,
+          ISNULL(atp.type_action, 'CREDIT_CLIENT') AS traitement_paiement,
+          ISNULL(atp.montant, ISNULL(f.facture_ht, 0) + ISNULL(f.facture_tva, 0)) AS montant_traitement,
+          ISNULL(atp.statut, 'CREDIT_OUVERT') AS statut_traitement,
+          atp.facture_compensation_id,
+          atp.facture_compensation_ind,
+          atp.mode_reglement_id,
+          atp.caisse_document_id,
           COUNT(*) OVER() AS total_count,
           ROW_NUMBER() OVER (ORDER BY ${safeOrderBy} ${safeOrderDirection}) AS RowNum
         FROM facture f
         INNER JOIN facture_souche fs ON fs.facture_id = f.facture_id
         LEFT JOIN partenaire p ON p.part_id = fs.part_id
+        OUTER APPLY (
+          SELECT TOP 1
+            treatment.type_action,
+            treatment.montant,
+            treatment.statut,
+            treatment.facture_compensation_id,
+            treatment.facture_compensation_ind,
+            treatment.mode_reglement_id,
+            treatment.caisse_document_id
+          FROM avoir_traitement_paiement treatment
+          WHERE treatment.avoir_facture_id = f.facture_id
+            AND (treatment.avoir_facture_ind = f.facture_ind OR treatment.avoir_facture_ind IS NULL)
+          ORDER BY treatment.id DESC
+        ) atp
         ${whereClause}
       ) AS PaginatedResults
       WHERE RowNum > ${offset} AND RowNum <= ${offset + safePageSize}
@@ -137,6 +489,7 @@ const countAllAvoirs = async (sequelizeConnection = null) => {
 // Récupérer un avoir par ID
 const getAvoirById = async (id, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
+  await ensureAvoirPaymentTreatmentTable(sequelize);
 
   // Récupérer les infos principales depuis facture et facture_souche
   const avoirRows = await sequelize.query(
@@ -151,6 +504,13 @@ const getAvoirById = async (id, sequelizeConnection = null) => {
       fs.adresse_id,
       fs.sens,
       p.nom AS client_nom,
+      ISNULL(atp.type_action, 'CREDIT_CLIENT') AS traitement_paiement,
+      ISNULL(atp.montant, ISNULL(f.facture_ht, 0) + ISNULL(f.facture_tva, 0)) AS montant_traitement,
+      ISNULL(atp.statut, 'CREDIT_OUVERT') AS statut_traitement,
+      atp.facture_compensation_id,
+      atp.facture_compensation_ind,
+      atp.mode_reglement_id,
+      atp.caisse_document_id,
       CASE 
         WHEN f.facture_id IN (SELECT facture_id FROM stock WHERE type = 5) THEN 'MARCHANDISE'
         ELSE 'FINANCIER'
@@ -158,6 +518,20 @@ const getAvoirById = async (id, sequelizeConnection = null) => {
     FROM facture f
     INNER JOIN facture_souche fs ON fs.facture_id = f.facture_id
     LEFT JOIN partenaire p ON p.part_id = fs.part_id
+    OUTER APPLY (
+      SELECT TOP 1
+        treatment.type_action,
+        treatment.montant,
+        treatment.statut,
+        treatment.facture_compensation_id,
+        treatment.facture_compensation_ind,
+        treatment.mode_reglement_id,
+        treatment.caisse_document_id
+      FROM avoir_traitement_paiement treatment
+      WHERE treatment.avoir_facture_id = f.facture_id
+        AND (treatment.avoir_facture_ind = f.facture_ind OR treatment.avoir_facture_ind IS NULL)
+      ORDER BY treatment.id DESC
+    ) atp
     WHERE f.facture_id = :id AND f.facture_typ = 'AV'`,
     {
       replacements: { id },
@@ -358,7 +732,24 @@ const getAvoirById = async (id, sequelizeConnection = null) => {
 };
 
 // Créer un avoir financier (basé sur une facture existante)
-const createAvoirFinancier = async ({ facture_id, part_id, date, montant_ht, montant_tva, description, adresse_id }, sequelizeConnection = null) => {
+const createAvoirFinancier = async ({
+  facture_id,
+  part_id,
+  date,
+  montant_ht,
+  montant_tva,
+  description,
+  adresse_id,
+  traitement_paiement,
+  montant_traitement,
+  facture_compensation_id,
+  facture_compensation_ind,
+  mode_reglement_id,
+  reference_remboursement,
+  caisse_remboursement_id,
+  note_traitement,
+  user_id
+}, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
   const { getCompteurCurrent } = require('../../services/compteur.service');
 
@@ -367,11 +758,17 @@ const createAvoirFinancier = async ({ facture_id, part_id, date, montant_ht, mon
       // facture_id : doit prendre le facture_id de la facture correspondant au facture sélectionné
       const factureId = facture_id || null;
 
+      const normalizedPaymentAction = normalizePaymentAction(traitement_paiement);
+
       if (!factureId) {
         throw new Error('facture_id est requis pour créer un avoir financier');
       }
 
       // Si part_id n'est pas fourni, le récupérer depuis la facture originale
+      if (normalizedPaymentAction === 'REMBOURSEMENT' || normalizedPaymentAction === 'COMPENSATION') {
+        await assertInvoiceHasPayment(sequelize, t, factureId);
+      }
+
       let finalPartId = part_id;
       if (!finalPartId || finalPartId === 0) {
         const [factureOriginale] = await sequelize.query(
@@ -460,13 +857,50 @@ const createAvoirFinancier = async ({ facture_id, part_id, date, montant_ht, mon
         { transaction: t }
       );
 
+      const paymentTreatment = await insertAvoirPaymentTreatment(sequelize, t, {
+        avoir_facture_id: factureId,
+        avoir_facture_ind: factureInd,
+        traitement_paiement,
+        montant_traitement,
+        montant_ttc: toDecimal(montant_ht, 0) + toDecimal(montant_tva, 0),
+        facture_compensation_id,
+        facture_compensation_ind,
+        mode_reglement_id,
+        reference_remboursement,
+        caisse_remboursement_id,
+        note_traitement: note_traitement || description
+      });
+
+      let refundResult = null;
+      let compensationResult = null;
+
+      if (paymentTreatment.traitement_paiement === 'REMBOURSEMENT') {
+        refundResult = await insertRefundExpenseLine(sequelize, t, {
+          avoir_facture_id: factureId,
+          avoir_facture_ind: factureInd,
+          avoir_num: avoirNum,
+          caisse_remboursement_id,
+          montant_traitement: paymentTreatment.montant_traitement,
+          description: `Remboursement avoir ${avoirNum}`,
+          user_id
+        });
+      } else if (paymentTreatment.traitement_paiement === 'COMPENSATION') {
+        compensationResult = await applyInvoiceCompensation(sequelize, t, {
+          facture_id: factureId,
+          facture_compensation_id,
+          facture_compensation_ind
+        });
+      }
 
       return {
         facture_id: factureId,
         facture_ind: factureInd,
         facture_num: avoirNum,
         facture_dat: date || new Date(),
-        type_avoir: 'FINANCIER'
+        type_avoir: 'FINANCIER',
+        ...paymentTreatment,
+        refund: refundResult,
+        compensation: compensationResult
       };
     } catch (error) {
       console.error('❌ Erreur lors de la création de l\'avoir financier:', error);
@@ -476,7 +910,21 @@ const createAvoirFinancier = async ({ facture_id, part_id, date, montant_ht, mon
 };
 
 // Créer un avoir marchandise (basé sur un retour)
-const createAvoirMarchandise = async ({ retour_id, part_id, date, adresse_id }, sequelizeConnection = null) => {
+const createAvoirMarchandise = async ({
+  retour_id,
+  part_id,
+  date,
+  adresse_id,
+  traitement_paiement,
+  montant_traitement,
+  facture_compensation_id,
+  facture_compensation_ind,
+  mode_reglement_id,
+  reference_remboursement,
+  caisse_remboursement_id,
+  note_traitement,
+  user_id
+}, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
   const { getCompteurCurrent } = require('../../services/compteur.service');
 
@@ -584,13 +1032,43 @@ const createAvoirMarchandise = async ({ retour_id, part_id, date, adresse_id }, 
         { transaction: t }
       );
 
+      const paymentTreatment = await insertAvoirPaymentTreatment(sequelize, t, {
+        avoir_facture_id: factureId,
+        avoir_facture_ind: factureInd,
+        traitement_paiement,
+        montant_traitement,
+        montant_ttc: toDecimal(totalHt, 0) + toDecimal(totalTva, 0),
+        facture_compensation_id,
+        facture_compensation_ind,
+        mode_reglement_id,
+        reference_remboursement,
+        caisse_remboursement_id,
+        note_traitement
+      });
+
+      let refundResult = null;
+
+      if (paymentTreatment.traitement_paiement === 'REMBOURSEMENT') {
+        refundResult = await insertRefundExpenseLine(sequelize, t, {
+          avoir_facture_id: factureId,
+          avoir_facture_ind: factureInd,
+          avoir_num: avoirNum,
+          caisse_remboursement_id,
+          montant_traitement: paymentTreatment.montant_traitement,
+          description: `Remboursement avoir ${avoirNum}`,
+          user_id
+        });
+      }
 
       return {
         facture_id: factureId,
+        facture_ind: factureInd,
         facture_num: avoirNum,
         facture_dat: date || new Date(),
         type_avoir: 'MARCHANDISE',
-        retour_id: retour_id
+        retour_id: retour_id,
+        ...paymentTreatment,
+        refund: refundResult
       };
     } catch (error) {
       console.error('❌ Erreur lors de la création de l\'avoir marchandise:', error);
@@ -602,20 +1080,28 @@ const createAvoirMarchandise = async ({ retour_id, part_id, date, adresse_id }, 
 // Mettre à jour un avoir
 const updateAvoir = async (id, avoirData, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
+  const factureInd = toInteger(avoirData.facture_ind);
+  const whereConditions = ['facture_id = :id', "facture_typ = 'AV'"];
+  const replacements = {
+    id,
+    date: avoirData.date || null,
+    factureHt: avoirData.montant_ht || null,
+    factureTva: avoirData.montant_tva || null
+  };
+
+  if (factureInd) {
+    whereConditions.push('facture_ind = :factureInd');
+    replacements.factureInd = factureInd;
+  }
 
   await sequelize.query(
     `UPDATE facture 
      SET facture_dat = :date, 
          facture_ht = :factureHt, 
          facture_tva = :factureTva
-     WHERE facture_id = :id`,
+     WHERE ${whereConditions.join(' AND ')}`,
     {
-      replacements: {
-        id,
-        date: avoirData.date || null,
-        factureHt: avoirData.montant_ht || null,
-        factureTva: avoirData.montant_tva || null
-      }
+      replacements
     }
   );
 };
@@ -627,6 +1113,13 @@ const deleteAvoir = async (ids, sequelizeConnection = null) => {
   if (!Array.isArray(ids) || ids.length === 0) {
     throw new Error('IDs invalides pour la suppression');
   }
+
+  await ensureAvoirPaymentTreatmentTable(sequelize);
+
+  await sequelize.query(
+    `DELETE FROM avoir_traitement_paiement WHERE avoir_facture_id IN (${ids.map(() => '?').join(',')})`,
+    { replacements: ids }
+  );
 
   // Supprimer facture_souche
   await sequelize.query(
@@ -763,4 +1256,3 @@ module.exports = {
   updateAvoir,
   deleteAvoir
 };
-

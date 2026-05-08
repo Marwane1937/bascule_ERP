@@ -127,7 +127,7 @@
 
 
     <!-- Produits -->
-    <div class="bg-white rounded shadow-sm p-4 mb-4">
+    <div class="bg-white rounded shadow-sm p-4 mb-4 products-panel">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h6 class="mb-0">📦 Liste des Produits</h6>
             <button class="btn btn-success" (click)="addProduit()">➕ Ajouter produit</button>
@@ -149,21 +149,30 @@
         </div>
 
         <!-- Tableau -->
-        <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+        <div class="table-responsive products-table-wrap">
             <table class="table table-striped align-middle text-center">
+                <colgroup>
+                    <col class="table-col-details" />
+                    <col class="table-col-pu" />
+                    <col class="table-col-qte" />
+                    <col class="table-col-reduc" />
+                    <col class="table-col-tva" />
+                    <col class="table-col-total" />
+                    <col class="table-col-action" />
+                </colgroup>
                 <thead class="table-light">
                     <tr>
-                        <th style="min-width: 300px;">Détails</th>
-                        <th class="text-end" style="min-width: 80px;">PU</th>
-                        <th class="text-end" style="min-width: 70px;">Qté</th>
-                        <th style="min-width: 120px;">Réduc</th>
-                        <th style="min-width: 70px;">TVA (%)</th>
-                        <th class="text-end" style="min-width: 110px;">Total</th>
-                        <th style="width: 40px; padding: 2px;">Action</th>
+                        <th class="table-col-details">Détails</th>
+                        <th class="text-end table-col-pu">PU</th>
+                        <th class="text-end table-col-qte">Qté</th>
+                        <th class="table-col-reduc">Réduc</th>
+                        <th class="table-col-tva">TVA (%)</th>
+                        <th class="text-end table-col-total">Total</th>
+                        <th class="table-col-action">Action</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <tr *ngFor="let p of produits; let i = index">
+                <tbody cdkDropList [cdkDropListData]="produits" [cdkDropListDisabled]="mode === 'editor'" (cdkDropListDropped)="onProduitDrop($event)">
+                    <tr *ngFor="let p of produits; let i = index" cdkDrag cdkDragLockAxis="y">
                         <td>
                             <ng-container *ngIf="mode === 'editor'">
                                 <quill-editor [(ngModel)]="p.designation" [styles]="{ height: '120px' }"
@@ -173,73 +182,100 @@
                             </ng-container>
 
                             <ng-container *ngIf="mode === 'table'">
-                                <div class="position-relative">
-                                    <input 
-                                        type="text" 
-                                        class="form-control form-control-sm" 
-                                        style="min-width: 280px; width: 100%;"
-                                        [(ngModel)]="p.articleSearch"
-                                        (input)="onArticleSearchChange(i, $any($event.target).value)"
-                                        placeholder="Rechercher un article..."
-                                        autocomplete="off" />
-                                    <ul *ngIf="p.articleSearch && filteredArticles[i] && filteredArticles[i].length > 0" 
-                                        class="list-group position-absolute w-100 shadow"
-                                        style="max-height: 600px; overflow-y: auto; z-index: 1050; font-size: 14px;">
-                                        <li class="list-group-item list-group-item-action" 
-                                            *ngFor="let article of filteredArticles[i]"
-                                            (click)="selectArticle(i, article)"
-                                            style="padding: 10px 15px; cursor: pointer; font-size: 14px; line-height: 1.5;">
-                                            {{ article.article_nom }}
-                                        </li>
-                                    </ul>
+                                <div class="article-picker">
+                                    <button type="button" class="btn-letter-icon" (click)="openArticleLetter(i)" [disabled]="!p.article_id" title="Voir details article">
+                                        &#9432;
+                                    </button>
+                                    <button type="button" class="btn-drag-handle" cdkDragHandle title="Changer l ordre de la ligne">
+                                        <span class="drag-handle-glyph">&#9776;</span>
+                                    </button>
+                                    <div class="position-relative article-picker-input product-search-cell">
+                                        <input 
+                                            type="text" 
+                                            class="form-control form-control-sm product-search-input" 
+                                            [(ngModel)]="p.articleSearch"
+                                            (input)="onArticleSearchChange(i, $any($event.target).value)"
+                                            (keydown)="onArticleSearchKeydown(i, $event)"
+                                            placeholder="Rechercher un article..."
+                                            autocomplete="off" />
+                                        <ul *ngIf="p.articleSearch && filteredArticles[i] && filteredArticles[i].length > 0" 
+                                            class="list-group position-absolute w-100 shadow product-autocomplete-dropdown">
+                                            <li class="list-group-item list-group-item-action product-autocomplete-item" 
+                                                *ngFor="let article of filteredArticles[i]; let articleIndex = index"
+                                                [class.active]="highlightedArticleIndex[i] === articleIndex"
+                                                (click)="selectArticle(i, article)">{{ article.article_nom }}</li>
+                                        </ul>
+                                    </div>
                                 </div>
+                                <small *ngIf="isStockRuptureLine(p)" class="text-danger d-block mt-1 fw-semibold">rupture de stock</small>
                             </ng-container>
 
                             <ng-container *ngIf="mode === 'nomenclature'">
-                                <div class="position-relative">
-                                    <input 
-                                        type="text" 
-                                        class="form-control form-control-sm" 
-                                        style="min-width: 280px; width: 100%;"
-                                        [(ngModel)]="p.articleSearch"
-                                        (input)="onNomenclatureSearchChange(i, $any($event.target).value)"
-                                        placeholder="Rechercher un produit avec nomenclature..."
-                                        autocomplete="off" />
-                                    <ul *ngIf="p.articleSearch && filteredNomenclatureArticles[i] && filteredNomenclatureArticles[i].length > 0" 
-                                        class="list-group position-absolute w-100 shadow"
-                                        style="max-height: 600px; overflow-y: auto; z-index: 1050; font-size: 14px;">
-                                        <li class="list-group-item list-group-item-action" 
-                                            *ngFor="let article of filteredNomenclatureArticles[i]"
-                                            (click)="selectNomenclatureArticle(i, article)"
-                                            style="padding: 10px 15px; cursor: pointer; font-size: 14px; line-height: 1.5;">
-                                            {{ article.article_nom }}
-                                        </li>
-                                    </ul>
+                                <div class="article-picker">
+                                    <button type="button" class="btn-letter-icon" (click)="openArticleLetter(i)" [disabled]="!p.article_id" title="Voir details article">
+                                        &#9432;
+                                    </button>
+                                    <button type="button" class="btn-drag-handle" cdkDragHandle title="Changer l ordre de la ligne">
+                                        <span class="drag-handle-glyph">&#9776;</span>
+                                    </button>
+                                    <div class="position-relative article-picker-input">
+                                        <input 
+                                            type="text" 
+                                            class="form-control form-control-sm product-search-input" 
+                                            [(ngModel)]="p.articleSearch"
+                                            (input)="onNomenclatureSearchChange(i, $any($event.target).value)"
+                                            placeholder="Rechercher un produit avec nomenclature..."
+                                            autocomplete="off" />
+                                        <ul *ngIf="p.articleSearch && filteredNomenclatureArticles[i] && filteredNomenclatureArticles[i].length > 0" 
+                                            class="list-group position-absolute w-100 shadow"
+                                            style="max-height: 600px; overflow-y: auto; z-index: 1050; font-size: 14px;">
+                                            <li class="list-group-item list-group-item-action" 
+                                                *ngFor="let article of filteredNomenclatureArticles[i]"
+                                                (click)="selectNomenclatureArticle(i, article)"
+                                                style="padding: 10px 15px; cursor: pointer; font-size: 14px; line-height: 1.5;">
+                                                {{ article.article_nom }}
+                                            </li>
+                                        </ul>
+                                    </div>
                                 </div>
+                                <small *ngIf="isStockRuptureLine(p)" class="text-danger d-block mt-1 fw-semibold">rupture de stock</small>
                             </ng-container>
                         </td>
 
                         <td>
-                            <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="p.pu"
+                            <input type="number" class="form-control form-control-sm text-end line-number-input" [(ngModel)]="p.pu"
                                 (input)="recalculateTotal(i)" />
                         </td>
 
                         <td>
-                            <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="p.qte"
+                            <input type="number" class="form-control form-control-sm text-end line-number-input" [(ngModel)]="p.qte"
                                 (input)="recalculateTotal(i)" />
                         </td>
 
                         <td>
-                            <div style="display: flex; align-items: center; gap: 6px;">
-                                <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="p.reduc" (ngModelChange)="recalculateTotal(i)" style="width: 80px;" />
-                                <select class="form-select form-select-sm" [(ngModel)]="p.reducMode" (change)="recalculateTotal(i)" style="width: 90px;">
+                            <div class="reduc-input-wrap">
+                                <input type="number" class="form-control form-control-sm text-end reduc-value-input" [(ngModel)]="p.reduc" (ngModelChange)="recalculateTotal(i)" />
+                                <select class="reduc-mode-select" [(ngModel)]="p.reducMode" (change)="recalculateTotal(i)" aria-label="Mode de réduction">
                                     <option value="pourcentage">%</option>
                                     <option value="montant">dh</option>
                                 </select>
                             </div>
                         </td>
 
-                        <td>{{ ((isClientExonerated ? 0 : (p.taxe || 0.2)) * 100) }}%</td>
+                        <td>
+                            <div class="taxe-input-wrap">
+                                <input
+                                    type="number"
+                                    class="form-control form-control-sm text-end line-number-input line-tax-input"
+                                    min="0"
+                                    max="100"
+                                    step="0.01"
+                                    [ngModel]="getTaxePercent(p)"
+                                    (ngModelChange)="onTaxePercentChange(i, $event)"
+                                />
+                                <span class="taxe-input-suffix">%</span>
+                            </div>
+                        </td>
 
                         <td class="text-end"><strong>{{ p.total | number:'1.2-2' }}</strong> dh</td>
 
@@ -275,7 +311,7 @@
                 </li>
                 <li class="list-group-item d-flex justify-content-between">
                     <strong>TVA</strong>
-                    <span>{{ isClientExonerated ? '0%' : '20%' }}</span>
+                    <span>{{ taxeTotal | number:'1.2-2' }} dh</span>
                 </li>
                 <li class="list-group-item bg-light d-flex justify-content-between">
                     <strong>Total général</strong> <strong>{{ totalGeneral | number:'1.2-2' }} dh</strong>
@@ -298,6 +334,11 @@
                 <li>
                     <button *ngIf="pdfPermissionsService.canAccessPdf('devis', 'normal')" class="dropdown-item" type="button" (click)="imprimerPdfNormal()">
                         Normal
+                    </button>
+                </li>
+                <li>
+                    <button *ngIf="pdfPermissionsService.canAccessPdf('devis', 'simple')" class="dropdown-item" type="button" (click)="imprimerPdfSimple()">
+                        Devis simple
                     </button>
                 </li>
                 <li>

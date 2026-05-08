@@ -290,7 +290,8 @@ export class DevisComponent implements OnInit, AfterViewInit {
 
   AllClients() {
     this.baseService.getClient().subscribe((response: any) => {
-      this.clients = response?.data || (Array.isArray(response) ? response : []);
+      const allPartenaires = response?.data || (Array.isArray(response) ? response : []);
+      this.clients = (allPartenaires || []).filter((partenaire: any) => Number(partenaire?.type) === 1);
       if (this.clients.length > 0) {
       }
       // Ne pas initialiser filteredClients avec tous les clients, laisser vide au départ
@@ -630,13 +631,13 @@ showNotification(message: string, isError: boolean = false) {
     this.showNotification('✅ Export CSV réussi !', false);
   }
 
-onPrintDevis(document_id: any) {
+onPrintDevis(document_id: any, printMode: 'normal' | 'simple' = 'normal') {
   if (!document_id) {
     Swal.fire({ icon: 'error', title: 'Erreur', text: 'document_id introuvable.' });
     return;
   }
   // Forcer le type à 'DEVIS' pour s'assurer qu'on génère toujours un devis, même si le document a été transformé
-  this.emailService.generateDevisPDF(document_id.toString(), { forceDocumentType: 'DEVIS' }).subscribe({
+  this.emailService.generateDevisPDF(document_id.toString(), { forceDocumentType: 'DEVIS', printMode }).subscribe({
     next: (res) => {
       const url = res?.pdfUrl;
       if (url) {

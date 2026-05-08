@@ -1,4 +1,5 @@
 const factureFournisseurModel = require('../../models/achats/facture-fournisseur.model');
+const factureFournisseurScanService = require('./facture-fournisseur-scan.service');
 
 // Obtenir toutes les factures fournisseur avec pagination
 const getFacturesFournisseur = async (options = {}, sequelizeConnection = null) => {
@@ -53,6 +54,52 @@ const createFactureFournisseurFromCommande = async (commandeId, sequelizeConnect
   }
 };
 
+const createFactureFournisseurFromScan = async (scanData, sequelizeConnection = null) => {
+  try {
+    const result = await factureFournisseurModel.createFactureFournisseurFromScan(scanData, sequelizeConnection);
+    return result;
+  } catch (error) {
+    console.error('[createFactureFournisseurFromScan Service] Erreur:', error);
+    throw error;
+  }
+};
+
+const createFactureFournisseurManual = async (factureData, sequelizeConnection = null) => {
+  try {
+    return await factureFournisseurModel.createFactureFournisseurManual(factureData, sequelizeConnection);
+  } catch (error) {
+    console.error('[createFactureFournisseurManual Service] Erreur:', error);
+    throw error;
+  }
+};
+
+const updateFactureFournisseur = async (id, factureData, sequelizeConnection = null) => {
+  try {
+    return await factureFournisseurModel.updateFactureFournisseur(id, factureData, sequelizeConnection);
+  } catch (error) {
+    console.error('[updateFactureFournisseur Service] Erreur:', error);
+    throw error;
+  }
+};
+
+const saveDetail = async ({ lignes }, sequelizeConnection = null) => {
+  try {
+    return await factureFournisseurModel.saveDetailLines(lignes, sequelizeConnection);
+  } catch (error) {
+    console.error('[saveDetail FactureFournisseur Service] Erreur:', error);
+    throw error;
+  }
+};
+
+const deleteLignesParIds = async (ligneIds, sequelizeConnection = null) => {
+  try {
+    return await factureFournisseurModel.deleteLignesParIds(ligneIds, sequelizeConnection);
+  } catch (error) {
+    console.error('[deleteLignesParIds FactureFournisseur Service] Erreur:', error);
+    throw error;
+  }
+};
+
 // Supprimer une facture fournisseur
 const deleteFactureFournisseur = async (id, sequelizeConnection = null) => {
   try {
@@ -64,11 +111,21 @@ const deleteFactureFournisseur = async (id, sequelizeConnection = null) => {
   }
 };
 
+const analyzeFactureFournisseurScan = async (file) => {
+  return factureFournisseurScanService.analyzeFactureFournisseurScan(file);
+};
+
 module.exports = {
   getFacturesFournisseur,
   getFactureFournisseur,
   getCommandesNonFacturees,
   createFactureFournisseurFromCommande,
-  deleteFactureFournisseur
+  createFactureFournisseurFromScan,
+  createFactureFournisseurManual,
+  updateFactureFournisseur,
+  saveDetail,
+  deleteLignesParIds,
+  deleteFactureFournisseur,
+  analyzeFactureFournisseurScan
 };
 

@@ -7,14 +7,20 @@ const databaseInjector = require('../../middleware/database-injector.middleware'
 router.use(databaseInjector.injectConnection.bind(databaseInjector));
 
 // router pour CRUD client
+router.get('/contact/autocomplete', clientController.getContactsAutocomplete);
 router.get('/contact', clientController.getContacts);
 router.get('/contact/paged', clientController.getContactsPaged);
+router.get('/contact/check-unique', clientController.checkCommercialUniqueness);
 router.get('/fournisseur', clientController.getFournisseurs);
 // Liste paginée (pour l'interface Fournisseurs, sans DataTables)
 router.get('/fournisseur/paged', clientController.getFournisseursPaged);
+router.get('/fournisseur/:id/stats', clientController.getFournisseurStatistics);
+router.get('/fournisseur/check-unique', clientController.checkFournisseurUniqueness);
 router.get('/client', clientController.getClients);
 // Liste paginée (pour l'interface Clients, sans DataTables)
 router.get('/client/paged', clientController.getClientsPaged);
+router.get('/client/:id/stats', clientController.getClientStatistics);
+router.get('/client/check-unique', clientController.checkClientUniqueness);
 router.get('/ville', clientController.getVilles);
 router.get('/identifiant', clientController.getIdentifiants);
 router.get('/listes/:group_id', clientController.getListesByGroupId);
@@ -49,3 +55,5 @@ router.put('/:id', clientController.editClient);
 router.delete('/:id', clientController.deleteClient);
 
 module.exports = router;
+
+

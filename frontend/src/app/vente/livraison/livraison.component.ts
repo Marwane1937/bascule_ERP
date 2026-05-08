@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { BaseService } from 'src/app/service/base.service';
@@ -6,8 +6,40 @@ import { VentesService } from 'src/app/service/ventes.service';
 import { EmailService } from 'src/app/service/email.service';
 import { PdfPermissionsService } from 'src/app/service/pdf-permissions.service';
 import Swal from 'sweetalert2';
-import { Subscription } from 'rxjs';
+import { Subscription, forkJoin } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
+
+interface CommandeProgressLine {
+  article_id: number | null;
+  article_cod: string;
+  article_nom: string;
+  quantite_demandee: number;
+  quantite_preparee: number;
+  quantite_livree: number;
+  quantite_restante_preparation: number;
+  quantite_restante_livraison: number;
+  preparation_percent: number;
+  livraison_percent: number;
+  etat_label: string;
+  has_preparation: boolean;
+}
+
+interface CommandeProgressData {
+  commande_id: number;
+  commande_numero: string;
+  has_preparation: boolean;
+  message?: string;
+  totals: {
+    quantite_demandee: number;
+    quantite_preparee: number;
+    quantite_livree: number;
+    quantite_restante_preparation: number;
+    quantite_restante_livraison: number;
+    pending_products_count: number;
+    progression_percent: number;
+  };
+  lines: CommandeProgressLine[];
+}
 
 @Component({
   selector: 'app-livraison',
@@ -32,9 +64,11 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   commerciaux: any[] = [];
   filteredCommerciaux: any[] = [];
   selectedCommercial: any = null;
+  depots: any[] = [];
   LivraisonForm!: FormGroup;
   successMessage: string | null = null;
   isError: boolean = false;
+  isWarning: boolean = false;
   nextLivraisonNumero: string = 'BL25-0001';
   
   // Commandes pour transfert vers livraison
@@ -71,7 +105,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   sortColumnLivraisons: string = 'date';
   sortDirectionLivraisons: 'ASC' | 'DESC' = 'DESC';
   
-  // Filtres avancés pour les livraisons
+  // Filtres avanc?s pour les livraisons
   showAdvancedFiltersLivraisons: boolean = false;
   filterDateFromLivraisons: string = '';
   filterDateToLivraisons: string = '';
@@ -86,6 +120,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   // Filtres par colonne (style Excel) pour les livraisons
   columnFilters: any = {
     numero: '',
+    commande_numero: '',
     date: '',
     client: '',
     total_ht: '',
@@ -95,9 +130,10 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
 
   allLivraisons: any[] = []; // Stocker toutes les livraisons pour le filtrage
 
-  // Gestion des colonnes (affichage/masquage, épinglage, etc.)
+  // Gestion des colonnes (affichage/masquage, ?pinglage, etc.)
   columnVisibility: any = {
     numero: true,
+    commande_numero: true,
     date: true,
     client: true,
     total_ht: true,
@@ -110,6 +146,14 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   showColumnMenu: boolean = false;
   activeColumnMenu: string = '';
   menuPosition: any = { x: 0, y: 0 };
+  resizingColumn: string | null = null;
+  resizeStartX = 0;
+  resizeStartWidth = 0;
+  highlightedLivraisonNumero: string = '';
+  detailMode: boolean = false;
+  private readonly livraisonFocusStorageKey = 'facturation-focus-livraison';
+  private sidebarStateBeforeDetailMode: boolean | null = null;
+  private sidebarObserver: MutationObserver | null = null;
   
   private clientSearchSub?: Subscription;
   private commercialSearchSub?: Subscription;
@@ -138,6 +182,14 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   clientChart: any = null;
   topClientsChart: any = null;
   articleChart: any = null;
+  commandePopoverVisible: boolean = false;
+  commandePopoverLoading: boolean = false;
+  commandePopoverData: CommandeProgressData | null = null;
+  commandePopoverPosition = { top: 0, left: 0 };
+  private hoveredCommandeId: number | null = null;
+  private commandePopoverAnchor = { x: 0, y: 0 };
+  private commandePopoverHideTimeout: ReturnType<typeof setTimeout> | null = null;
+  private commandeProgressCache = new Map<number, CommandeProgressData>();
 
   constructor(
     private ventesService: VentesService, 
@@ -157,24 +209,44 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.getLivraisons();
+    const focusedLivraison = this.consumePendingFocusedLivraison();
+    if (focusedLivraison?.numero) {
+      this.highlightedLivraisonNumero = focusedLivraison.numero;
+      this.ventesService.getLivraisonLocationByNumero(focusedLivraison.numero, {
+        pageSize: this.pageSizeLivraisons,
+        orderBy: this.sortColumnLivraisons,
+        orderDirection: this.sortDirectionLivraisons
+      }).subscribe({
+        next: (response: any) => {
+          const page = Number(response?.data?.page || 1);
+          this.loadLivraisons(page > 0 ? page : 1, '', false);
+        },
+        error: () => {
+          this.loadLivraisons(1, '', false);
+        }
+      });
+    } else {
+      this.getLivraisons();
+    }
     this.getCommandesNonLivrees();
     this.AllClients();
     this.AllCommerciaux();
+    this.AllDepots();
     this.initForm();
     this.resetFormState();
     this.loadNextLivraisonNumero();
   }
 
   initForm(): void {
-    // Récupérer la date du jour au format YYYY-MM-DD
+    // R?cup?rer la date du jour au format YYYY-MM-DD
     const today = new Date().toISOString().split('T')[0];
     
     this.LivraisonForm = this.fb.group({
-      date: [today], // Date du jour par défaut, automatiquement renseignée
+      date: [today], // Date du jour par défaut, automatiquement renseign?e
       description: [''], // Non obligatoire
       part_id: [0, Validators.required], // Client obligatoire uniquement
       contact_id: [0], // Commercial non obligatoire
+      depot_id: [null],
       date_fin: [''], // Non obligatoire
       etat: [3],
       clientSearch: [''],
@@ -185,8 +257,8 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private setupFormListeners(): void {
-    // Les listeners ne sont plus nécessaires car on utilise directement (input) dans le template
-    // On garde cette méthode vide pour éviter les erreurs si elle est appelée ailleurs
+    // Les listeners ne sont plus n?cessaires car on utilise directement (input) dans le template
+    // On garde cette méthode vide pour ?viter les erreurs si elle est appel?e ailleurs
   }
 
   private resetFormState(): void {
@@ -194,7 +266,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    // Récupérer la date du jour au format YYYY-MM-DD
+    // R?cup?rer la date du jour au format YYYY-MM-DD
    // const today = new Date().toISOString().split('T')[0];
    const now = new Date();
    const pad = (n: number) => n.toString().padStart(2, '0');
@@ -208,6 +280,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
       description: '',
       part_id: 0,
       contact_id: 0,
+      depot_id: null,
       date_fin: '',
       etat: 3,
       clientSearch: '',
@@ -222,6 +295,54 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
 
   getTodayDate(): string {
     return new Date().toISOString().split('T')[0];
+  }
+
+  formatTableDate(value: any): string {
+    if (!value) {
+      return '-';
+    }
+
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const formatParts = (day: number, month: number, year: string | number): string =>
+      `${pad(day)}/${pad(month)}/${year}`;
+
+    if (value instanceof Date && !isNaN(value.getTime())) {
+      return formatParts(
+        value.getDate(),
+        value.getMonth() + 1,
+        value.getFullYear()
+      );
+    }
+
+    const rawValue = String(value).trim();
+    const isoDateMatch = rawValue.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (isoDateMatch) {
+      return formatParts(
+        Number(isoDateMatch[3]),
+        Number(isoDateMatch[2]),
+        isoDateMatch[1]
+      );
+    }
+
+    const frenchDateMatch = rawValue.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (frenchDateMatch) {
+      return formatParts(
+        Number(frenchDateMatch[1]),
+        Number(frenchDateMatch[2]),
+        frenchDateMatch[3]
+      );
+    }
+
+    const parsedDate = new Date(rawValue.replace(' ', 'T'));
+    if (isNaN(parsedDate.getTime())) {
+      return '-';
+    }
+
+    return formatParts(
+      parsedDate.getDate(),
+      parsedDate.getMonth() + 1,
+      parsedDate.getFullYear()
+    );
   }
 
   private normalizeValue(value: string | null | undefined): string {
@@ -295,10 +416,10 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
       $('#addLivraisonModal').on('shown.bs.modal', () => {
         this.resetFormState();
         this.loadNextLivraisonNumero();
-        // S'assurer que les clients et commerciaux sont chargés à chaque ouverture du modal
+        // S'assurer que les clients et commerciaux sont charg?s ? chaque ouverture du modal
         this.AllClients();
         this.AllCommerciaux();
-        // Réinitialiser les listes filtrées
+        // Réinitialiser les listes filtr?es
         this.filteredClients = [];
         this.filteredCommerciaux = [];
         this.searchTerm = '';
@@ -310,6 +431,8 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
         this.resetFormState();
       });
     }
+
+    this.startSidebarObserver();
   }
 
   loadNextLivraisonNumero(): void {
@@ -327,6 +450,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
 
   loadLivraisons(page: number = 1, search: string = '', resetFilters: boolean = false): void {
     this.loadingLivraisons = true;
+    this.hideCommandeProgressPopover(true);
     this.currentPageLivraisons = page;
     this.searchTermLivraisons = search;
     
@@ -347,8 +471,11 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
         const result = response.data || [];
         const pagination = response.pagination || {};
         
-        // Les données sont déjà filtrées et paginées par le serveur
-        const livraisonsData = Array.isArray(result) ? result : [];
+        // Les données sont déjà filtr?es et pagin?es par le serveur
+        const livraisonsData = (Array.isArray(result) ? result : []).map((item: any) => ({
+          ...item,
+          checked: false
+        }));
         this.livraisons = livraisonsData;
         this.allLivraisons = [...livraisonsData]; // Stocker une copie pour les filtres locaux
         this.totalRecordsLivraisons = pagination.total || 0;
@@ -362,9 +489,10 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
         
         this.loadingLivraisons = false;
         this.cdr.detectChanges();
+        this.applyFocusedLivraisonHighlight();
       },
       error: (err) => {
-        this.showError("❌ Une erreur s'est produite lors du chargement des livraisons.");
+        this.showError("Erreur Une erreur s'est produite lors du chargement des livraisons.");
         this.loadingLivraisons = false;
         this.livraisons = [];
         this.allLivraisons = [];
@@ -374,8 +502,512 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   getLivraisons(): void {
-    // Toujours utiliser loadLivraisons avec pagination dès le démarrage
+    // Toujours utiliser loadLivraisons avec pagination d?s le démarrage
     this.loadLivraisons(1, '', false);
+  }
+
+  private consumePendingFocusedLivraison(): { numero: string } | null {
+    try {
+      const rawValue = localStorage.getItem(this.livraisonFocusStorageKey);
+      if (!rawValue) {
+        return null;
+      }
+
+      localStorage.removeItem(this.livraisonFocusStorageKey);
+      const parsed = JSON.parse(rawValue);
+      const numero = String(parsed?.numero || '').trim();
+      return numero ? { numero } : null;
+    } catch {
+      localStorage.removeItem(this.livraisonFocusStorageKey);
+      return null;
+    }
+  }
+
+  private applyFocusedLivraisonHighlight(): void {
+    if (!this.highlightedLivraisonNumero) {
+      return;
+    }
+
+    setTimeout(() => {
+      const rows = Array.from(document.querySelectorAll('[data-livraison-numero]')) as HTMLElement[];
+      const targetRow = rows.find((row) => String(row.getAttribute('data-livraison-numero') || '').trim() === this.highlightedLivraisonNumero);
+      if (!targetRow) {
+        return;
+      }
+
+      targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
+  }
+
+  isFocusedLivraison(livraison: any): boolean {
+    return String(livraison?.numero || '').trim() === this.highlightedLivraisonNumero;
+  }
+
+  onCommandeCellEnter(livraison: any, event: MouseEvent): void {
+    const commandeId = Number(livraison?.commande_id || 0);
+    const commandeNumero = String(livraison?.commande_numero || '').trim();
+
+    if (!commandeId || !commandeNumero) {
+      return;
+    }
+
+    this.clearCommandePopoverHideTimer();
+    this.hoveredCommandeId = commandeId;
+    this.commandePopoverVisible = true;
+    this.commandePopoverLoading = false;
+    this.updateCommandePopoverPosition(event);
+
+    const cachedProgress = this.commandeProgressCache.get(commandeId);
+    if (cachedProgress) {
+      this.commandePopoverData = cachedProgress;
+      return;
+    }
+
+    this.commandePopoverLoading = true;
+    this.commandePopoverData = this.createEmptyCommandeProgressData(commandeId, commandeNumero, 'Chargement de la progression...');
+
+    this.ventesService.getLivraisonCommandeProgress(commandeId).subscribe({
+      next: (response: any) => {
+        const progress = (response?.data || response || null) as CommandeProgressData | null;
+        if (!progress) {
+          if (this.hoveredCommandeId === commandeId) {
+            this.commandePopoverData = this.createEmptyCommandeProgressData(commandeId, commandeNumero, 'Aucune progression disponible.');
+            this.commandePopoverLoading = false;
+            this.cdr.detectChanges();
+          }
+          return;
+        }
+
+        this.commandeProgressCache.set(commandeId, progress);
+
+        if (this.hoveredCommandeId !== commandeId) {
+          return;
+        }
+
+        this.commandePopoverData = progress;
+        this.commandePopoverLoading = false;
+        this.updateCommandePopoverPosition();
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        if (this.hoveredCommandeId !== commandeId) {
+          return;
+        }
+
+        this.commandePopoverData = this.createEmptyCommandeProgressData(
+          commandeId,
+          commandeNumero,
+          'Impossible de charger l\'etat de cette commande.'
+        );
+        this.commandePopoverLoading = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  onCommandeCellMove(event: MouseEvent): void {
+    if (!this.commandePopoverVisible) {
+      return;
+    }
+
+    this.updateCommandePopoverPosition(event);
+  }
+
+  onCommandePopoverMouseEnter(): void {
+    this.clearCommandePopoverHideTimer();
+  }
+
+  scheduleHideCommandeProgressPopover(): void {
+    this.clearCommandePopoverHideTimer();
+    this.commandePopoverHideTimeout = setTimeout(() => {
+      this.hideCommandeProgressPopover();
+    }, 160);
+  }
+
+  hideCommandeProgressPopover(force: boolean = false): void {
+    this.clearCommandePopoverHideTimer();
+    this.hoveredCommandeId = null;
+    this.commandePopoverVisible = false;
+    this.commandePopoverLoading = false;
+    this.commandePopoverData = null;
+
+    if (force) {
+      this.commandePopoverPosition = { top: 0, left: 0 };
+    }
+  }
+
+  getCommandeLinePendingLabel(line: CommandeProgressLine): string {
+    if (Number(line?.quantite_restante_preparation || 0) > 0) {
+      return `${this.formatQuantity(line.quantite_restante_preparation)} a preparer`;
+    }
+
+    if (Number(line?.quantite_restante_livraison || 0) > 0) {
+      return `${this.formatQuantity(line.quantite_restante_livraison)} a livrer`;
+    }
+
+    return 'Termine';
+  }
+
+  getCommandeLineStatusClass(line: CommandeProgressLine): string {
+    const status = String(line?.etat_label || '').toLowerCase();
+
+    if (status.includes('livre')) {
+      return 'is-done';
+    }
+    if (status.includes('livraison')) {
+      return 'is-delivery';
+    }
+    if (status.includes('pret')) {
+      return 'is-ready';
+    }
+    if (status.includes('preparation')) {
+      return 'is-preparation';
+    }
+
+    return 'is-pending';
+  }
+
+  getCommandeLineRemainingValue(line: CommandeProgressLine): number {
+    const restePreparation = Number(line?.quantite_restante_preparation || 0);
+    if (restePreparation > 0) {
+      return restePreparation;
+    }
+
+    return Number(line?.quantite_restante_livraison || 0);
+  }
+
+  getCommandeLineRemainingLabel(line: CommandeProgressLine): string {
+    if (Number(line?.quantite_restante_preparation || 0) > 0) {
+      return 'A preparer';
+    }
+
+    if (Number(line?.quantite_restante_livraison || 0) > 0) {
+      return 'A livrer';
+    }
+
+    return 'Termine';
+  }
+
+  getCommandePreparationPercent(totalDemandee: number, totalPreparee: number): number {
+    const demandee = Number(totalDemandee || 0);
+    if (demandee <= 0) {
+      return 0;
+    }
+
+    return Number((((Number(totalPreparee || 0)) * 100) / demandee).toFixed(2));
+  }
+
+  getCommandeDisplayedRemainingTotal(data: CommandeProgressData | null): number {
+    if (!data?.totals) {
+      return 0;
+    }
+
+    const restePreparation = Number(data.totals.quantite_restante_preparation || 0);
+    if (restePreparation > 0) {
+      return restePreparation;
+    }
+
+    return Number(data.totals.quantite_restante_livraison || 0);
+  }
+
+  private createEmptyCommandeProgressData(
+    commandeId: number,
+    commandeNumero: string,
+    message: string
+  ): CommandeProgressData {
+    return {
+      commande_id: commandeId,
+      commande_numero: commandeNumero,
+      has_preparation: false,
+      message,
+      totals: {
+        quantite_demandee: 0,
+        quantite_preparee: 0,
+        quantite_livree: 0,
+        quantite_restante_preparation: 0,
+        quantite_restante_livraison: 0,
+        pending_products_count: 0,
+        progression_percent: 0
+      },
+      lines: []
+    };
+  }
+
+  private updateCommandePopoverPosition(event?: MouseEvent): void {
+    if (event) {
+      this.commandePopoverAnchor = {
+        x: event.clientX,
+        y: event.clientY
+      };
+    }
+
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
+    const popoverWidth = Math.min(380, Math.max(0, viewportWidth - 32));
+    const lineCount = this.commandePopoverData?.lines?.length || 0;
+    const estimatedHeight = Math.min(430, this.commandePopoverLoading ? 170 : 170 + (lineCount * 84));
+    const popoverHeight = Math.min(estimatedHeight, Math.max(0, viewportHeight - 32));
+    const left = Math.max(16, Math.round((viewportWidth - popoverWidth) / 2));
+    const top = Math.max(16, Math.round((viewportHeight - popoverHeight) / 2));
+
+    this.commandePopoverPosition = { top, left };
+  }
+
+  private clearCommandePopoverHideTimer(): void {
+    if (this.commandePopoverHideTimeout) {
+      clearTimeout(this.commandePopoverHideTimeout);
+      this.commandePopoverHideTimeout = null;
+    }
+  }
+
+  private formatQuantity(value: number): string {
+    const numericValue = Number(value || 0);
+    return Number.isInteger(numericValue) ? `${numericValue}` : numericValue.toFixed(2);
+  }
+
+  getSelectedLivraisonsCount(): number {
+    return this.livraisons.filter((l: any) => !!l?.checked && !this.isFacturee(l)).length;
+  }
+
+  hasMultipleLivraisonsSelected(): boolean {
+    return this.getSelectedLivraisonsCount() > 1;
+  }
+
+  isAllLivraisonsSelected(): boolean {
+    const selectableLivraisons = this.livraisons.filter((l: any) => !this.isFacturee(l));
+    if (selectableLivraisons.length === 0) return false;
+    return selectableLivraisons.every((l: any) => !!l.checked);
+  }
+
+  toggleAllLivraisons(event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.livraisons.forEach((l: any) => {
+      if (!this.isFacturee(l)) {
+        l.checked = checked;
+      }
+    });
+    this.cdr.detectChanges();
+  }
+
+  toggleLivraisonSelection(livraison: any, event: Event): void {
+    if (!livraison || this.isFacturee(livraison)) return;
+    livraison.checked = (event.target as HTMLInputElement).checked;
+    this.cdr.detectChanges();
+  }
+
+  clearLivraisonSelection(): void {
+    this.livraisons.forEach((l: any) => l.checked = false);
+    this.allLivraisons.forEach((l: any) => l.checked = false);
+  }
+
+  transfererLivraisonsSelectionneesVersFacturation(): void {
+    const livraisonsSelectionnees = this.livraisons.filter((l: any) => !!l?.checked && !this.isFacturee(l));
+    if (livraisonsSelectionnees.length <= 1) return;
+
+    Swal.fire({
+      title: 'Vérification des bons sélectionnés...',
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading()
+    });
+
+    const checks = livraisonsSelectionnees.map((livraison: any) =>
+      this.ventesService.getLivraisonDataForTransfer(Number(livraison.document_id))
+    );
+
+    forkJoin(checks).subscribe({
+      next: (details: any[]) => {
+        const validSelections = livraisonsSelectionnees.map((livraison: any, index: number) => {
+          const detail = details[index] || {};
+          return {
+            livraison,
+            partId: Number(detail?.part_id),
+            clientName: detail?.client_nom || detail?.client || '',
+            date: detail?.date
+          };
+        }).filter((item: any) => !!item.partId && !isNaN(item.partId));
+
+        if (validSelections.length !== livraisonsSelectionnees.length) {
+          Swal.close();
+          this.showNotification('Transfert groupé impossible: certains bons sont invalides.', 'warning');
+          return;
+        }
+
+        const uniquePartIds = Array.from(new Set(validSelections.map((item: any) => item.partId)));
+        if (uniquePartIds.length > 1) {
+          Swal.close();
+          this.showNotification('Transfert groupé impossible: les bons sélectionnés appartiennent à des clients différents.', 'warning');
+          return;
+        }
+
+        const first = validSelections[0];
+        const defaultDate = first?.date
+          ? new Date(first.date).toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0];
+        const defaultClientName = first?.clientName || '';
+        const defaultPartId = Number(first?.partId);
+
+        Swal.close();
+        this.openGroupedFacturationPopup(livraisonsSelectionnees, defaultDate, defaultClientName, defaultPartId);
+      },
+      error: () => {
+        Swal.close();
+        this.showNotification('Impossible de vérifier les bons sélectionnés.', 'warning');
+      }
+    });
+  }
+
+  private openGroupedFacturationPopup(
+    livraisons: any[],
+    defaultDate: string,
+    defaultClientName: string,
+    defaultPartId: number
+  ): void {
+    let selectedPartId = defaultPartId || null;
+
+    const htmlContent = `
+      <div style="text-align: left; padding: 10px;">
+        <div class="mb-3">
+          <label for="factureDate" style="display: block; margin-bottom: 5px; font-weight: bold;">Date de facture:</label>
+          <input type="date" id="factureDate" class="swal2-input" value="${defaultDate}" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
+        <div class="mb-3" style="position: relative;">
+          <label for="factureClient" style="display: block; margin-bottom: 5px; font-weight: bold;">Client:</label>
+          <input type="text" id="factureClient" class="swal2-input" value="${defaultClientName}" 
+                 placeholder="Rechercher un client..." 
+                 style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+                 autocomplete="off">
+          <div id="clientSuggestions" style="position: absolute; z-index: 1000; background: white; border: 1px solid #ddd; max-height: 200px; overflow-y: auto; width: calc(100% - 2px); margin-top: 2px; display: none; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></div>
+        </div>
+        <input type="hidden" id="selectedPartId" value="${defaultPartId || ''}">
+      </div>
+    `;
+
+    Swal.fire({
+      title: 'Confirmer le transfert',
+      html: htmlContent,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Oui, transférer',
+      cancelButtonText: 'Annuler',
+      confirmButtonColor: '#28a745',
+      cancelButtonColor: '#6c757d',
+      reverseButtons: true,
+      width: '650px',
+      padding: '2rem',
+      didOpen: () => {
+        const clientInput = document.getElementById('factureClient') as HTMLInputElement;
+        const suggestionsDiv = document.getElementById('clientSuggestions');
+        const hiddenPartId = document.getElementById('selectedPartId') as HTMLInputElement;
+
+        if (clientInput && suggestionsDiv && hiddenPartId) {
+          let searchTimeout: any;
+
+          clientInput.addEventListener('input', (e: any) => {
+            const searchTerm = e.target.value;
+            clearTimeout(searchTimeout);
+
+            if (searchTerm.length >= 2) {
+              searchTimeout = setTimeout(() => {
+                this.onSearchChange(searchTerm);
+                setTimeout(() => {
+                  if (this.filteredClients.length > 0) {
+                    suggestionsDiv.innerHTML = this.filteredClients.map((client: any) => {
+                      const clientName = (client.nom || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                      return `<div style="padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; transition: background 0.2s;" 
+                                  onmouseover="this.style.background='#f0f0f0'" 
+                                  onmouseout="this.style.background='white'"
+                                  data-part-id="${client.part_id}"
+                                  data-client-name="${clientName}">
+                              ${client.nom || ''}
+                            </div>`;
+                    }).join('');
+                    suggestionsDiv.style.display = 'block';
+
+                    suggestionsDiv.querySelectorAll('div[data-part-id]').forEach((div: any) => {
+                      div.addEventListener('click', () => {
+                        const partId = parseInt(div.getAttribute('data-part-id'), 10);
+                        const clientName = div.getAttribute('data-client-name');
+                        clientInput.value = clientName;
+                        selectedPartId = partId;
+                        hiddenPartId.value = partId.toString();
+                        suggestionsDiv.style.display = 'none';
+                      });
+                    });
+                  } else {
+                    suggestionsDiv.innerHTML = '<div style="padding: 10px; color: #999;">Aucun client trouvé</div>';
+                    suggestionsDiv.style.display = 'block';
+                  }
+                }, 100);
+              }, 300);
+            } else {
+              suggestionsDiv.style.display = 'none';
+            }
+          });
+        }
+      },
+      preConfirm: () => {
+        const dateInput = document.getElementById('factureDate') as HTMLInputElement;
+        const hiddenPartId = document.getElementById('selectedPartId') as HTMLInputElement;
+
+        if (!dateInput || !dateInput.value) {
+          Swal.showValidationMessage('La date est requise');
+          return false;
+        }
+
+        const partId = hiddenPartId ? parseInt(hiddenPartId.value, 10) : selectedPartId;
+        if (!partId || isNaN(partId)) {
+          Swal.showValidationMessage('Le client est requis');
+          return false;
+        }
+
+        return {
+          factureDate: dateInput.value,
+          partId: partId
+        };
+      }
+    }).then((result) => {
+      if (!result.isConfirmed || !result.value) return;
+      const { factureDate, partId } = result.value;
+      this.processLivraisonsVersFacturation(livraisons, factureDate, partId);
+    });
+  }
+  private processLivraisonsVersFacturation(
+    livraisons: any[],
+    factureDate: string,
+    partId: number
+  ): void {
+    const stockIds = livraisons
+      .map((livraison: any) => Number(livraison?.document_id))
+      .filter((id: number) => !!id && !isNaN(id));
+
+    Swal.fire({
+      title: 'Transfert en cours...',
+      html: 'Regroupement des bons de livraison dans une seule facture...',
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading()
+    });
+
+    this.ventesService.transfererLivraisonsVersFacturation(stockIds, factureDate, partId).subscribe({
+      next: (res: any) => {
+        Swal.fire({
+          icon: 'success',
+          title: 'Transfert réussi',
+          text: `Les bons sélectionnés ont été regroupés dans la facture ${res?.factureNum || ''}.`,
+          confirmButtonText: 'OK'
+        }).then(() => {
+          this.clearLivraisonSelection();
+          this.loadLivraisons(this.currentPageLivraisons, this.searchTermLivraisons);
+        });
+      },
+      error: (err: any) => {
+        Swal.fire({
+          icon: 'error',
+          title: 'Erreur',
+          text: err?.error?.message || err?.message || 'Erreur lors du transfert groupé en facturation',
+          confirmButtonText: 'Fermer'
+        });
+      }
+    });
   }
 
   private initializeDataTable(): void {
@@ -397,7 +1029,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
         $('#livraisonTable').DataTable().destroy();
       }
       
-      // Initialiser DataTables simple (côté client)
+      // Initialiser DataTables simple (c?t? client)
       // @ts-ignore
       this.dataTableLivraison = $('#livraisonTable').DataTable({
         pageLength: 25,
@@ -428,7 +1060,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     this.loadingCommandesFacturation = true;
     this.ventesService.getCommandesNonLivrees().subscribe({
       next: (response: any) => {
-        // Gérer le format de réponse (peut être { success: true, data: [...] } ou directement un tableau)
+        // G?rer le format de r?ponse (peut ?tre { success: true, data: [...] } ou directement un tableau)
         let commandesData = response;
         if (response && response.data && Array.isArray(response.data)) {
           commandesData = response.data;
@@ -445,7 +1077,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
         this.loadingCommandesFacturation = false;
         this.cdr.detectChanges();
         
-        // Initialiser DataTables après le chargement des données
+        // Initialiser DataTables apr?s le chargement des données
         setTimeout(() => {
           this.initializeDataTableCommandes();
           this.initializeDataTableCommandesFacturation();
@@ -492,15 +1124,15 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
         searching: true,
         lengthChange: true,
         deferRender: true,
-        // Ne pas utiliser data: pour laisser Angular gérer le rendu
-        // DataTables gère juste la pagination, recherche et tri
+        // Ne pas utiliser data: pour laisser Angular g?rer le rendu
+        // DataTables g?re juste la pagination, recherche et tri
         columnDefs: [
-          { orderable: false, targets: [0, 6] }, // Désactiver le tri sur la colonne checkbox et Status
-          { searchable: false, targets: [0, 6] } // Désactiver la recherche sur checkbox et Status
+          { orderable: false, targets: [0, 6] }, // D?sactiver le tri sur la colonne checkbox et Status
+          { searchable: false, targets: [0, 6] } // D?sactiver la recherche sur checkbox et Status
         ],
         // Écouter les changements de checkbox après le rendu DataTables
         drawCallback: () => {
-          // Réattacher les événements aux checkboxes après chaque redraw
+          // R?attacher les ?v?nements aux checkboxes apr?s chaque redraw
           // @ts-ignore
           $('#commandesTable-modal tbody input[type="checkbox"]').off('change').on('change', (e: any) => {
             const checkbox = e.target;
@@ -514,6 +1146,34 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
                 this.commandes.find(c => c.document_id === documentId)!.checked = checked;
                 this.cdr.detectChanges();
               }
+            }
+          });
+
+          // DataTables redessine le tbody et casse les bindings Angular sur ces boutons.
+          // On rattache donc des handlers DOM avec delegation.
+          // @ts-ignore
+          $('#commandesTable-modal tbody').off('click', 'button[data-action="edit-commande"]');
+          // @ts-ignore
+          $('#commandesTable-modal tbody').on('click', 'button[data-action="edit-commande"]', (e: any) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const rawId = e.currentTarget?.getAttribute('data-document-id');
+            const documentId = Number(rawId);
+            if (documentId > 0) {
+              this.OnEditCommande(documentId);
+            }
+          });
+
+          // @ts-ignore
+          $('#commandesTable-modal tbody').off('click', 'button[data-action="print-commande"]');
+          // @ts-ignore
+          $('#commandesTable-modal tbody').on('click', 'button[data-action="print-commande"]', (e: any) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const rawId = e.currentTarget?.getAttribute('data-document-id');
+            const documentId = Number(rawId);
+            if (documentId > 0) {
+              this.OnPrintCommande(documentId);
             }
           });
         },
@@ -562,7 +1222,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
         lengthChange: true,
         deferRender: true,
         columnDefs: [
-          { orderable: false, targets: 0 } // Désactiver le tri sur la colonne checkbox
+          { orderable: false, targets: 0 } // D?sactiver le tri sur la colonne checkbox
         ],
         language: {
           emptyTable: 'Aucune commande disponible',
@@ -583,12 +1243,12 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   getSelectedCount(): number {
-    // Vérifier à la fois dans le tableau et dans le DOM pour être sûr
+    // V?rifier ? la fois dans le tableau et dans le DOM pour ?tre s?r
     const countFromArray = this.commandes.filter(d => {
       return d.checked === true || d.checked === 'true' || d.checked === 1 || d.checked === 'checked';
     }).length;
     
-    // Vérifier aussi dans le DOM au cas où DataTables cacherait des lignes
+    // V?rifier aussi dans le DOM au cas o? DataTables cacherait des lignes
     try {
       // @ts-ignore
       if (typeof $ !== 'undefined') {
@@ -609,7 +1269,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
 
   isAllSelected(): boolean {
     if (this.commandes.length === 0) return false;
-    // Vérifier que toutes les commandes sont cochées
+    // V?rifier que toutes les commandes sont coch?es
     const allChecked = this.commandes.every(d => {
       return d.checked === true || d.checked === 'true' || d.checked === 1 || d.checked === 'checked';
     });
@@ -623,7 +1283,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
 
   toggleAllCommandes(event: Event) {
     const checked = (event.target as HTMLInputElement).checked;
-    // Mettre à jour toutes les commandes dans le tableau principal
+    // Mettre ? jour toutes les commandes dans le tableau principal
     this.commandes.forEach((d) => {
       d.checked = checked;
     });
@@ -632,7 +1292,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
 
   toggleAllCommandesFacturation(event: Event) {
     const checked = (event.target as HTMLInputElement).checked;
-    // Mettre à jour toutes les commandes dans le tableau principal
+    // Mettre ? jour toutes les commandes dans le tableau principal
     this.commandesFacturation.forEach((d) => {
       d.checked = checked;
     });
@@ -648,11 +1308,11 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     const index = this.commandes.findIndex(d => d.document_id === commande.document_id);
     
     if (index !== -1) {
-      // Mettre à jour l'état dans le tableau principal
+      // Mettre ? jour l'?tat dans le tableau principal
       this.commandes[index].checked = checked;
       commande.checked = checked;
       
-      // Forcer la détection de changement
+      // Forcer la d?tection de changement
       this.cdr.detectChanges();
     }
   }
@@ -665,18 +1325,18 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
       if (modal) {
         modal.hide();
       } else {
-        // Si l'instance n'existe pas, créer une nouvelle instance et la fermer
+        // Si l'instance n'existe pas, cr?er une nouvelle instance et la fermer
         const bsModal = new (window as any).bootstrap.Modal(modalElement);
         bsModal.hide();
       }
     }
     
-    // Naviguer vers la page d'édition de la commande
+    // Naviguer vers la page d'?dition de la commande
     this.router.navigate(['/Edit-Commande/' + document_id]);
   }
 
   OnPrintCommande(document_id: any): void {
-    // Afficher un loader pendant la génération du PDF
+    // Afficher un loader pendant la g?n?ration du PDF
     Swal.fire({
       title: 'Génération du PDF...',
       allowOutsideClick: false,
@@ -721,7 +1381,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   transfererCommandeVersLivraison() {
-    // Vérifier à la fois dans le tableau et dans le DOM
+    // V?rifier ? la fois dans le tableau et dans le DOM
     let commandesSelectionnees = this.commandes.filter(d => {
       return d.checked === true || d.checked === 'true' || d.checked === 1 || d.checked === 'checked';
     });
@@ -760,7 +1420,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    // Message de confirmation adapté au nombre de commandes
+    // Message de confirmation adapt? au nombre de commandes
     const message = commandesSelectionnees.length === 1
       ? `Voulez-vous transférer cette commande en livraison ?`
       : `Voulez-vous transférer <strong>${commandesSelectionnees.length}</strong> commandes en livraison ?`;
@@ -807,7 +1467,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
                   Swal.fire({
                     icon: 'success',
                     title: 'Transfert réussi',
-                    text: `✅ ${completed} livraison(s) créée(s) avec succès !`,
+                    text: `OK ${completed} livraison(s) créée(s) avec succès !`,
                     confirmButtonText: 'OK'
                   }).then(() => {
                     // Fermer le modal
@@ -822,9 +1482,9 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
                     window.location.reload();
                   });
                 } else {
-                  this.showError(`⚠️ ${completed} livraison(s) créée(s), ${errors} erreur(s).`);
+                  this.showError(`Attention ${completed} livraison(s) créée(s), ${errors} erreur(s).`);
                   
-                  // Décocher toutes les cases après transfert
+                  // D?cocher toutes les cases apr?s transfert
                   commandesSelectionnees.forEach(c => {
                     c.checked = false;
                     const index = this.commandes.findIndex(d => d.document_id === c.document_id);
@@ -845,12 +1505,12 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
               if (completed + errors === total) {
                 Swal.close();
                 if (completed > 0) {
-                  this.showError(`⚠️ ${completed} livraison(s) créée(s), ${errors} erreur(s).`);
+                  this.showError(`Attention ${completed} livraison(s) créée(s), ${errors} erreur(s).`);
                 } else {
-                  this.showError(`❌ Aucune livraison n'a pu être créée.`);
+                  this.showError(`Erreur Aucune livraison n'a pu être créée.`);
                 }
                 
-                // Actualiser les données même en cas d'erreur partielle
+                // Actualiser les données m?me en cas d'erreur partielle
                 this.getCommandesNonLivrees();
                 this.getLivraisons();
               }
@@ -858,7 +1518,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
           });
         });
       }
-      // Si l'utilisateur choisit "Non", aucune action n'est effectuée
+      // Si l'utilisateur choisit "Non", aucune action n'est effectu?e
     });
   }
 
@@ -883,16 +1543,16 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private processCommandeVersFacturation(commandes: any[], index: number) {
     if (index >= commandes.length) {
-      // Toutes les commandes ont été traitées
+      // Toutes les commandes ont ?t? trait?es
       Swal.fire({
         icon: 'success',
         title: 'Transfert terminé !',
-        text: `✅ ${commandes.length} commande(s) transférée(s) vers la facturation avec succès !`,
+        text: `OK ${commandes.length} commande(s) transférée(s) vers la facturation avec succès !`,
         confirmButtonText: 'OK'
       }).then(() => {
         this.getCommandesNonLivrees();
         this.loadLivraisons(this.currentPageLivraisons, this.searchTermLivraisons);
-        // Décocher toutes les commandes
+        // D?cocher toutes les commandes
         commandes.forEach(c => {
           c.checked = false;
           const cmdIndex = this.commandesFacturation.findIndex(cmd => cmd.document_id === c.document_id);
@@ -909,7 +1569,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     const dateValue = commande.date ? new Date(commande.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
     let selectedPartId = commande.part_id || null;
     
-    // Créer le HTML pour la popup avec date et client modifiables
+    // Cr?er le HTML pour la popup avec date et client modifiables
     const htmlContent = `
       <div style="text-align: left; padding: 10px;">
         <div class="mb-3">
@@ -926,7 +1586,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
         </div>
         <input type="hidden" id="selectedPartId${index}" value="${commande.part_id || ''}">
         <p class="text-muted small">Commande: ${commande.numero || 'N/A'}</p>
-        <p class="text-info small">📦 Cela créera <strong>deux livraisons</strong> et <strong>une facture</strong></p>
+        <p class="text-info small">Cela créera <strong>deux livraisons</strong> et <strong>une facture</strong></p>
       </div>
     `;
     
@@ -1034,7 +1694,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
         
         this.ventesService.transfererCommandeVersFacturation(commande.document_id, factureDate, partId).subscribe({
           next: (res: any) => {
-            // Décocher la commande
+            // D?cocher la commande
             commande.checked = false;
             const cmdIndex = this.commandesFacturation.findIndex(c => c.document_id === commande.document_id);
             if (cmdIndex !== -1) {
@@ -1055,16 +1715,16 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
               cancelButtonText: 'Arrêter'
             }).then((result) => {
               if (result.isConfirmed) {
-                // Continuer avec la commande suivante même en cas d'erreur
+                // Continuer avec la commande suivante m?me en cas d'erreur
                 this.processCommandeVersFacturation(commandes, index + 1);
               }
             });
           }
         });
       } else if (!result.isConfirmed && index === 0) {
-        // L'utilisateur a annulé dès le début, on ne fait rien
+        // L'utilisateur a annul? d?s le d?but, on ne fait rien
       } else if (!result.isConfirmed) {
-        // L'utilisateur a annulé, on continue avec les commandes restantes
+        // L'utilisateur a annul?, on continue avec les commandes restantes
         this.processCommandeVersFacturation(commandes, index + 1);
       }
     });
@@ -1075,14 +1735,14 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   transfererLivraisonVersFacturation(stockId: number) {
-    // Récupérer les données de la livraison
+    // R?cup?rer les données de la livraison
     this.ventesService.getLivraisonDataForTransfer(stockId).subscribe({
       next: (livraisonData: any) => {
         // Formater la date pour l'input date
         const dateValue = livraisonData.date ? new Date(livraisonData.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
         let selectedPartId = livraisonData.part_id || null;
         
-        // Créer le HTML pour la popup avec date et client modifiables
+        // Cr?er le HTML pour la popup avec date et client modifiables
         const htmlContent = `
           <div style="text-align: left; padding: 10px;">
             <div class="mb-3">
@@ -1256,7 +1916,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   OnPrintLivraison(document_id: any, printMode: string = 'normal') {
-    // Afficher un loader pendant la génération du PDF
+    // Afficher un loader pendant la g?n?ration du PDF
     Swal.fire({
       title: 'Génération du PDF...',
       allowOutsideClick: false,
@@ -1267,11 +1927,11 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // Convertir le mode d'impression pour le backend
     // 'normal' -> 'normal' (BL normal)
-    // 'non_valorise' -> 'non_valorise' (BL non valorisé)
+    // 'non_valorise' -> 'non_valorise' (BL non valoris?)
     const backendPrintMode = printMode === 'non_valorise' ? 'non_valorise' : 'normal';
 
-    // Utiliser generateDevisPDF car la route /api/pdf/generate gère tous les types de documents (devis, commandes, livraisons)
-    this.emailService.generateDevisPDF(document_id.toString(), { printMode: backendPrintMode }).subscribe({
+    // Utiliser generateDevisPDF car la route /api/pdf/generate g?re tous les types de documents (devis, commandes, livraisons)
+    this.emailService.generateDevisPDF(document_id.toString(), { printMode: backendPrintMode, forceDocumentType: 'LIVRAISON' }).subscribe({
       next: (res: any) => {
         Swal.close();
         const url = res?.pdfUrl;
@@ -1300,7 +1960,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   AllClients() {
     this.baseService.getClient().subscribe({
       next: (data) => {
-        // Gérer différents formats de réponse
+        // G?rer différents formats de r?ponse
         let clientsData = data;
         if (data && data.data && Array.isArray(data.data)) {
           clientsData = data.data;
@@ -1310,7 +1970,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
           clientsData = [];
         }
         
-        this.clients = clientsData;
+        this.clients = (clientsData || []).filter((client: any) => Number(client?.type) === 1);
         this.filteredClients = [];
       },
       error: (err) => {
@@ -1357,10 +2017,22 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     this.searchTerm = client.nom;
   }
 
+  AllDepots() {
+    this.baseService.getDepots().subscribe({
+      next: (response: any) => {
+        const data = response?.data || (Array.isArray(response) ? response : []);
+        this.depots = Array.isArray(data) ? data : [];
+      },
+      error: () => {
+        this.depots = [];
+      }
+    });
+  }
+
   AllCommerciaux() {
     this.baseService.getCommercial().subscribe({
       next: (data) => {
-        // Gérer différents formats de réponse
+        // G?rer différents formats de r?ponse
         let commerciauxData = data;
         if (data && data.data && Array.isArray(data.data)) {
           commerciauxData = data.data;
@@ -1420,12 +2092,13 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   onSubmit(): void {
     if (this.LivraisonForm.valid) {
       const formValue = {
-        ...this.LivraisonForm.value
+        ...this.LivraisonForm.value,
+        depot_id: this.LivraisonForm.value?.depot_id ? Number(this.LivraisonForm.value.depot_id) : null
       };
       
       this.ventesService.addLivraison(formValue).subscribe({
         next: (response: any) => {
-          this.showSuccess(`✅ Livraison ${response.numero || ''} créée avec succès !`);
+          this.showSuccess(`OK Livraison ${response.numero || ''} créée avec succès !`);
           const modal = document.getElementById('addLivraisonModal');
           if (modal) {
             const bsModal = (window as any).bootstrap?.Modal?.getInstance(modal);
@@ -1439,11 +2112,11 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
           this.loadNextLivraisonNumero();
         },
         error: (err) => {
-          this.showError(`❌ Une erreur s'est produite lors de la création de la livraison: ${err.error?.message || err.message || 'Erreur inconnue'}`);
+          this.showError(`Erreur Une erreur s'est produite lors de la cr?ation de la livraison: ${err.error?.message || err.message || 'Erreur inconnue'}`);
         }
       });
     } else {
-      this.showError("❗ Le formulaire est invalide. Veuillez remplir tous les champs requis.");
+      this.showError("Le formulaire est invalide. Veuillez remplir tous les champs requis.");
     }
   }
 
@@ -1522,7 +2195,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     return this.LivraisonForm.get('commercialSearch') as FormControl;
   }
 
-  // Méthodes de pagination pour les livraisons
+  // M?thodes de pagination pour les livraisons
   onPageChangeLivraisons(page: number): void {
     if (page >= 1 && page <= this.totalPagesLivraisons && page !== this.currentPageLivraisons) {
       this.loadLivraisons(page, this.searchTermLivraisons);
@@ -1567,7 +2240,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   getDisplayRangeLivraisons(): string {
     const start = ((this.currentPageLivraisons - 1) * this.pageSizeLivraisons) + 1;
     const end = Math.min(this.currentPageLivraisons * this.pageSizeLivraisons, this.totalRecordsLivraisons);
-    return `${start} à ${end}`;
+    return `${start} ? ${end}`;
   }
 
   // Tri par colonne pour les livraisons
@@ -1588,7 +2261,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     return this.sortDirectionLivraisons === 'ASC' ? 'fa-sort-up' : 'fa-sort-down';
   }
 
-  // Filtres avancés pour les livraisons
+  // Filtres avanc?s pour les livraisons
   toggleAdvancedFiltersLivraisons(): void {
     this.showAdvancedFiltersLivraisons = !this.showAdvancedFiltersLivraisons;
   }
@@ -1655,9 +2328,11 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   // Export des données pour les livraisons
   exportToCSVLivraisons(): void {
     const headers = ['Numéro', 'Date', 'Client', 'Commercial', 'HT', 'TVA', 'TTC'];
+    headers.splice(1, 0, 'Commande');
     const rows = this.livraisons.map(l => [
       l.numero || '',
-      l.date ? new Date(l.date).toLocaleDateString('fr-FR') : '',
+      l.commande_numero || '',
+      this.formatTableDate(l.date),
       l.client || '',
       l.commercial || '',
       (l.total_ht || 0).toFixed(2),
@@ -1680,12 +2355,20 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     link.click();
     document.body.removeChild(link);
     
-    this.showNotification('✅ Export CSV réussi !', false);
+    this.showNotification('OK Export CSV réussi !', false);
   }
 
-  showNotification(message: string, isError: boolean = false): void {
+  showNotification(message: string, typeOrIsError: boolean | 'success' | 'error' | 'warning' = false): void {
     this.successMessage = message;
-    this.isError = isError;
+
+    if (typeof typeOrIsError === 'boolean') {
+      this.isError = typeOrIsError;
+      this.isWarning = false;
+    } else {
+      this.isError = typeOrIsError === 'error';
+      this.isWarning = typeOrIsError === 'warning';
+    }
+
     setTimeout(() => {
       this.successMessage = null;
     }, 5000);
@@ -1717,6 +2400,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   clearColumnFilters(): void {
     this.columnFilters = {
       numero: '',
+      commande_numero: '',
       date: '',
       client: '',
       total_ht: '',
@@ -1779,6 +2463,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   resetColumns(): void {
     this.columnVisibility = {
       numero: true,
+      commande_numero: true,
       date: true,
       client: true,
       total_ht: true,
@@ -1788,6 +2473,65 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     this.pinnedColumns = [];
     this.columnWidths = {};
     this.hideColumnContextMenu();
+  }
+
+  startColumnResize(event: MouseEvent, column: string, headerEl: HTMLElement): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.resizingColumn = column;
+    this.resizeStartX = event.clientX;
+    const currentWidth = headerEl?.offsetWidth || parseInt(String(this.columnWidths[column] || ''), 10) || 160;
+    this.resizeStartWidth = currentWidth;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  @HostListener('document:mousemove', ['$event'])
+  onDocumentMouseMove(event: MouseEvent): void {
+    if (!this.resizingColumn) {
+      return;
+    }
+    const delta = event.clientX - this.resizeStartX;
+    const minByColumn: any = {
+      numero: 80,
+      commande_numero: 110,
+      date: 150,
+      client: 120,
+      total_ht: 110,
+      total_tva: 110,
+      total_ttc: 110
+    };
+    const maxByColumn: any = {
+      numero: 180,
+      commande_numero: 260,
+      date: 220,
+      client: 500,
+      total_ht: 180,
+      total_tva: 180,
+      total_ttc: 180
+    };
+    const minWidth = minByColumn[this.resizingColumn] ?? 80;
+    const maxWidth = maxByColumn[this.resizingColumn] ?? 600;
+    const nextWidth = Math.max(minWidth, Math.min(maxWidth, this.resizeStartWidth + delta));
+    this.columnWidths[this.resizingColumn] = `${nextWidth}px`;
+  }
+
+  @HostListener('document:mouseup')
+  onDocumentMouseUp(): void {
+    if (!this.resizingColumn) {
+      return;
+    }
+    this.resizingColumn = null;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+
+  @HostListener('window:scroll')
+  @HostListener('window:resize')
+  onViewportChanged(): void {
+    if (this.commandePopoverVisible) {
+      this.hideCommandeProgressPopover(true);
+    }
   }
 
   getColumnIndex(column: string): number {
@@ -1804,6 +2548,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
       total_tva: 'Total TVA',
       total_ttc: 'Total TTC'
     };
+    names.commande_numero = 'Commande';
     return names[column] || column;
   }
 
@@ -1903,6 +2648,63 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  toggleDetailMode(): void {
+    if (!this.detailMode) {
+      this.sidebarStateBeforeDetailMode = this.isSidebarHidden();
+    }
+
+    this.detailMode = !this.detailMode;
+    this.applyDetailMode();
+  }
+
+  private applyDetailMode(): void {
+    if (this.detailMode) {
+      this.setSidebarHidden(true);
+      return;
+    }
+
+    if (this.sidebarStateBeforeDetailMode === false) {
+      this.setSidebarHidden(false);
+    }
+    this.sidebarStateBeforeDetailMode = null;
+  }
+
+  private isSidebarHidden(): boolean {
+    return !!document.querySelector('.wrapper.sidebar-hidden-desktop');
+  }
+
+  private setSidebarHidden(hidden: boolean): void {
+    const currentlyHidden = this.isSidebarHidden();
+    if (currentlyHidden === hidden) {
+      return;
+    }
+
+    const selector = hidden ? '.toggle-sidebar' : '.btn-sidebar-toggle-float, .toggle-sidebar';
+    const toggleButton = document.querySelector(selector) as HTMLElement | null;
+    toggleButton?.click();
+  }
+
+  private startSidebarObserver(): void {
+    const wrapper = document.querySelector('.wrapper');
+    if (!wrapper) {
+      return;
+    }
+
+    this.sidebarObserver?.disconnect();
+    this.sidebarObserver = new MutationObserver(() => {
+      if (this.detailMode && !this.isSidebarHidden()) {
+        this.detailMode = false;
+        this.applyDetailMode();
+        this.cdr.detectChanges();
+      }
+    });
+
+    this.sidebarObserver.observe(wrapper, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+  }
+
   loadDashboardStats(): void {
     this.dashboardLoading = true;
     
@@ -1915,7 +2717,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
       search: ''
     }).subscribe({
       next: (response: any) => {
-        // Gérer différents formats de réponse
+        // G?rer différents formats de r?ponse
         let allLivraisons = [];
         if (response && response.data && Array.isArray(response.data)) {
           allLivraisons = response.data;
@@ -1925,19 +2727,19 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
           allLivraisons = response;
         }
         
-        // Charger les détails de chaque livraison pour les statistiques par article
+        // Charger les d?tails de chaque livraison pour les statistiques par article
         this.loadLivraisonsDetails(allLivraisons);
       },
       error: (err: any) => {
         console.error('Erreur lors du chargement des statistiques:', err);
         this.dashboardLoading = false;
-        this.showError("❌ Impossible de charger les statistiques du dashboard.");
+        this.showError("Erreur Impossible de charger les statistiques du dashboard.");
       }
     });
   }
 
   loadLivraisonsDetails(livraisons: any[]): void {
-    // Charger les détails de chaque livraison
+    // Charger les d?tails de chaque livraison
     const detailPromises = livraisons.map((livraison: any) => {
       const livraisonId = livraison.document_id || livraison.id;
       if (!livraisonId) {
@@ -1957,8 +2759,8 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
       this.calculateDashboardStats(livraisonsWithDetails);
       this.dashboardLoading = false;
     }).catch((err: any) => {
-      console.error('Erreur lors du chargement des détails:', err);
-      // Calculer les stats même sans détails
+      console.error('Erreur lors du chargement des d?tails:', err);
+      // Calculer les stats m?me sans d?tails
       this.calculateDashboardStats(livraisons);
       this.dashboardLoading = false;
     });
@@ -1989,7 +2791,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     const clientStats: { [key: string]: { client: string; chiffreAffaire: number; totalLivraisons: number } } = {};
     
     livraisons.forEach(l => {
-      const clientName = l.client || 'Non spécifié';
+      const clientName = l.client || 'Non sp?cifi?';
       if (!clientStats[clientName]) {
         clientStats[clientName] = {
           client: clientName,
@@ -2001,7 +2803,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
       clientStats[clientName].totalLivraisons += 1;
     });
 
-    // Convertir en tableau et trier par chiffre d'affaire décroissant
+    // Convertir en tableau et trier par chiffre d'affaire d?croissant
     this.dashboardStats.chiffreAffaireParClient = Object.values(clientStats)
       .sort((a, b) => b.chiffreAffaire - a.chiffreAffaire);
 
@@ -2035,11 +2837,11 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
       stat.prixMoyen = stat.quantite > 0 ? stat.chiffreAffaire / stat.quantite : 0;
     });
 
-    // Convertir en tableau et trier par chiffre d'affaire décroissant
+    // Convertir en tableau et trier par chiffre d'affaire d?croissant
     this.dashboardStats.chiffreAffaireParArticle = Object.values(articleStats)
       .sort((a, b) => b.chiffreAffaire - a.chiffreAffaire);
 
-    // Initialiser les graphiques après un court délai pour s'assurer que les canvas sont rendus
+    // Initialiser les graphiques apr?s un court d?lai pour s'assurer que les canvas sont rendus
     setTimeout(() => {
       this.initCharts(livraisons);
     }, 100);
@@ -2056,7 +2858,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     const canvas = document.getElementById('evolutionChartLivraison') as HTMLCanvasElement;
     if (!canvas) return;
 
-    // Détruire le graphique existant s'il existe
+    // D?truire le graphique existant s'il existe
     if (this.evolutionChart) {
       this.evolutionChart.destroy();
     }
@@ -2071,11 +2873,11 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
       }
     });
 
-    // Trier les mois et préparer les données
+    // Trier les mois et pr?parer les données
     const sortedMonths = Object.keys(monthlyData).sort();
     const labels = sortedMonths.map(m => {
       const [year, month] = m.split('-');
-      const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+      const monthNames = ['Jan', 'F?v', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Ao?', 'Sep', 'Oct', 'Nov', 'D?c'];
       return `${monthNames[parseInt(month) - 1]} ${year}`;
     });
     const data = sortedMonths.map(m => monthlyData[m]);
@@ -2129,12 +2931,12 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     const canvas = document.getElementById('clientChartLivraison') as HTMLCanvasElement;
     if (!canvas) return;
 
-    // Détruire le graphique existant s'il existe
+    // D?truire le graphique existant s'il existe
     if (this.clientChart) {
       this.clientChart.destroy();
     }
 
-    // Utiliser les données calculées dans dashboardStats
+    // Utiliser les données calcul?es dans dashboardStats
     const topClients = this.dashboardStats.chiffreAffaireParClient.slice(0, 10);
     
     if (topClients.length === 0) {
@@ -2202,7 +3004,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     const canvas = document.getElementById('articleChartLivraison') as HTMLCanvasElement;
     if (!canvas) return;
 
-    // Détruire le graphique existant s'il existe
+    // D?truire le graphique existant s'il existe
     if (this.articleChart) {
       this.articleChart.destroy();
     }
@@ -2270,7 +3072,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     const canvas = document.getElementById('topClientsChartLivraison') as HTMLCanvasElement;
     if (!canvas) return;
 
-    // Détruire le graphique existant s'il existe
+    // D?truire le graphique existant s'il existe
     if (this.topClientsChart) {
       this.topClientsChart.destroy();
     }
@@ -2337,7 +3139,13 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     this.clientSearchSub?.unsubscribe();
     this.commercialSearchSub?.unsubscribe();
-    // Détruire les graphiques
+    this.clearCommandePopoverHideTimer();
+    this.sidebarObserver?.disconnect();
+    this.sidebarObserver = null;
+    if (this.detailMode && this.sidebarStateBeforeDetailMode === false) {
+      this.setSidebarHidden(false);
+    }
+    // D?truire les graphiques
     if (this.evolutionChart) {
       this.evolutionChart.destroy();
     }
@@ -2352,3 +3160,7 @@ export class LivraisonComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 }
+
+
+
+

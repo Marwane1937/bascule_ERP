@@ -500,9 +500,7 @@ table.grise {
 
 .comparaison-table thead th.sortable:hover {
   background-color: rgba(255, 255, 255, 0.1);
-}
-
-.comparaison-table thead th i {
+}.comparaison-table thead th i {
   opacity: 0.7;
   margin-left: 5px;
 }
@@ -590,4 +588,3 @@ table.grise {
     max-height: 50vh;
   }
 }
-

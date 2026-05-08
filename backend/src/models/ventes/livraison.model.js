@@ -1,4 +1,235 @@
 const { getConnection } = require('../../config/database');
+const {
+  LIVRAISON_QUILL_TABLE,
+  getLivraisonQuillCandidates,
+  loadQuillRowsByDocument,
+  mergeDetailsWithQuill,
+  upsertQuillDesignation,
+  deleteQuillRowsByIds
+} = require('./quill-table.helper');
+const {
+  loadStockInfoByDocument,
+  upsertStockInfo
+} = require('./stock-info-table.helper');
+const {
+  buildFlatComponentLines
+} = require('../../utils/nomenclature.helper');
+
+const formatToSqlDateTime = (value) => {
+  if (!value) return null;
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`;
+  }
+
+  let dateStr = String(value).trim();
+  if (!dateStr) return null;
+
+  if (dateStr.includes('T')) {
+    dateStr = dateStr.replace('Z', '').replace('T', ' ');
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return `${dateStr} 00:00:00`;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}$/.test(dateStr)) {
+    return `${dateStr}:00`;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(dateStr)) {
+    return dateStr;
+  }
+
+  const parsed = new Date(dateStr);
+  if (!isNaN(parsed.getTime())) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}:${pad(parsed.getSeconds())}`;
+  }
+
+  return null;
+};
+
+const tableColumnSetCache = new Map();
+
+const getTableColumnSet = async (sequelize, tableName) => {
+  const cacheKey = `${String(sequelize?.config?.database || 'default').toLowerCase()}:${String(tableName || '').toLowerCase()}`;
+  if (tableColumnSetCache.has(cacheKey)) {
+    return tableColumnSetCache.get(cacheKey);
+  }
+
+  const cols = await sequelize.query(
+    `
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_NAME = :tableName
+    `,
+    {
+      replacements: { tableName },
+      type: sequelize.QueryTypes.SELECT
+    }
+  );
+  const columnSet = new Set((Array.isArray(cols) ? cols : []).map((c) => String(c.COLUMN_NAME || '').toLowerCase()));
+  tableColumnSetCache.set(cacheKey, columnSet);
+  return columnSet;
+};
+
+const getPartenaireSelectFields = async (sequelize) => {
+  const availableColumns = await getTableColumnSet(sequelize, 'partenaire');
+  const selectFields = ['p.part_id', 'p.nom'];
+
+  const optionalColumns = [
+    { column: 'telephone', alias: 'telephone' },
+    { column: 'email', alias: 'email' },
+    { column: 'adresse', alias: 'adresse' },
+    { column: 'ice', alias: 'ice' },
+    { column: 'cin', alias: 'cin' },
+    { column: 'rc', alias: 'rc' },
+    { column: 'IF_', alias: 'IF_' },
+    { column: 'PATENTE', alias: 'PATENTE' },
+    { column: 'cnss', alias: 'cnss' }
+  ];
+
+  optionalColumns.forEach(({ column, alias }) => {
+    const key = column.toLowerCase();
+    if (availableColumns.has(key)) {
+      selectFields.push(`p.${column} AS [${alias}]`);
+    } else {
+      selectFields.push(`NULL AS [${alias}]`);
+    }
+  });
+
+  return selectFields;
+};
+
+const getPartenaireInfoById = async (sequelize, partId) => {
+  if (partId == null) {
+    return null;
+  }
+
+  const selectFields = await getPartenaireSelectFields(sequelize);
+  const clientRows = await sequelize.query(
+    `SELECT ${selectFields.join(', ')}
+     FROM partenaire p
+     WHERE p.part_id = :part_id`,
+    {
+      replacements: { part_id: partId },
+      type: sequelize.QueryTypes.SELECT
+    }
+  );
+
+  if (Array.isArray(clientRows) && clientRows.length > 0) {
+    return clientRows[0];
+  }
+
+  return clientRows && typeof clientRows === 'object' ? clientRows : null;
+};
+
+const normalizePositiveInt = (value) => {
+  const n = parseInt(value, 10);
+  return Number.isInteger(n) && n > 0 ? n : null;
+};
+
+const toFiniteNumber = (value, fallback = 0) => {
+  if (value === null || value === undefined || value === '') {
+    return fallback;
+  }
+
+  const normalizedValue = typeof value === 'string'
+    ? value.trim().replace(',', '.')
+    : value;
+  const parsed = Number(normalizedValue);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const COMPOSITION_QUILL_ID_OFFSET = 1000000000;
+
+const buildCompositionQuillId = (compositionId) => {
+  const safeId = parseInt(compositionId, 10) || 0;
+  return COMPOSITION_QUILL_ID_OFFSET + safeId;
+};
+
+const buildFlexibleQuillMap = (quillRows = []) => {
+  const quillMap = new Map();
+  for (const row of (Array.isArray(quillRows) ? quillRows : [])) {
+    if (row?.quill_id !== undefined && row?.quill_id !== null) {
+      quillMap.set(String(row.quill_id), row.designation || '');
+    }
+    if (row?.id !== undefined && row?.id !== null) {
+      quillMap.set(String(row.id), row.designation || '');
+    }
+  }
+  return quillMap;
+};
+
+const loadLivraisonCompositionRows = async (
+  sequelize,
+  documentId,
+  detailIds = [],
+  existingQuillRows = [],
+  transaction = null
+) => {
+  if (!Array.isArray(detailIds) || detailIds.length === 0) {
+    return [];
+  }
+
+  const compositionColSet = await getTableColumnSet(sequelize, 'stock_detail_composition');
+  if (compositionColSet.size === 0) {
+    return [];
+  }
+
+  const rows = await sequelize.query(
+    `
+      SELECT
+        c.id,
+        c.stock_detail_id,
+        c.ligne,
+        c.article_id,
+        c.quill_id,
+        c.quantite,
+        c.prix,
+        c.taux_tva,
+        c.etat,
+        c.type,
+        a.article_nom
+      FROM stock_detail_composition c
+      LEFT JOIN article a ON a.article_id = c.article_id
+      WHERE c.stock_detail_id IN (${detailIds.map(() => '?').join(',')})
+      ORDER BY c.ligne ASC, c.id ASC, c.stock_detail_id ASC
+    `,
+    {
+      replacements: detailIds,
+      type: sequelize.QueryTypes.SELECT,
+      transaction
+    }
+  );
+
+  const quillRows = Array.isArray(existingQuillRows) && existingQuillRows.length > 0
+    ? existingQuillRows
+    : await loadQuillRowsByDocument(sequelize, documentId, getLivraisonQuillCandidates(), transaction);
+  const quillMap = buildFlexibleQuillMap(quillRows);
+
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    const ligne = Math.max(1, parseInt(row.ligne, 10) || 1);
+    const effectiveQuillId = parseInt(row.quill_id, 10)
+      || (ligne === 1 ? (parseInt(row.stock_detail_id, 10) || null) : null);
+
+    return {
+      id: row.id ?? null,
+      stock_detail_id: row.stock_detail_id ?? null,
+      ligne,
+      article_id: row.article_id ?? null,
+      quill_id: effectiveQuillId,
+      quantite: row.quantite ?? null,
+      prix: row.prix ?? null,
+      taux_tva: row.taux_tva ?? null,
+      etat: row.etat ?? 1,
+      type: row.type ?? 2,
+      article_nom: row.article_nom || '',
+      designation: quillMap.get(String(effectiveQuillId || '')) || row.article_nom || ''
+    };
+  });
+};
 
 // Récupérer toutes les livraisons avec pagination
 // Optimisé avec COUNT(*) OVER() pour éviter une requête séparée de comptage
@@ -17,9 +248,20 @@ const getAllLivraisons = async (options = {}, sequelizeConnection = null) => {
     const safePageSize = parseInt(pageSize) || 25;
     const offset = (safePage - 1) * safePageSize;
 
-    const validColumns = ['document_id', 'numero', 'date', 'client', 'commercial', 'total_ht', 'total_tva', 'total_ttc'];
-    const safeOrderBy = validColumns.includes(orderBy) ? orderBy : 'date';
+    const orderColumnMap = {
+      document_id: 's.id',
+      numero: 's.numero',
+      commande_numero: 'COALESCE(cmd.numero, s.part_ref)',
+      date: 's.date',
+      client: 'p.nom',
+      commercial: 'c.nom',
+      total_ht: 'ISNULL(t.total_ht, 0)',
+      total_tva: 'ISNULL(t.total_tva, 0)',
+      total_ttc: 'ISNULL(t.total_ttc, 0)'
+    };
+    const safeOrderBy = Object.prototype.hasOwnProperty.call(orderColumnMap, orderBy) ? orderBy : 'date';
     const safeOrderDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    const safeOrderExpression = orderColumnMap[safeOrderBy];
 
     let whereClause = 'WHERE s.type = 2';
     const replacements = {};
@@ -27,6 +269,7 @@ const getAllLivraisons = async (options = {}, sequelizeConnection = null) => {
     if (search && search.trim()) {
       whereClause += ` AND (
         s.numero LIKE :search 
+        OR COALESCE(cmd.numero, s.part_ref) LIKE :search
         OR p.nom LIKE :search
         OR c.nom LIKE :search
         OR s.description LIKE :search
@@ -39,6 +282,8 @@ const getAllLivraisons = async (options = {}, sequelizeConnection = null) => {
       SELECT 
         document_id,
         numero,
+        commande_id,
+        commande_numero,
         date,
         description,
         part_ref,
@@ -53,6 +298,8 @@ const getAllLivraisons = async (options = {}, sequelizeConnection = null) => {
         SELECT 
           s.id AS document_id,
           s.numero,
+          CASE WHEN cmd.document_id IS NULL THEN NULL ELSE COALESCE(prep.parent, s.parent) END AS commande_id,
+          COALESCE(cmd.numero, s.part_ref) AS commande_numero,
           s.date,
           s.description,
           s.part_ref,
@@ -63,7 +310,7 @@ const getAllLivraisons = async (options = {}, sequelizeConnection = null) => {
           ISNULL(t.total_ttc, 0) AS total_ttc,
           CASE WHEN s.facture_id IS NULL THEN 'NON FACTURE' ELSE 'FACTURE' END AS facture,
           COUNT(*) OVER() AS total_count,
-          ROW_NUMBER() OVER (ORDER BY ${safeOrderBy} ${safeOrderDirection}) AS RowNum
+          ROW_NUMBER() OVER (ORDER BY ${safeOrderExpression} ${safeOrderDirection}, s.id DESC) AS RowNum
         FROM stock s
         LEFT JOIN (
             SELECT stock_id,
@@ -73,6 +320,8 @@ const getAllLivraisons = async (options = {}, sequelizeConnection = null) => {
             FROM stock_detail
             GROUP BY stock_id
         ) t ON t.stock_id = s.id
+        LEFT JOIN stock_document prep ON prep.id = s.parent AND prep.type = 10
+        LEFT JOIN vente_document cmd ON cmd.document_id = COALESCE(prep.parent, s.parent) AND cmd.type = 2
         LEFT JOIN partenaire p ON p.part_id = s.part_id
         LEFT JOIN contact c ON c.id = s.employe_id
         ${whereClause}
@@ -123,6 +372,85 @@ const getAllLivraisons = async (options = {}, sequelizeConnection = null) => {
   }
 };
 
+const getLivraisonLocationByNumero = async (numero, options = {}, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  const safeNumero = String(numero || '').trim();
+
+  if (!safeNumero) {
+    throw new Error('numero de livraison invalide');
+  }
+
+  const {
+    pageSize = 25,
+    orderBy = 'date',
+    orderDirection = 'DESC'
+  } = options;
+
+  const safePageSize = parseInt(pageSize, 10) || 25;
+  const orderColumnMap = {
+    document_id: 's.id',
+    numero: 's.numero',
+    commande_numero: 'COALESCE(cmd.numero, s.part_ref)',
+    date: 's.date',
+    client: 'p.nom',
+    commercial: 'c.nom',
+    total_ht: 'ISNULL(t.total_ht, 0)',
+    total_tva: 'ISNULL(t.total_tva, 0)',
+    total_ttc: 'ISNULL(t.total_ttc, 0)'
+  };
+  const safeOrderBy = Object.prototype.hasOwnProperty.call(orderColumnMap, orderBy) ? orderBy : 'date';
+  const safeOrderDirection = String(orderDirection || '').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+  const safeOrderExpression = orderColumnMap[safeOrderBy];
+
+  const query = `
+    WITH OrderedLivraisons AS (
+      SELECT
+        s.id AS document_id,
+        s.numero,
+        ROW_NUMBER() OVER (ORDER BY ${safeOrderExpression} ${safeOrderDirection}, s.id DESC) AS RowNum
+      FROM stock s
+      LEFT JOIN (
+          SELECT stock_id,
+                 SUM(quantite * prix) AS total_ht,
+                 SUM((quantite * prix) * taux_tva) AS total_tva,
+                 SUM((quantite * prix) + (quantite * prix) * taux_tva) AS total_ttc
+          FROM stock_detail
+          GROUP BY stock_id
+      ) t ON t.stock_id = s.id
+      LEFT JOIN stock_document prep ON prep.id = s.parent AND prep.type = 10
+      LEFT JOIN vente_document cmd ON cmd.document_id = COALESCE(prep.parent, s.parent) AND cmd.type = 2
+      LEFT JOIN partenaire p ON p.part_id = s.part_id
+      LEFT JOIN contact c ON c.id = s.employe_id
+      WHERE s.type = 2
+    )
+    SELECT TOP 1
+      document_id,
+      numero,
+      RowNum
+    FROM OrderedLivraisons
+    WHERE numero = :numero
+  `;
+
+  const result = await sequelize.query(query, {
+    replacements: { numero: safeNumero },
+    type: sequelize.QueryTypes.SELECT
+  });
+
+  const firstRow = Array.isArray(result) ? result[0] : result;
+  if (!firstRow?.numero) {
+    return null;
+  }
+
+  const rowNumber = Number(firstRow.RowNum || 1);
+  return {
+    document_id: Number(firstRow.document_id || 0) || null,
+    numero: String(firstRow.numero || '').trim(),
+    rowNumber,
+    page: Math.max(1, Math.ceil(rowNumber / safePageSize)),
+    pageSize: safePageSize
+  };
+};
+
 // Compter le total des livraisons
 const countAllLivraisons = async (sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
@@ -164,6 +492,12 @@ const getAllCommandesNonLivrees = async (sequelizeConnection = null) => {
           WHERE s.parent = vd.document_id 
             AND s.type = 2
         )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM stock_document sd
+          WHERE sd.parent = vd.document_id
+            AND sd.type = 10
+        )
       ORDER BY vd.date DESC`
     );
     return Array.isArray(results) ? results : [];
@@ -174,8 +508,255 @@ const getAllCommandesNonLivrees = async (sequelizeConnection = null) => {
 };
 
 // Récupérer une livraison par ID
+// Récupérer la progression d'une commande liée à une livraison
+const getCommandeProgress = async (commandeId, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  const safeCommandeId = parseInt(commandeId, 10);
+
+  if (!Number.isInteger(safeCommandeId) || safeCommandeId <= 0) {
+    throw new Error('ID commande invalide');
+  }
+
+  const venteDetailColSet = await getTableColumnSet(sequelize, 'vente_document_detail');
+  const stockDetailColSet = await getTableColumnSet(sequelize, 'stock_detail');
+  const stockDocDetailColSet = await getTableColumnSet(sequelize, 'stock_document_detail');
+
+  const venteQuantiteExpr = venteDetailColSet.has('quantite')
+    ? 'vdd.quantite'
+    : (venteDetailColSet.has('qte') ? 'vdd.qte' : '0');
+  const venteDescriptionExpr = venteDetailColSet.has('description') ? 'vdd.description' : 'NULL';
+  const stockQuantiteExpr = stockDetailColSet.has('quantite')
+    ? 'sd.quantite'
+    : (stockDetailColSet.has('qte') ? 'sd.qte' : '0');
+  const stockDescriptionExpr = stockDetailColSet.has('description') ? 'sd.description' : 'NULL';
+  const stockDocQuantiteExpr = stockDocDetailColSet.has('quantite')
+    ? 'sdd.quantite'
+    : (stockDocDetailColSet.has('qte') ? 'sdd.qte' : '0');
+  const stockDocDescriptionExpr = stockDocDetailColSet.has('description') ? 'sdd.description' : 'NULL';
+
+  const buildLineKeyExpr = (articleExpr, descriptionExpr) => `
+    COALESCE(
+      CAST(${articleExpr} AS NVARCHAR(100)),
+      CONCAT('DESC:', LTRIM(RTRIM(ISNULL(${descriptionExpr}, ''))))
+    )
+  `;
+  const buildLabelExpr = (descriptionExpr) => `
+    COALESCE(
+      NULLIF(LTRIM(RTRIM(ISNULL(${descriptionExpr}, ''))), ''),
+      NULLIF(LTRIM(RTRIM(ISNULL(a.article_nom, ''))), ''),
+      NULLIF(LTRIM(RTRIM(ISNULL(a.article_cod, ''))), ''),
+      'Article sans libelle'
+    )
+  `;
+
+  const queryOptions = {
+    replacements: { commandeId: safeCommandeId },
+    type: sequelize.QueryTypes.SELECT
+  };
+
+  const [commandeRows] = await sequelize.query(
+    `
+      SELECT document_id, numero
+      FROM vente_document
+      WHERE document_id = :commandeId
+        AND type = 2
+    `,
+    queryOptions
+  );
+  const commande = Array.isArray(commandeRows) ? commandeRows[0] : commandeRows;
+
+  if (!commande) {
+    return null;
+  }
+
+  const [preparationCountRows] = await sequelize.query(
+    `
+      SELECT COUNT(*) AS preparation_count
+      FROM stock_document
+      WHERE type = 10
+        AND parent = :commandeId
+    `,
+    queryOptions
+  );
+  const preparationCount = Number((Array.isArray(preparationCountRows) ? preparationCountRows[0] : preparationCountRows)?.preparation_count || 0);
+  const hasPreparation = preparationCount > 0;
+
+  const commandeDetails = await sequelize.query(
+    `
+      SELECT
+        ${buildLineKeyExpr('vdd.article_id', venteDescriptionExpr)} AS line_key,
+        vdd.article_id,
+        MAX(a.article_cod) AS article_cod,
+        MAX(${buildLabelExpr(venteDescriptionExpr)}) AS article_nom,
+        SUM(ISNULL(${venteQuantiteExpr}, 0)) AS quantite_demandee
+      FROM vente_document_detail vdd
+      LEFT JOIN article a ON a.article_id = vdd.article_id
+      WHERE vdd.document_id = :commandeId
+      GROUP BY ${buildLineKeyExpr('vdd.article_id', venteDescriptionExpr)}, vdd.article_id
+    `,
+    queryOptions
+  );
+
+  const preparationDetails = await sequelize.query(
+    `
+      SELECT
+        ${buildLineKeyExpr('sdd.article_id', stockDocDescriptionExpr)} AS line_key,
+        MAX(a.article_cod) AS article_cod,
+        MAX(${buildLabelExpr(stockDocDescriptionExpr)}) AS article_nom,
+        SUM(ISNULL(${stockDocQuantiteExpr}, 0)) AS quantite_preparee
+      FROM stock_document prep
+      INNER JOIN stock_document_detail sdd ON sdd.stock_id = prep.id
+      LEFT JOIN article a ON a.article_id = sdd.article_id
+      WHERE prep.type = 10
+        AND prep.parent = :commandeId
+      GROUP BY ${buildLineKeyExpr('sdd.article_id', stockDocDescriptionExpr)}
+    `,
+    queryOptions
+  );
+
+  const livraisonDetails = await sequelize.query(
+    `
+      SELECT
+        ${buildLineKeyExpr('sd.article_id', stockDescriptionExpr)} AS line_key,
+        MAX(a.article_cod) AS article_cod,
+        MAX(${buildLabelExpr(stockDescriptionExpr)}) AS article_nom,
+        SUM(ISNULL(${stockQuantiteExpr}, 0)) AS quantite_livree
+      FROM stock s
+      INNER JOIN stock_detail sd ON sd.stock_id = s.id
+      LEFT JOIN stock_document prep ON prep.id = s.parent AND prep.type = 10
+      LEFT JOIN article a ON a.article_id = sd.article_id
+      WHERE s.type = 2
+        AND (
+          s.parent = :commandeId
+          OR prep.parent = :commandeId
+        )
+      GROUP BY ${buildLineKeyExpr('sd.article_id', stockDescriptionExpr)}
+    `,
+    queryOptions
+  );
+
+  const preparationMap = new Map((Array.isArray(preparationDetails) ? preparationDetails : []).map((row) => [
+    String(row.line_key || ''),
+    row
+  ]));
+  const livraisonMap = new Map((Array.isArray(livraisonDetails) ? livraisonDetails : []).map((row) => [
+    String(row.line_key || ''),
+    row
+  ]));
+
+  const normalizedLines = (Array.isArray(commandeDetails) ? commandeDetails : []).map((row) => {
+    const lineKey = String(row.line_key || '');
+    const preparationRow = preparationMap.get(lineKey) || {};
+    const livraisonRow = livraisonMap.get(lineKey) || {};
+
+    const quantiteDemandee = Number(row.quantite_demandee || 0);
+    const quantitePreparee = Number(preparationRow.quantite_preparee || 0);
+    const quantiteLivree = Number(livraisonRow.quantite_livree || 0);
+
+    let quantiteRestantePreparation = 0;
+    let quantiteRestanteLivraison = 0;
+    let etatLabel = 'Livre';
+
+    if (hasPreparation) {
+      const quantiteCouverte = Math.max(quantitePreparee, quantiteLivree);
+      quantiteRestantePreparation = Math.max(0, quantiteDemandee - quantiteCouverte);
+      quantiteRestanteLivraison = Math.max(0, quantitePreparee - quantiteLivree);
+
+      if (quantiteLivree >= quantiteDemandee && quantiteDemandee > 0) {
+        etatLabel = 'Livre';
+      } else if (quantiteRestantePreparation > 0 && quantitePreparee > 0) {
+        etatLabel = 'Preparation partielle';
+      } else if (quantiteRestantePreparation > 0) {
+        etatLabel = 'A preparer';
+      } else if (quantiteRestanteLivraison > 0 && quantiteLivree > 0) {
+        etatLabel = 'Livraison partielle';
+      } else if (quantiteRestanteLivraison > 0) {
+        etatLabel = 'Pret a livrer';
+      }
+    } else {
+      quantiteRestantePreparation = Math.max(0, quantiteDemandee - quantiteLivree);
+
+      if (quantiteLivree >= quantiteDemandee && quantiteDemandee > 0) {
+        etatLabel = 'Livre';
+      } else if (quantiteLivree > 0) {
+        etatLabel = 'Livraison partielle';
+      } else {
+        etatLabel = 'A preparer';
+      }
+    }
+
+    return {
+      line_key: lineKey,
+      article_id: row.article_id ?? null,
+      article_cod: row.article_cod || preparationRow.article_cod || livraisonRow.article_cod || '',
+      article_nom: row.article_nom || preparationRow.article_nom || livraisonRow.article_nom || 'Article sans libelle',
+      quantite_demandee: quantiteDemandee,
+      quantite_preparee: quantitePreparee,
+      quantite_livree: quantiteLivree,
+      quantite_restante_preparation: quantiteRestantePreparation,
+      quantite_restante_livraison: quantiteRestanteLivraison,
+      preparation_percent: quantiteDemandee > 0 ? Number(((quantitePreparee * 100) / quantiteDemandee).toFixed(2)) : 0,
+      livraison_percent: quantiteDemandee > 0 ? Number(((quantiteLivree * 100) / quantiteDemandee).toFixed(2)) : 0,
+      etat_label: etatLabel,
+      has_preparation: hasPreparation
+    };
+  });
+
+  const pendingLines = normalizedLines
+    .filter((line) => line.quantite_restante_preparation > 0 || line.quantite_restante_livraison > 0)
+    .sort((a, b) => String(a.article_nom || '').localeCompare(String(b.article_nom || '')));
+
+  const totalDemandee = normalizedLines.reduce((sum, row) => sum + Number(row.quantite_demandee || 0), 0);
+  const totalPreparee = normalizedLines.reduce((sum, row) => sum + Number(row.quantite_preparee || 0), 0);
+  const totalLivree = normalizedLines.reduce((sum, row) => sum + Number(row.quantite_livree || 0), 0);
+  const totalRestantePreparation = normalizedLines.reduce((sum, row) => sum + Number(row.quantite_restante_preparation || 0), 0);
+  const totalRestanteLivraison = normalizedLines.reduce((sum, row) => sum + Number(row.quantite_restante_livraison || 0), 0);
+
+  return {
+    commande_id: Number(commande.document_id),
+    commande_numero: commande.numero || '',
+    has_preparation: hasPreparation,
+    totals: {
+      quantite_demandee: totalDemandee,
+      quantite_preparee: totalPreparee,
+      quantite_livree: totalLivree,
+      quantite_restante_preparation: totalRestantePreparation,
+      quantite_restante_livraison: totalRestanteLivraison,
+      pending_products_count: pendingLines.length,
+      progression_percent: totalDemandee > 0 ? Number(((totalLivree * 100) / totalDemandee).toFixed(2)) : 0
+    },
+    lines: pendingLines
+  };
+};
+
+// Récupérer une livraison par ID
 const getLivraisonById = async (id, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
+  const [stockColSet, vdColSet, stockDetailColSet] = await Promise.all([
+    getTableColumnSet(sequelize, 'stock'),
+    getTableColumnSet(sequelize, 'vente_document'),
+    getTableColumnSet(sequelize, 'stock_detail')
+  ]);
+  const stockDepotExpr = stockColSet.has('depot_id')
+    ? 's.depot_id'
+    : (stockColSet.has('adresse_id') ? 's.adresse_id' : null);
+  const stockDepotIdSelect = stockDepotExpr ? `${stockDepotExpr} AS depot_id` : 'NULL AS depot_id';
+  const stockDepotNomSelect = stockDepotExpr ? 'w.nom AS depot_nom' : 'NULL AS depot_nom';
+  const stockWarehouseJoin = stockDepotExpr ? `LEFT JOIN warehouse w ON w.id = ${stockDepotExpr}` : '';
+
+  const vdDepotExpr = vdColSet.has('depot_id')
+    ? 'vd.depot_id'
+    : (vdColSet.has('adresse_id') ? 'vd.adresse_id' : null);
+  const vdDepotIdSelect = vdDepotExpr ? `${vdDepotExpr} AS depot_id` : 'NULL AS depot_id';
+  const vdDepotNomSelect = vdDepotExpr ? 'w.nom AS depot_nom' : 'NULL AS depot_nom';
+  const vdWarehouseJoin = vdDepotExpr ? `LEFT JOIN warehouse w ON w.id = ${vdDepotExpr}` : '';
+
+  const detailDepotExpr = stockDetailColSet.has('depot_id')
+    ? 'sd.depot_id'
+    : (stockDetailColSet.has('adresse_id') ? 'sd.adresse_id' : null);
+  const detailDepotIdSelect = detailDepotExpr ? `${detailDepotExpr} AS depot_id` : 'NULL AS depot_id';
+  const detailDepotNomSelect = detailDepotExpr ? 'wd.nom AS depot_nom' : 'NULL AS depot_nom';
+  const detailWarehouseJoin = detailDepotExpr ? `LEFT JOIN warehouse wd ON wd.id = ${detailDepotExpr}` : '';
 
   // Récupérer les infos principales depuis stock
   let livraisonRows;
@@ -188,12 +769,15 @@ const getLivraisonById = async (id, sequelizeConnection = null) => {
         s.description,
         s.part_id,
         s.employe_id AS contact_id,
+        ${stockDepotIdSelect},
+        ${stockDepotNomSelect},
         s.part_ref,
         p.nom AS client_nom,
         c.nom AS commercial_nom
       FROM stock s
       LEFT JOIN partenaire p ON p.part_id = s.part_id
       LEFT JOIN contact c ON c.id = s.employe_id
+      ${stockWarehouseJoin}
       WHERE s.id = :id`,
       {
         replacements: { id },
@@ -223,12 +807,15 @@ const getLivraisonById = async (id, sequelizeConnection = null) => {
           vd.description,
           vd.part_id,
           vd.contact_id,
+          ${vdDepotIdSelect},
+          ${vdDepotNomSelect},
           vd.part_ref,
           p.nom AS client_nom,
           c.nom AS commercial_nom
         FROM vente_document vd
         LEFT JOIN partenaire p ON p.part_id = vd.part_id
         LEFT JOIN contact c ON c.id = vd.contact_id
+        ${vdWarehouseJoin}
         WHERE vd.document_id = :id`,
         {
           replacements: { id },
@@ -257,6 +844,21 @@ const getLivraisonById = async (id, sequelizeConnection = null) => {
   }
 
   const documentId = livraison.id;
+  const [stockDetailLotColSet, venteDetailColSet] = await Promise.all([
+    getTableColumnSet(sequelize, 'stock_detail_lot'),
+    getTableColumnSet(sequelize, 'vente_document_detail')
+  ]);
+  const hasStockDetailLigne = stockDetailColSet.has('ligne');
+  const stockDetailOrderBy = hasStockDetailLigne
+    ? 'ORDER BY CASE WHEN sd.ligne IS NULL THEN 1 ELSE 0 END, sd.ligne ASC, sd.id ASC'
+    : 'ORDER BY sd.id DESC';
+  const hasVenteDetailLigne = venteDetailColSet.has('ligne');
+  const venteDetailLigneSelect = hasVenteDetailLigne ? ', vdd.ligne' : '';
+  const stockDetailTypeSelect = stockDetailColSet.has('type') ? 'sd.type,' : 'NULL AS type,';
+  const venteDetailTypeSelect = venteDetailColSet.has('type') ? 'vdd.type,' : 'NULL AS type,';
+  const venteDetailOrderBy = hasVenteDetailLigne
+    ? 'ORDER BY CASE WHEN vdd.ligne IS NULL THEN 1 ELSE 0 END, vdd.ligne ASC, vdd.detail_id ASC'
+    : 'ORDER BY vdd.detail_id DESC';
 
   // Récupérer les détails de la livraison depuis stock_detail
   let details = [];
@@ -272,6 +874,10 @@ const getLivraisonById = async (id, sequelizeConnection = null) => {
         sd.taux_tva AS tva,
         sd.remise,
         sd.remise_montant,
+        ${stockDetailTypeSelect}
+        ${hasStockDetailLigne ? 'sd.ligne,' : ''}
+        ${detailDepotIdSelect},
+        ${detailDepotNomSelect},
         sd.quantite * sd.prix AS ht,
         (sd.quantite * sd.prix) * sd.taux_tva AS tva_montant,
         (sd.quantite * sd.prix) + ((sd.quantite * sd.prix) * sd.taux_tva) AS ttc,
@@ -279,8 +885,9 @@ const getLivraisonById = async (id, sequelizeConnection = null) => {
         a.article_nom
       FROM stock_detail sd
       LEFT JOIN article a ON a.article_id = sd.article_id
+      ${detailWarehouseJoin}
       WHERE sd.stock_id = :id
-      ORDER BY sd.id DESC`,
+      ${stockDetailOrderBy}`,
       {
         replacements: { id: documentId },
         type: sequelize.QueryTypes.SELECT
@@ -308,6 +915,8 @@ const getLivraisonById = async (id, sequelizeConnection = null) => {
           vdd.pu,
           vdd.remise,
           vdd.remise_montant AS remise_montant,
+          ${venteDetailTypeSelect}
+          ${hasVenteDetailLigne ? 'vdd.ligne,' : ''}
           vdd.ht,
           vdd.tva,
           vdd.ttc,
@@ -316,7 +925,7 @@ const getLivraisonById = async (id, sequelizeConnection = null) => {
         FROM vente_document_detail vdd
         LEFT JOIN article a ON a.article_id = vdd.article_id
         WHERE vdd.document_id = :id
-        ORDER BY vdd.detail_id DESC`,
+        ${venteDetailOrderBy}`,
         {
           replacements: { id: documentId },
           type: sequelize.QueryTypes.SELECT
@@ -345,6 +954,8 @@ const getLivraisonById = async (id, sequelizeConnection = null) => {
               vdd.pu,
               vdd.remise,
               NULL AS remise_montant,
+              ${venteDetailTypeSelect}
+              ${hasVenteDetailLigne ? 'vdd.ligne,' : ''}
               vdd.ht,
               vdd.tva,
               vdd.ttc,
@@ -353,7 +964,7 @@ const getLivraisonById = async (id, sequelizeConnection = null) => {
             FROM vente_document_detail vdd
             LEFT JOIN article a ON a.article_id = vdd.article_id
             WHERE vdd.document_id = :id
-            ORDER BY vdd.detail_id DESC`,
+            ${venteDetailOrderBy}`,
             {
               replacements: { id: documentId },
               type: sequelize.QueryTypes.SELECT
@@ -400,6 +1011,7 @@ const getLivraisonById = async (id, sequelizeConnection = null) => {
             pu: 0,
             remise: null,
             remise_montant: null,
+            type: null,
             ht: 0,
             tva: 0,
             ttc: 0,
@@ -430,6 +1042,7 @@ const getLivraisonById = async (id, sequelizeConnection = null) => {
           pu: prix,
           remise: entries.remise ?? null,
           remise_montant: entries.remise_montant ?? null,
+          type: entries.type ?? null,
           ht: entries.ht ?? htCalcul,
           tva: entries.tva ?? entries.taux_tva ?? 0,
           ttc: entries.ttc ?? (htCalcul + (entries.tva ?? 0)),
@@ -444,7 +1057,93 @@ const getLivraisonById = async (id, sequelizeConnection = null) => {
     }
   }
 
+  let livraisonQuillRows = [];
+  if (source === 'stock' && Array.isArray(details) && details.length > 0) {
+    livraisonQuillRows = await loadQuillRowsByDocument(
+      sequelize,
+      documentId,
+      getLivraisonQuillCandidates()
+    );
+    details = mergeDetailsWithQuill(details, livraisonQuillRows, {
+      detailIdField: 'id',
+      designationField: 'designation',
+      fallbackFields: ['description', 'article_nom']
+    });
+  }
+
   const clientId = livraison.part_id;
+  let lotDetails = [];
+
+  if (stockDetailLotColSet.size > 0 && source === 'stock') {
+    try {
+      const detailIds = (Array.isArray(details) ? details : [])
+        .map((detail) => parseInt(detail?.id ?? detail?.detail_id, 10))
+        .filter((detailId) => Number.isInteger(detailId) && detailId > 0);
+      const ligneExpr = stockDetailLotColSet.has('ligne')
+        ? 'sdl.ligne'
+        : (stockDetailLotColSet.has('detail_id') ? 'sdl.detail_id' : 'NULL');
+      const quantiteExpr = stockDetailLotColSet.has('quantite') ? 'sdl.quantite' : '0';
+      const serieExpr = stockDetailLotColSet.has('serie') ? 'sdl.serie' : 'NULL';
+      const articleIdExpr = stockDetailLotColSet.has('article_id')
+        ? 'sdl.article_id'
+        : (stockDetailLotColSet.has('detail_id') ? 'sd.article_id' : 'NULL');
+      const lotRowIdExpr = stockDetailLotColSet.has('id') ? 'sdl.id' : 'NULL';
+      const lotJoin = stockDetailLotColSet.has('detail_id')
+        ? 'LEFT JOIN stock_detail sd ON sd.id = sdl.detail_id'
+        : '';
+      const lotFilters = [];
+      const lotReplacements = { id: documentId };
+
+      if (stockDetailLotColSet.has('stock_id')) {
+        lotFilters.push('sdl.stock_id = :id');
+      }
+
+      if (stockDetailLotColSet.has('detail_id') && detailIds.length > 0) {
+        const detailPlaceholders = detailIds.map((detailId, index) => {
+          const key = `detailId${index}`;
+          lotReplacements[key] = detailId;
+          return `:${key}`;
+        });
+        lotFilters.push(`sdl.detail_id IN (${detailPlaceholders.join(', ')})`);
+      }
+
+      if (lotFilters.length === 0) {
+        lotDetails = [];
+      } else {
+        const lotRows = await sequelize.query(
+          `
+            SELECT
+              ${lotRowIdExpr} AS lot_row_id,
+              ${stockDetailLotColSet.has('stock_id') ? 'sdl.stock_id' : ':id'} AS stock_id,
+              ${ligneExpr} AS ligne,
+              ${serieExpr} AS serie,
+              ${articleIdExpr} AS article_id,
+              COALESCE(
+                NULLIF(LTRIM(RTRIM(ISNULL(a.article_nom, ''))), ''),
+                NULLIF(LTRIM(RTRIM(ISNULL(sd.description, ''))), '')
+              ) AS article_nom,
+              NULLIF(LTRIM(RTRIM(ISNULL(sd.description, ''))), '') AS detail_designation,
+              ${quantiteExpr} AS quantite,
+              ${stockDetailLotColSet.has('detail_id') ? 'sdl.detail_id' : 'NULL'} AS detail_id
+            FROM stock_detail_lot sdl
+            ${lotJoin}
+            LEFT JOIN article a ON a.article_id = ${articleIdExpr}
+            WHERE (${lotFilters.join(' OR ')})
+            ORDER BY ISNULL(${ligneExpr}, 0), ${serieExpr}
+          `,
+          {
+            replacements: lotReplacements,
+            type: sequelize.QueryTypes.SELECT
+          }
+        );
+
+        lotDetails = Array.isArray(lotRows) ? lotRows : [];
+      }
+    } catch (error) {
+      console.error('[getLivraisonById] Erreur chargement stock_detail_lot:', error);
+      lotDetails = [];
+    }
+  }
 
   // Harmoniser la structure des détails pour le frontend
   const normalizedDetails = (Array.isArray(details) ? details : []).map((detail, index) => {
@@ -452,7 +1151,7 @@ const getLivraisonById = async (id, sequelizeConnection = null) => {
     const prix = detail.pu ?? detail.prix ?? 0;
     const quantite = detail.qte ?? detail.quantite ?? 0;
     const taux_tva = detail.tva ?? detail.taux_tva ?? 0;
-    const designation = detail.description ?? detail.designation ?? detail.article_nom ?? '';
+    const designation = detail.designation ?? detail.description ?? detail.article_nom ?? '';
 
     const isStockSource = source === 'stock';
     let remiseMode = null;
@@ -511,6 +1210,8 @@ const getLivraisonById = async (id, sequelizeConnection = null) => {
       quantite,
       tva: taux_tva,
       taux_tva,
+      depot_id: detail.depot_id ?? null,
+      depot_nom: detail.depot_nom ?? null,
       remise: rawRemisePercent,
       remise_montant: rawRemiseMontant,
       remise_mode: remiseMode,
@@ -520,78 +1221,37 @@ const getLivraisonById = async (id, sequelizeConnection = null) => {
   });
 
   // Récupérer les informations du client (partenaire)
-  let clientInfo = null;
-  if (clientId != null) {
-    const columnRows = await sequelize.query(
-      `SELECT COLUMN_NAME 
-       FROM INFORMATION_SCHEMA.COLUMNS 
-       WHERE TABLE_NAME = 'partenaire'`,
-      { type: sequelize.QueryTypes.SELECT }
-    );
+  const detailIds = normalizedDetails
+    .map((detail) => parseInt(detail?.id ?? detail?.detail_id, 10))
+    .filter((detailId) => Number.isInteger(detailId) && detailId > 0);
 
-    const availableColumns = new Set(
-      Array.isArray(columnRows)
-        ? columnRows
-          .map((row) => {
-            if (!row) return null;
-            const entries = Object.values(row);
-            return entries.length > 0 ? String(entries[0]).toLowerCase() : null;
-          })
-          .filter(Boolean)
-        : []
-    );
-
-    const selectFields = ['p.part_id', 'p.nom'];
-
-    const optionalColumns = [
-      { column: 'telephone', alias: 'telephone' },
-      { column: 'email', alias: 'email' },
-      { column: 'adresse', alias: 'adresse' },
-      { column: 'ice', alias: 'ice' },
-      { column: 'cin', alias: 'cin' },
-      { column: 'rc', alias: 'rc' },
-      { column: 'IF_', alias: 'IF_' },
-      { column: 'PATENTE', alias: 'PATENTE' },
-      { column: 'cnss', alias: 'cnss' }
-    ];
-
-    optionalColumns.forEach(({ column, alias }) => {
-      const key = column.toLowerCase();
-      if (availableColumns.has(key)) {
-        selectFields.push(`p.${column} AS [${alias}]`);
-      } else {
-        selectFields.push(`NULL AS [${alias}]`);
-      }
-    });
-
-    const clientRows = await sequelize.query(
-      `SELECT ${selectFields.join(', ')} 
-       FROM partenaire p
-       WHERE p.part_id = :part_id`,
-      {
-        replacements: { part_id: clientId },
-        type: sequelize.QueryTypes.SELECT
-      }
-    );
-
-    if (Array.isArray(clientRows) && clientRows.length > 0) {
-      clientInfo = clientRows[0];
-    } else if (clientRows && typeof clientRows === 'object') {
-      clientInfo = clientRows;
-    }
-  }
+  const [normalizedCompositions, clientInfo, stockInfo] = await Promise.all([
+    source === 'stock'
+      ? loadLivraisonCompositionRows(sequelize, documentId, detailIds, livraisonQuillRows)
+      : Promise.resolve([]),
+    getPartenaireInfoById(sequelize, clientId),
+    loadStockInfoByDocument(sequelize, documentId)
+  ]);
 
   const result = {
     ...livraison,
     document_id: documentId,
     part_id: livraison.part_id,
     contact_id: livraison.contact_id ?? livraison.employe_id ?? null,
+    depot_id: livraison.depot_id ?? null,
+    depot_nom: livraison.depot_nom ?? null,
     client: livraison.client_nom || null,
     commercial: livraison.commercial_nom || null,
     client_nom: livraison.client_nom || null,
     commercial_nom: livraison.commercial_nom || null,
+    date: stockInfo?.date || livraison.date || null,
+    condition: stockInfo?.condition || '',
+    expedition: stockInfo?.expedition || '',
+    transporteur: stockInfo?.transporteur || '',
     source,
     details: Array.isArray(normalizedDetails) ? normalizedDetails : [],
+    compositions: Array.isArray(normalizedCompositions) ? normalizedCompositions : [],
+    lot_details: Array.isArray(lotDetails) ? lotDetails : [],
     clientInfo: clientInfo || null
   };
 
@@ -601,7 +1261,7 @@ const getLivraisonById = async (id, sequelizeConnection = null) => {
 
 
 // Ajouter une nouvelle livraison dans stock (pour transfert depuis commande)
-const addLivraisonFromCommande = async ({ numero, date, description, part_id, contact_id, type = 2, etat = 1, parent = null }, sequelizeConnection = null) => {
+const addLivraisonFromCommande = async ({ numero, date, description, part_id, contact_id, depot_id, type = 2, etat = 1, parent = null }, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
   const { getCompteurCurrent } = require('../../services/compteur.service');
 
@@ -643,6 +1303,18 @@ const addLivraisonFromCommande = async ({ numero, date, description, part_id, co
         type: type || 2,
         etat: etat || 1
       };
+
+      const stockColSet = await getTableColumnSet(sequelize, 'stock');
+      const depotColumn = stockColSet.has('depot_id') ? 'depot_id' : (stockColSet.has('adresse_id') ? 'adresse_id' : null);
+      const depotValue = (() => {
+        const n = parseInt(depot_id, 10);
+        return Number.isInteger(n) && n > 0 ? n : null;
+      })();
+      if (depotColumn) {
+        columns += `, ${depotColumn}`;
+        values += ', :depotValue';
+        replacements.depotValue = depotValue;
+      }
 
       // Ajouter parent si fourni
       if (parent !== undefined && parent !== null) {
@@ -712,8 +1384,9 @@ const addLivraisonFromCommande = async ({ numero, date, description, part_id, co
 };
 
 // Sauvegarder les détails dans stock_detail (pour transfert depuis commande) avec transaction
-const saveDetailStock = async (detail, sequelizeConnection = null) => {
+const saveDetailStock = async (detail, sequelizeConnection = null, transaction = null) => {
   const sequelize = sequelizeConnection || getConnection();
+  const stockDetailColSet = await getTableColumnSet(sequelize, 'stock_detail');
 
   const stock_id = detail.stock_id || detail.document_id || null;
   const article_id = detail.article_id || null;
@@ -726,6 +1399,20 @@ const saveDetailStock = async (detail, sequelizeConnection = null) => {
   const remise = detail.hasOwnProperty('remise') ? (detail.remise !== undefined ? detail.remise : null) : 0;
   const remise_montant = detail.hasOwnProperty('remise_montant') ? (detail.remise_montant !== undefined ? detail.remise_montant : null) : 0;
   const sens = detail.sens != null ? detail.sens : -1;
+  const detailType = detail.type !== undefined && detail.type !== null && detail.type !== ''
+    ? Number(detail.type)
+    : null;
+  const depotColumn = stockDetailColSet.has('depot_id')
+    ? 'depot_id'
+    : (stockDetailColSet.has('adresse_id') ? 'adresse_id' : null);
+  const depotValue = (() => {
+    const n = parseInt(detail.depot_id ?? detail.adresse_id, 10);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  })();
+  const ligneValue = (() => {
+    const n = parseInt(detail.ligne, 10);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  })();
 
   // Préparer les valeurs - convertir null en 0 pour éviter les problèmes avec SQL Server
   let remiseValue = remise;
@@ -739,10 +1426,24 @@ const saveDetailStock = async (detail, sequelizeConnection = null) => {
   const descriptionLimited = (description || '').substring(0, 200);
 
   // Utiliser une requête simple avec paramètres
+  let columns = 'stock_id, article_id, quantite, prix, taux_tva, sens, remise, remise_montant, cr_date';
+  let values = ':stock_id, :article_id, :quantite, :prix, :taux_tva, :sens, :remise, :remise_montant, GETDATE()';
+  if (stockDetailColSet.has('ligne') && ligneValue !== null) {
+    columns += ', ligne';
+    values += ', :ligneValue';
+  }
+  if (depotColumn) {
+    columns += `, ${depotColumn}`;
+    values += ', :depotValue';
+  }
+  if (stockDetailColSet.has('type') && detailType !== null && Number.isFinite(detailType)) {
+    columns += ', type';
+    values += ', :detailType';
+  }
   const query = `
-    INSERT INTO stock_detail (stock_id, article_id, quantite, prix, taux_tva,  sens, remise, remise_montant , cr_date)
+    INSERT INTO stock_detail (${columns})
     OUTPUT INSERTED.id
-    VALUES (:stock_id, :article_id, :quantite, :prix, :taux_tva,  :sens, :remise, :remise_montant , GETDATE())
+    VALUES (${values})
   `;
 
   const replacements = {
@@ -755,9 +1456,17 @@ const saveDetailStock = async (detail, sequelizeConnection = null) => {
     remise: remiseValue || 0, // Toujours 0 si null/undefined
     remise_montant: remiseMontantValue || 0 // Toujours 0 si null/undefined
   };
+  if (stockDetailColSet.has('ligne') && ligneValue !== null) {
+    replacements.ligneValue = ligneValue;
+  }
+  if (depotColumn) {
+    replacements.depotValue = depotValue;
+  }
+  if (stockDetailColSet.has('type') && detailType !== null && Number.isFinite(detailType)) {
+    replacements.detailType = detailType;
+  }
 
-  // Utiliser une transaction pour garantir le rollback en cas d'erreur
-  return await sequelize.transaction(async (t) => {
+  const executeInsert = async (t) => {
     try {
       const [results] = await sequelize.query(query, {
         replacements: replacements,
@@ -793,6 +1502,17 @@ const saveDetailStock = async (detail, sequelizeConnection = null) => {
         }
       }
 
+      if (detail_id) {
+        await upsertQuillDesignation(sequelize, {
+          tableName: LIVRAISON_QUILL_TABLE,
+          quillId: detail_id,
+          documentId: stock_id,
+          designation: description,
+          articleId: article_id,
+          transaction: t
+        });
+      }
+
       return detail_id;
     } catch (error) {
       console.error('❌ Erreur lors de la sauvegarde du détail dans stock_detail:', error);
@@ -804,12 +1524,19 @@ const saveDetailStock = async (detail, sequelizeConnection = null) => {
       // Le rollback sera automatique grâce à la transaction
       throw new Error(`Erreur lors de la sauvegarde du détail: ${error.message || 'Erreur inconnue'}`);
     }
-  });
+  };
+
+  if (transaction) {
+    return await executeInsert(transaction);
+  }
+
+  return await sequelize.transaction(async (t) => executeInsert(t));
 };
 
 // Mettre à jour un détail de stock_detail
 const updateDetailStock = async (id, detail, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
+  const stockDetailColSet = await getTableColumnSet(sequelize, 'stock_detail');
 
   // Préparer les valeurs - convertir null en 0 pour éviter les problèmes avec SQL Server
   let remiseValue = detail.remise;
@@ -823,16 +1550,44 @@ const updateDetailStock = async (id, detail, sequelizeConnection = null) => {
   const descriptionLimited = (detail.description || '').substring(0, 200);
 
   // Utiliser une requête simple avec paramètres
+  const depotColumn = stockDetailColSet.has('depot_id')
+    ? 'depot_id'
+    : (stockDetailColSet.has('adresse_id') ? 'adresse_id' : null);
+  const depotValue = (() => {
+    const n = parseInt(detail.depot_id ?? detail.adresse_id, 10);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  })();
+  const ligneValue = (() => {
+    const n = parseInt(detail.ligne, 10);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  })();
+  const detailType = detail.type !== undefined && detail.type !== null && detail.type !== ''
+    ? Number(detail.type)
+    : null;
+
+  let setClause = `
+    article_id = :article_id,
+    quantite = :quantite,
+    prix = :prix,
+    taux_tva = :taux_tva,
+    description = :description,
+    remise = :remise,
+    remise_montant = :remise_montant ,
+    cr_date = GETDATE()
+  `;
+  if (depotColumn) {
+    setClause += `,\n        ${depotColumn} = :depotValue`;
+  }
+  if (stockDetailColSet.has('ligne') && ligneValue !== null) {
+    setClause += `,\n        ligne = :ligneValue`;
+  }
+  if (stockDetailColSet.has('type') && detailType !== null && Number.isFinite(detailType)) {
+    setClause += `,\n        type = :detailType`;
+  }
+
   const query = `
     UPDATE stock_detail
-    SET article_id = :article_id,
-        quantite = :quantite,
-        prix = :prix,
-        taux_tva = :taux_tva,
-        description = :description,
-        remise = :remise,
-        remise_montant = :remise_montant ,
-        cr_date = GETDATE()
+    SET ${setClause}
     WHERE id = :id
   `;
 
@@ -847,11 +1602,40 @@ const updateDetailStock = async (id, detail, sequelizeConnection = null) => {
     remise: remiseValue || 0, // Toujours 0 si null/undefined
     remise_montant: remiseMontantValue || 0 // Toujours 0 si null/undefined
   };
+  if (depotColumn) {
+    replacements.depotValue = depotValue;
+  }
+  if (stockDetailColSet.has('ligne') && ligneValue !== null) {
+    replacements.ligneValue = ligneValue;
+  }
+  if (stockDetailColSet.has('type') && detailType !== null && Number.isFinite(detailType)) {
+    replacements.detailType = detailType;
+  }
 
   try {
     await sequelize.query(query, {
       replacements: replacements
     });
+
+    const stockRows = await sequelize.query(
+      `SELECT TOP 1 stock_id, article_id FROM stock_detail WHERE id = :id`,
+      {
+        replacements: { id },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+    const stockDetailRow = Array.isArray(stockRows) && stockRows.length > 0 ? stockRows[0] : null;
+
+    if (stockDetailRow?.stock_id && stockDetailRow?.article_id !== undefined && stockDetailRow?.article_id !== null) {
+      await upsertQuillDesignation(sequelize, {
+        tableName: LIVRAISON_QUILL_TABLE,
+        quillId: id,
+        documentId: stockDetailRow.stock_id,
+        designation: detail.description || '',
+        articleId: stockDetailRow.article_id
+      });
+    }
+
     return id;
   } catch (error) {
     console.error('[updateDetailStock] Erreur:', error.message);
@@ -1023,42 +1807,72 @@ const saveDetail = async (detail, sequelizeConnection = null) => {
 // Sauvegarder les informations Quill d'une livraison
 const saveInfo = async (info, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
-
-  const document_id = info.document_id || null;
-  const conditions = info.conditions || '';
-  const note = info.note || '';
-
-  const query = `
-    IF EXISTS (SELECT 1 FROM vente_document_quill WHERE document_id = :document_id)
-      UPDATE vente_document_quill 
-      SET conditions = :conditions, note = :note
-      WHERE document_id = :document_id
-    ELSE
-      INSERT INTO vente_document_quill (document_id, conditions, note)
-      VALUES (:document_id, :conditions, :note)
-  `;
-
-  await sequelize.query(query, {
-    replacements: {
-      document_id: document_id || null,
-      conditions: conditions || '',
-      note: note || ''
-    }
+  await upsertStockInfo(sequelize, {
+    document_id: info?.document_id || null,
+    date: formatToSqlDateTime(info?.date),
+    condition: info?.condition || '',
+    expedition: info?.expedition || '',
+    transporteur: info?.transporteur || ''
   });
 };
 
 // Mettre à jour une livraison (dans la table stock)
-const updateLivraison = async (id, { date, description, part_id, contact_id, date_fin }, sequelizeConnection = null) => {
+const updateLivraison = async (id, { date, description, part_id, contact_id, depot_id, date_fin }, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
+  const stockColSet = await getTableColumnSet(sequelize, 'stock');
 
   const dateSql = formatToSqlDateTime(date);
+  const contactColumn = stockColSet.has('employe_id')
+    ? 'employe_id'
+    : (stockColSet.has('contact_id') ? 'contact_id' : null);
+  const depotColumn = stockColSet.has('depot_id')
+    ? 'depot_id'
+    : (stockColSet.has('adresse_id') ? 'adresse_id' : null);
+  const depotValue = (() => {
+    const n = parseInt(depot_id, 10);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  })();
+
+  const setParts = [];
+  const replacements = { id };
+
+  if (stockColSet.has('date')) {
+    setParts.push('date = :dateSql');
+    replacements.dateSql = dateSql;
+  }
+  if (stockColSet.has('description')) {
+    setParts.push('description = :description');
+    replacements.description = description;
+  }
+  if (stockColSet.has('part_id')) {
+    setParts.push('part_id = :part_id');
+    replacements.part_id = part_id;
+  }
+  if (contactColumn) {
+    setParts.push(`${contactColumn} = :contact_id`);
+    replacements.contact_id = contact_id;
+  }
+  if (stockColSet.has('date_fin')) {
+    setParts.push('date_fin = :date_fin');
+    replacements.date_fin = date_fin;
+  }
+
+  if (depotColumn) {
+    setParts.push(`${depotColumn} = :depotValue`);
+    replacements.depotValue = depotValue;
+  }
+
+  if (setParts.length === 0) {
+    return;
+  }
+  const setClause = setParts.join(',\n     ');
+
   await sequelize.query(
     `UPDATE stock 
-     SET date = :dateSql, description = :description, part_id = :part_id, 
-         contact_id = :contact_id, date_fin = :date_fin
+     SET ${setClause}
      WHERE id = :id`,
     {
-      replacements: { id, dateSql, description, part_id, contact_id, date_fin }
+      replacements
     }
   );
 };
@@ -1066,31 +1880,204 @@ const updateLivraison = async (id, { date, description, part_id, contact_id, dat
 // Supprimer une livraison
 const deleteLivraison = async (ids, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
+  const safeIds = (Array.isArray(ids) ? ids : [])
+    .map(normalizePositiveInt)
+    .filter(Boolean);
 
-  if (!Array.isArray(ids) || ids.length === 0) {
+  if (safeIds.length === 0) {
     throw new Error('IDs invalides pour la suppression');
   }
 
-  // Supprimer les détails
-  await sequelize.query(
-    `DELETE FROM vente_document_detail WHERE document_id IN (${ids.map(() => '?').join(',')})`,
-    { replacements: ids }
-  );
+  await sequelize.transaction(async (transaction) => {
+    const stockRows = await sequelize.query(
+      `SELECT id, facture_id
+       FROM stock
+       WHERE id IN (${safeIds.map(() => '?').join(',')}) AND type = 2`,
+      {
+        replacements: safeIds,
+        type: sequelize.QueryTypes.SELECT,
+        transaction
+      }
+    );
 
-  // Supprimer les infos Quill
-  await sequelize.query(
-    `DELETE FROM vente_document_quill WHERE document_id IN (${ids.map(() => '?').join(',')})`,
-    { replacements: ids }
-  );
+    const stockLivraisons = Array.isArray(stockRows) ? stockRows : [];
+    const facturedStockIds = stockLivraisons
+      .filter((row) => row?.facture_id !== null && row?.facture_id !== undefined)
+      .map((row) => Number(row.id))
+      .filter((id) => Number.isInteger(id) && id > 0);
 
-  // Supprimer la livraison
-  await sequelize.query(
-    `DELETE FROM vente_document WHERE document_id IN (${ids.map(() => '?').join(',')})`,
-    { replacements: ids }
-  );
+    if (facturedStockIds.length > 0) {
+      throw new Error('Impossible de supprimer une livraison deja facturee');
+    }
+
+    const stockIds = stockLivraisons
+      .map((row) => Number(row.id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+    const stockIdSet = new Set(stockIds);
+
+    if (stockIds.length > 0) {
+      const detailRows = await sequelize.query(
+        `SELECT id
+         FROM stock_detail
+         WHERE stock_id IN (${stockIds.map(() => '?').join(',')})`,
+        {
+          replacements: stockIds,
+          type: sequelize.QueryTypes.SELECT,
+          transaction
+        }
+      );
+
+      const detailIds = (Array.isArray(detailRows) ? detailRows : [])
+        .map((row) => Number(row.id))
+        .filter((id) => Number.isInteger(id) && id > 0);
+
+      const lotColSet = await getTableColumnSet(sequelize, 'stock_detail_lot');
+      if (lotColSet.size > 0) {
+        const lotPredicates = [];
+        const lotReplacements = [];
+        if (lotColSet.has('stock_id')) {
+          lotPredicates.push(`stock_id IN (${stockIds.map(() => '?').join(',')})`);
+          lotReplacements.push(...stockIds);
+        }
+        if (detailIds.length > 0 && lotColSet.has('detail_id')) {
+          lotPredicates.push(`detail_id IN (${detailIds.map(() => '?').join(',')})`);
+          lotReplacements.push(...detailIds);
+        }
+
+        if (lotPredicates.length > 0) {
+          await sequelize.query(
+            `DELETE FROM stock_detail_lot WHERE ${lotPredicates.join(' OR ')}`,
+            {
+              replacements: lotReplacements,
+              transaction
+            }
+          );
+        }
+      }
+
+      if (detailIds.length > 0) {
+        await deleteQuillRowsByIds(sequelize, [LIVRAISON_QUILL_TABLE], detailIds, transaction);
+        await deleteCompositionRowsByStockDetailIds(detailIds, sequelize, transaction);
+
+        await sequelize.query(
+          `DELETE FROM stock_detail WHERE id IN (${detailIds.map(() => '?').join(',')})`,
+          {
+            replacements: detailIds,
+            transaction
+          }
+        );
+      }
+
+      const stockInfoColSet = await getTableColumnSet(sequelize, 'stock_detail_info');
+      if (stockInfoColSet.has('document_id')) {
+        await sequelize.query(
+          `DELETE FROM stock_detail_info WHERE document_id IN (${stockIds.map(() => '?').join(',')})`,
+          {
+            replacements: stockIds,
+            transaction
+          }
+        );
+      }
+
+      await sequelize.query(
+        `DELETE FROM stock WHERE id IN (${stockIds.map(() => '?').join(',')}) AND type = 2`,
+        {
+          replacements: stockIds,
+          transaction
+        }
+      );
+    }
+
+    const legacyCandidateIds = safeIds.filter((id) => !stockIdSet.has(id));
+    let legacyLivraisonIds = [];
+
+    if (legacyCandidateIds.length > 0) {
+      const legacyRows = await sequelize.query(
+        `SELECT document_id
+         FROM vente_document
+         WHERE document_id IN (${legacyCandidateIds.map(() => '?').join(',')}) AND type = 3`,
+        {
+          replacements: legacyCandidateIds,
+          type: sequelize.QueryTypes.SELECT,
+          transaction
+        }
+      );
+
+      legacyLivraisonIds = (Array.isArray(legacyRows) ? legacyRows : [])
+        .map((row) => Number(row.document_id))
+        .filter((id) => Number.isInteger(id) && id > 0);
+    }
+
+    if (legacyLivraisonIds.length > 0) {
+      await sequelize.query(
+        `DELETE FROM vente_document_detail WHERE document_id IN (${legacyLivraisonIds.map(() => '?').join(',')})`,
+        {
+          replacements: legacyLivraisonIds,
+          transaction
+        }
+      );
+
+      await sequelize.query(
+        `DELETE FROM vente_document_quill WHERE document_id IN (${legacyLivraisonIds.map(() => '?').join(',')})`,
+        {
+          replacements: legacyLivraisonIds,
+          transaction
+        }
+      );
+
+      await sequelize.query(
+        `DELETE FROM vente_document WHERE document_id IN (${legacyLivraisonIds.map(() => '?').join(',')}) AND type = 3`,
+        {
+          replacements: legacyLivraisonIds,
+          transaction
+        }
+      );
+    }
+
+    if (stockIds.length === 0 && legacyLivraisonIds.length === 0) {
+      throw new Error('Livraison introuvable ou deja supprimee');
+    }
+  });
 };
 
 // Supprimer des lignes de détail par IDs (dans stock_detail)
+const deleteCompositionRowsByStockDetailIds = async (ligneIds, sequelize, transaction = null) => {
+  const compositionColSet = await getTableColumnSet(sequelize, 'stock_detail_composition');
+  if (compositionColSet.size === 0 || !Array.isArray(ligneIds) || ligneIds.length === 0) {
+    return;
+  }
+
+  const compositionRows = await sequelize.query(
+    `
+      SELECT id, stock_detail_id, ligne, quill_id
+      FROM stock_detail_composition
+      WHERE stock_detail_id IN (${ligneIds.map(() => '?').join(',')})
+    `,
+    {
+      replacements: ligneIds,
+      type: sequelize.QueryTypes.SELECT,
+      transaction
+    }
+  );
+
+  const quillIdsToDelete = (Array.isArray(compositionRows) ? compositionRows : [])
+    .map((row) => Number(row?.quill_id || 0))
+    .filter((quillId) => Number.isInteger(quillId) && quillId > 0);
+
+  if (quillIdsToDelete.length > 0) {
+    await deleteQuillRowsByIds(sequelize, [LIVRAISON_QUILL_TABLE], quillIdsToDelete, transaction);
+  }
+
+  await sequelize.query(
+    `DELETE FROM stock_detail_composition WHERE stock_detail_id IN (${ligneIds.map(() => '?').join(',')})`,
+    {
+      replacements: ligneIds,
+      type: sequelize.QueryTypes.DELETE,
+      transaction
+    }
+  );
+};
+
 const deleteLignesParIds = async (ligneIds, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
 
@@ -1098,10 +2085,258 @@ const deleteLignesParIds = async (ligneIds, sequelizeConnection = null) => {
     throw new Error('IDs de lignes invalides pour la suppression');
   }
 
-  await sequelize.query(
-    `DELETE FROM stock_detail WHERE id IN (${ligneIds.map(() => '?').join(',')})`,
-    { replacements: ligneIds }
+  const stockDetailColSet = await getTableColumnSet(sequelize, 'stock_detail');
+  let idsToDelete = [...ligneIds];
+
+  const stockRows = await sequelize.query(
+    `SELECT DISTINCT stock_id
+     FROM stock_detail
+     WHERE id IN (${ligneIds.map(() => '?').join(',')})`,
+    {
+      replacements: ligneIds,
+      type: sequelize.QueryTypes.SELECT
+    }
   );
+  const touchedStockIds = (Array.isArray(stockRows) ? stockRows : [])
+    .map((row) => Number(row?.stock_id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+
+  if (stockDetailColSet.has('type') && stockDetailColSet.has('ligne')) {
+    const rows = await sequelize.query(
+      `SELECT id, stock_id, ligne, type
+       FROM stock_detail
+       WHERE id IN (${ligneIds.map(() => '?').join(',')})`,
+      {
+        replacements: ligneIds,
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const stockId = Number(row?.stock_id || 0);
+      const parentLine = Number(row?.ligne || 0);
+      if (!stockId || !parentLine || Number(row?.type || 0) === 1) {
+        continue;
+      }
+
+      const nextRows = await sequelize.query(
+        `SELECT MIN(ligne) AS next_ligne
+         FROM stock_detail
+         WHERE stock_id = :stockId
+           AND ligne > :parentLine
+           AND ISNULL(type, 0) <> 1`,
+        {
+          replacements: { stockId, parentLine },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+      const nextLine = Number((Array.isArray(nextRows) ? nextRows[0] : nextRows)?.next_ligne || 0);
+      const componentRows = await sequelize.query(
+        `SELECT id
+         FROM stock_detail
+         WHERE stock_id = :stockId
+           AND type = 1
+           AND ligne > :parentLine
+           ${nextLine > 0 ? 'AND ligne < :nextLine' : ''}`,
+        {
+          replacements: { stockId, parentLine, nextLine },
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
+      idsToDelete.push(...(Array.isArray(componentRows) ? componentRows : []).map((component) => component.id));
+    }
+  }
+
+  idsToDelete = Array.from(new Set(idsToDelete.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)));
+  if (idsToDelete.length === 0) {
+    return;
+  }
+
+  await deleteQuillRowsByIds(sequelize, [LIVRAISON_QUILL_TABLE], idsToDelete);
+  await deleteCompositionRowsByStockDetailIds(idsToDelete, sequelize);
+
+  await sequelize.query(
+    `DELETE FROM stock_detail WHERE id IN (${idsToDelete.map(() => '?').join(',')})`,
+    { replacements: idsToDelete }
+  );
+
+  await syncTouchedStockDetailLignes(sequelize, touchedStockIds);
+};
+
+const syncTouchedStockDetailLignes = async (sequelize, touchedStockIds = []) => {
+  const stockDetailColSet = await getTableColumnSet(sequelize, 'stock_detail');
+  if (!stockDetailColSet.has('ligne')) {
+    return;
+  }
+
+  const safeStockIds = Array.from(new Set((Array.isArray(touchedStockIds) ? touchedStockIds : [])
+    .map((id) => Number(id))
+    .filter((id) => Number.isInteger(id) && id > 0)));
+
+  for (const stockId of safeStockIds) {
+    const orderedRows = await sequelize.query(
+      `SELECT id, ligne
+       FROM stock_detail
+       WHERE stock_id = :stockId
+       ORDER BY CASE WHEN ligne IS NULL THEN 1 ELSE 0 END, ligne ASC, id ASC`,
+      {
+        replacements: { stockId },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+
+    for (let index = 0; index < orderedRows.length; index++) {
+      const row = orderedRows[index];
+      const expectedLigne = index + 1;
+      if (Number(row?.ligne || 0) === expectedLigne) {
+        continue;
+      }
+
+      await sequelize.query(
+        `UPDATE stock_detail
+         SET ligne = :ligne
+         WHERE id = :id`,
+        {
+          replacements: { id: row.id, ligne: expectedLigne },
+          type: sequelize.QueryTypes.UPDATE
+        }
+      );
+    }
+  }
+};
+
+const syncStockDetailNomenclatureComponents = async (sequelize, parents = [], hasLigneColumn = false) => {
+  if (!Array.isArray(parents) || parents.length === 0) {
+    return;
+  }
+
+  const stockDetailColSet = await getTableColumnSet(sequelize, 'stock_detail');
+  const hasTypeColumn = stockDetailColSet.has('type');
+  const parentRows = [];
+  for (const parent of parents) {
+    const componentLines = await buildFlatComponentLines(sequelize, parent);
+    if (!Array.isArray(componentLines) || componentLines.length === 0) {
+      continue;
+    }
+
+    const rows = await sequelize.query(
+      `SELECT TOP 1 id, stock_id, article_id, ligne
+       FROM stock_detail
+       WHERE id = :id`,
+      {
+        replacements: { id: parent.id },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+    const dbParent = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+    if (!dbParent?.id || !dbParent?.stock_id) {
+      continue;
+    }
+
+    parentRows.push({
+      ...parent,
+      id: dbParent.id,
+      stock_id: dbParent.stock_id,
+      document_id: dbParent.stock_id,
+      ligne: Number(dbParent.ligne || parent.ligne || 0),
+      componentLines
+    });
+  }
+
+  parentRows.sort((a, b) => Number(b.ligne || 0) - Number(a.ligne || 0));
+
+  for (const parent of parentRows) {
+    const stockId = Number(parent.stock_id || parent.document_id || 0);
+    const parentLine = Number(parent.ligne || 0);
+    const components = parent.componentLines;
+    if (!stockId || !parentLine || components.length === 0) {
+      continue;
+    }
+
+    const followingRows = await sequelize.query(
+      `SELECT id, article_id, ligne${hasTypeColumn ? ', type' : ''}
+       FROM stock_detail
+       WHERE stock_id = :stock_id
+         AND id <> :parent_id
+         AND ligne > :parent_line
+       ORDER BY ligne ASC, id ASC`,
+      {
+        replacements: {
+          stock_id: stockId,
+          parent_id: parent.id,
+          parent_line: parentLine
+        },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+
+    const consumedIds = [];
+    let cursor = 0;
+    for (const component of components) {
+      const candidate = followingRows[cursor];
+      const candidateType = hasTypeColumn && candidate?.type !== null && candidate?.type !== undefined
+        ? Number(candidate.type)
+        : null;
+      if (
+        !candidate
+        || (candidateType !== null && candidateType !== 1)
+        || Number(candidate.article_id || 0) !== Number(component.article_id || 0)
+      ) {
+        break;
+      }
+      consumedIds.push(candidate.id);
+      cursor += 1;
+    }
+
+    if (consumedIds.length > 0) {
+      await deleteQuillRowsByIds(sequelize, [LIVRAISON_QUILL_TABLE], consumedIds);
+      await deleteCompositionRowsByStockDetailIds(consumedIds, sequelize);
+      await sequelize.query(
+        `DELETE FROM stock_detail WHERE id IN (${consumedIds.map(() => '?').join(',')})`,
+        {
+          replacements: consumedIds,
+          type: sequelize.QueryTypes.DELETE
+        }
+      );
+    }
+
+    if (hasLigneColumn) {
+      await sequelize.query(
+        `UPDATE stock_detail
+         SET ligne = ligne + :offset
+         WHERE stock_id = :stock_id
+           AND ligne > :parent_line`,
+        {
+          replacements: {
+            offset: components.length,
+            stock_id: stockId,
+            parent_line: parentLine
+          },
+          type: sequelize.QueryTypes.UPDATE
+        }
+      );
+    }
+
+    for (let index = 0; index < components.length; index++) {
+      const component = components[index];
+      await saveDetailStock({
+        stock_id: stockId,
+        document_id: stockId,
+        article_id: component.article_id,
+        quantite: toFiniteNumber(component.quantite ?? component.qte, 0),
+        prix: toFiniteNumber(component.prix ?? component.pu, 0),
+        taux_tva: toFiniteNumber(component.taux_tva ?? component.tva ?? parent.taux_tva, 0),
+        depot_id: parent.depot_id ?? parent.adresse_id ?? null,
+        ligne: hasLigneColumn ? parentLine + index + 1 : null,
+        description: component.designation || component.description || '',
+        sens: parent.sens != null ? Number(parent.sens) : -1,
+        remise: 0,
+        remise_montant: 0,
+        type: 1
+      }, sequelize);
+    }
+  }
 };
 
 const saveDetailLines = async (lignes, sequelizeConnection = null) => {
@@ -1109,7 +2344,16 @@ const saveDetailLines = async (lignes, sequelizeConnection = null) => {
     return [];
   }
 
+  const sequelize = sequelizeConnection || getConnection();
+  const stockColSet = await getTableColumnSet(sequelize, 'stock');
+  const stockDetailColSet = await getTableColumnSet(sequelize, 'stock_detail');
+  const stockDepotColumn = stockColSet.has('depot_id')
+    ? 'depot_id'
+    : (stockColSet.has('adresse_id') ? 'adresse_id' : null);
+
   const results = [];
+  const touchedStockIds = new Set();
+  const nomenclatureParents = [];
 
   for (const ligne of lignes) {
     try {
@@ -1123,6 +2367,7 @@ const saveDetailLines = async (lignes, sequelizeConnection = null) => {
         });
         continue;
       }
+      touchedStockIds.add(Number(stockId));
 
       const articleId = ligne?.article_id ?? null;
       const quantite = Number(ligne?.qte ?? ligne?.quantite) || 0;
@@ -1132,6 +2377,15 @@ const saveDetailLines = async (lignes, sequelizeConnection = null) => {
         : (ligne?.taux_tva != null ? Number(ligne.taux_tva) : 0);
       const description = ligne?.designation ?? ligne?.description ?? '';
       const sens = ligne?.sens != null ? Number(ligne.sens) : -1;
+      const ligneNumber = stockDetailColSet.has('ligne')
+        ? (() => {
+            const n = parseInt(ligne?.ligne, 10);
+            return Number.isInteger(n) && n > 0 ? n : null;
+          })()
+        : null;
+      const ligneType = stockDetailColSet.has('type')
+        ? (Number(ligne?.type ?? ligne?.ligne_type ?? ligne?.detail_type ?? 0) === 1 ? 1 : 0)
+        : null;
 
       // Détecter le mode basé sur les valeurs envoyées par le frontend
       // Le frontend envoie soit remise (pourcentage décimal) avec remise_montant = null
@@ -1188,16 +2442,36 @@ const saveDetailLines = async (lignes, sequelizeConnection = null) => {
         prix,
         tva: tauxTva,
         taux_tva: tauxTva,
+        depot_id: ligne?.depot_id ?? ligne?.adresse_id ?? null,
+        ligne: ligneNumber,
         description,
         sens,
         // S'assurer que null est explicitement défini et non undefined
         remise: remiseFraction !== undefined ? remiseFraction : null,
-        remise_montant: remiseMontant !== undefined ? remiseMontant : null
+        remise_montant: remiseMontant !== undefined ? remiseMontant : null,
+        type: ligneType
       };
+
+      // Synchroniser le depot en en-tete (stock) a partir de la ligne si fourni.
+      if (stockDepotColumn) {
+        const lineDepotValue = (() => {
+          const n = parseInt(ligne?.depot_id ?? ligne?.adresse_id, 10);
+          return Number.isInteger(n) && n > 0 ? n : null;
+        })();
+        if (lineDepotValue) {
+          await sequelize.query(
+            `UPDATE stock SET ${stockDepotColumn} = :lineDepotValue WHERE id = :stockId`,
+            {
+              replacements: { lineDepotValue, stockId }
+            }
+          );
+        }
+      }
 
       if (ligne?.update_mode === 'U' && ligne?.id) {
         await updateDetailStock(ligne.id, payload, sequelizeConnection);
         results.push({ id: ligne.id, update_mode: 'U', success: true, remise_mode: detectedMode });
+        nomenclatureParents.push({ ...payload, id: ligne.id });
       } else if (ligne?.update_mode === 'D' && ligne?.id) {
         await deleteLignesParIds([ligne.id], sequelizeConnection);
         results.push({ id: ligne.id, update_mode: 'D', success: true, remise_mode: detectedMode });
@@ -1205,6 +2479,9 @@ const saveDetailLines = async (lignes, sequelizeConnection = null) => {
         const insertedId = await saveDetailStock(payload, sequelizeConnection);
         console.log(`[saveDetailLines] ✅ Nouvelle ligne ${insertedId} insérée avec succès`);
         results.push({ id: insertedId, update_mode: 'I', success: true, remise_mode: detectedMode });
+        if (insertedId) {
+          nomenclatureParents.push({ ...payload, id: insertedId });
+        }
       }
     } catch (error) {
       console.error('Erreur lors du traitement d’une ligne stock_detail :', error);
@@ -1217,10 +2494,552 @@ const saveDetailLines = async (lignes, sequelizeConnection = null) => {
     }
   }
 
+  await syncStockDetailNomenclatureComponents(sequelize, nomenclatureParents, stockDetailColSet.has('ligne'));
+  await syncTouchedStockDetailLignes(sequelize, Array.from(touchedStockIds));
+
   return results;
 };
 
 // Récupérer les données de la livraison pour la popup de confirmation
+const saveCompositionLines = async (documentId, lignes, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  const safeDocumentId = parseInt(documentId, 10);
+
+  if (!Number.isInteger(safeDocumentId) || safeDocumentId <= 0) {
+    throw new Error('document_id invalide');
+  }
+
+  if (!Array.isArray(lignes) || lignes.length === 0) {
+    return [];
+  }
+
+  const compositionColSet = await getTableColumnSet(sequelize, 'stock_detail_composition');
+  if (compositionColSet.size === 0) {
+    throw new Error('Table stock_detail_composition introuvable');
+  }
+  const quillTableColSet = await getTableColumnSet(sequelize, LIVRAISON_QUILL_TABLE);
+
+  return await sequelize.transaction(async (transaction) => {
+    const detailRows = await sequelize.query(
+      `SELECT id, article_id FROM stock_detail WHERE stock_id = :documentId`,
+      {
+        replacements: { documentId: safeDocumentId },
+        type: sequelize.QueryTypes.SELECT,
+        transaction
+      }
+    );
+
+    const validDetailIds = new Set(
+      (Array.isArray(detailRows) ? detailRows : [])
+        .map((row) => parseInt(row?.id, 10))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    );
+
+    const existingCompositionRows = await sequelize.query(
+      `
+        SELECT id, stock_detail_id, ligne, article_id, quill_id
+        FROM stock_detail_composition
+        WHERE stock_detail_id IN (${Array.from(validDetailIds).map((_, index) => `:detailId${index}`).join(', ') || 'NULL'})
+      `,
+      {
+        replacements: Array.from(validDetailIds).reduce((acc, id, index) => {
+          acc[`detailId${index}`] = id;
+          return acc;
+        }, {}),
+        type: sequelize.QueryTypes.SELECT,
+        transaction
+      }
+    );
+
+    const existingById = new Map();
+    const existingByStockDetailId = new Map();
+    (Array.isArray(existingCompositionRows) ? existingCompositionRows : []).forEach((row) => {
+      const rowId = parseInt(row?.id, 10);
+      const stockDetailId = parseInt(row?.stock_detail_id, 10);
+      if (Number.isInteger(rowId) && rowId > 0) {
+        existingById.set(rowId, row);
+      }
+      if (Number.isInteger(stockDetailId) && stockDetailId > 0 && !existingByStockDetailId.has(stockDetailId)) {
+        existingByStockDetailId.set(stockDetailId, row);
+      }
+    });
+
+    const results = [];
+
+    for (const ligne of lignes) {
+      try {
+        const stockDetailId = parseInt(ligne?.stock_detail_id ?? ligne?.detail_id, 10);
+        const ligneNumber = Math.max(1, parseInt(ligne?.ligne, 10) || 1);
+        let compositionId = parseInt(ligne?.id, 10);
+        const articleId = parseInt(ligne?.article_id, 10);
+        const existingRow = (
+          (Number.isInteger(compositionId) && compositionId > 0 ? existingById.get(compositionId) : null)
+          || existingByStockDetailId.get(stockDetailId)
+          || null
+        );
+        if ((!Number.isInteger(compositionId) || compositionId <= 0) && existingRow?.id) {
+          compositionId = parseInt(existingRow.id, 10);
+        }
+        const updateMode = String(ligne?.update_mode || (compositionId ? 'U' : 'I')).toUpperCase();
+
+        if (!Number.isInteger(stockDetailId) || stockDetailId <= 0 || !validDetailIds.has(stockDetailId)) {
+          results.push({
+            id: Number.isInteger(compositionId) && compositionId > 0 ? compositionId : null,
+            stock_detail_id: stockDetailId || null,
+            update_mode: updateMode,
+            success: false,
+            error: 'stock_detail_id invalide pour ce document'
+          });
+          continue;
+        }
+
+        if (updateMode === 'D') {
+          const rowToDelete = existingRow || (Number.isInteger(compositionId) && compositionId > 0 ? { id: compositionId } : null);
+          if (!rowToDelete?.id) {
+            results.push({
+              id: Number.isInteger(compositionId) && compositionId > 0 ? compositionId : null,
+              stock_detail_id: stockDetailId,
+              update_mode: updateMode,
+              success: false,
+              error: 'id composition manquant pour suppression'
+            });
+            continue;
+          }
+
+          const quillIdToDelete = Number(rowToDelete?.quill_id || 0);
+          if (Number.isInteger(quillIdToDelete) && quillIdToDelete > 0) {
+            await deleteQuillRowsByIds(sequelize, [LIVRAISON_QUILL_TABLE], [quillIdToDelete], transaction);
+          }
+
+          await sequelize.query(
+            `DELETE FROM stock_detail_composition WHERE id = :id`,
+            {
+              replacements: { id: rowToDelete.id },
+              type: sequelize.QueryTypes.DELETE,
+              transaction
+            }
+          );
+
+          results.push({
+            id: rowToDelete.id,
+            stock_detail_id: stockDetailId,
+            update_mode: updateMode,
+            success: true
+          });
+          continue;
+        }
+
+        if (!Number.isInteger(articleId) || articleId <= 0) {
+          results.push({
+            id: Number.isInteger(compositionId) && compositionId > 0 ? compositionId : null,
+            stock_detail_id: stockDetailId,
+            update_mode: updateMode,
+            success: false,
+            error: 'article_id invalide'
+          });
+          continue;
+        }
+
+        const designation = String(ligne?.designation || '').trim();
+        const quantite = ligneNumber === 1 ? Number(ligne?.quantite ?? ligne?.qte ?? 0) : null;
+        const prix = ligneNumber === 1 ? Number(ligne?.prix ?? ligne?.pu ?? 0) : null;
+        const tauxTva = ligneNumber === 1
+          ? Number(ligne?.taux_tva ?? ligne?.tva ?? 0.2)
+          : null;
+        let quillId = parseInt(ligne?.quill_id ?? existingRow?.quill_id, 10);
+        quillId = Number.isInteger(quillId) && quillId > 0 ? quillId : null;
+        let effectiveQuillKey = null;
+        const etat = ligne?.etat != null ? Number(ligne.etat) : 1;
+        const type = ligne?.type != null ? Number(ligne.type) : 2;
+
+        let savedCompositionId = Number.isInteger(compositionId) && compositionId > 0 ? compositionId : null;
+
+        if (savedCompositionId) {
+          await sequelize.query(
+            `
+              UPDATE stock_detail_composition
+              SET stock_detail_id = :stockDetailId,
+                  ligne = :ligne,
+                  article_id = :articleId,
+                  quill_id = :quillId,
+                  quantite = :quantite,
+                  prix = :prix,
+                  taux_tva = :tauxTva,
+                  etat = :etat,
+                  type = :type
+              WHERE id = :id
+            `,
+            {
+              replacements: {
+                id: savedCompositionId,
+                stockDetailId,
+                ligne: ligneNumber,
+                articleId,
+                quillId,
+                quantite,
+                prix,
+                tauxTva,
+                etat,
+                type
+              },
+              type: sequelize.QueryTypes.UPDATE,
+              transaction
+            }
+          );
+        } else {
+          const insertResult = await sequelize.query(
+            `
+              INSERT INTO stock_detail_composition
+              (stock_detail_id, ligne, article_id, quill_id, quantite, prix, taux_tva, etat, type)
+              OUTPUT INSERTED.id
+              VALUES (:stockDetailId, :ligne, :articleId, :quillId, :quantite, :prix, :tauxTva, :etat, :type)
+            `,
+            {
+              replacements: {
+                stockDetailId,
+                ligne: ligneNumber,
+                articleId,
+                quillId,
+                quantite,
+                prix,
+                tauxTva,
+                etat,
+                type
+              },
+              type: sequelize.QueryTypes.INSERT,
+              transaction
+            }
+          );
+
+          const insertedRow = Array.isArray(insertResult) ? insertResult[0] : insertResult;
+          savedCompositionId = Array.isArray(insertedRow)
+            ? Number(insertedRow[0]?.id || 0)
+            : Number(insertedRow?.id || 0);
+
+          if (!savedCompositionId) {
+            const fallbackRows = await sequelize.query(
+              `SELECT TOP 1 id FROM stock_detail_composition ORDER BY id DESC`,
+              {
+                type: sequelize.QueryTypes.SELECT,
+                transaction
+              }
+            );
+            savedCompositionId = Number((Array.isArray(fallbackRows) ? fallbackRows[0] : fallbackRows)?.id || 0);
+          }
+        }
+
+        if (!savedCompositionId) {
+          throw new Error('Impossible de sauvegarder la composition');
+        }
+
+        if (quillId && quillTableColSet.size > 0) {
+          const linkedQuillRows = await sequelize.query(
+            `
+              SELECT TOP 1
+                ${quillTableColSet.has('id') ? 'id' : 'NULL AS id'},
+                quill_id
+              FROM ${LIVRAISON_QUILL_TABLE}
+              WHERE ${quillTableColSet.has('id') ? 'id = :ref OR ' : ''}quill_id = :ref
+              ORDER BY ${quillTableColSet.has('id') ? 'CASE WHEN id = :ref THEN 0 ELSE 1 END, ' : ''}quill_id DESC
+            `,
+            {
+              replacements: { ref: quillId },
+              type: sequelize.QueryTypes.SELECT,
+              transaction
+            }
+          );
+
+          const linkedQuillRow = Array.isArray(linkedQuillRows) ? linkedQuillRows[0] : null;
+          effectiveQuillKey = Number(linkedQuillRow?.quill_id || 0) || null;
+        }
+
+        if (!effectiveQuillKey) {
+          effectiveQuillKey = buildCompositionQuillId(savedCompositionId);
+        }
+
+        const savedQuillRow = await upsertQuillDesignation(sequelize, {
+          tableName: LIVRAISON_QUILL_TABLE,
+          quillId: effectiveQuillKey,
+          documentId: safeDocumentId,
+          designation,
+          articleId,
+          entryType: 1,
+          transaction
+        });
+
+        const savedQuillReference = Number(savedQuillRow?.id || savedQuillRow?.quill_id || effectiveQuillKey) || effectiveQuillKey;
+        await sequelize.query(
+          `UPDATE stock_detail_composition SET quill_id = :quillId WHERE id = :id`,
+          {
+            replacements: { quillId: savedQuillReference, id: savedCompositionId },
+            type: sequelize.QueryTypes.UPDATE,
+            transaction
+          }
+        );
+
+        results.push({
+          id: savedCompositionId,
+          stock_detail_id: stockDetailId,
+          ligne: ligneNumber,
+          quill_id: savedQuillReference,
+          update_mode: updateMode,
+          success: true
+        });
+      } catch (error) {
+        results.push({
+          id: ligne?.id ?? null,
+          stock_detail_id: ligne?.stock_detail_id ?? ligne?.detail_id ?? null,
+          ligne: ligne?.ligne ?? null,
+          update_mode: ligne?.update_mode ?? null,
+          success: false,
+          error: error.message || 'Erreur inconnue'
+        });
+      }
+    }
+
+    return results;
+  });
+};
+
+const saveLotDetailLines = async (documentId, lignes, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  const safeDocumentId = normalizePositiveInt(documentId);
+
+  if (!safeDocumentId) {
+    throw new Error('document_id invalide');
+  }
+
+  if (!Array.isArray(lignes) || lignes.length === 0) {
+    return [];
+  }
+
+  const lotColSet = await getTableColumnSet(sequelize, 'stock_detail_lot');
+  if (!lotColSet.size) {
+    throw new Error('Table stock_detail_lot introuvable');
+  }
+
+  const detailRows = await sequelize.query(
+    `SELECT id FROM stock_detail WHERE stock_id = :documentId`,
+    {
+      replacements: { documentId: safeDocumentId },
+      type: sequelize.QueryTypes.SELECT
+    }
+  );
+
+  const validDetailIds = new Set(
+    (Array.isArray(detailRows) ? detailRows : [])
+      .map((row) => normalizePositiveInt(row?.id))
+      .filter(Boolean)
+  );
+
+  const results = [];
+
+  for (const ligne of lignes) {
+    try {
+      const stockId = normalizePositiveInt(ligne?.stock_id) || safeDocumentId;
+      const detailId = normalizePositiveInt(ligne?.detail_id);
+      const lotRowId = lotColSet.has('id')
+        ? normalizePositiveInt(ligne?.lot_row_id ?? ligne?.id)
+        : null;
+
+      if (!detailId || !validDetailIds.has(detailId)) {
+        results.push({
+          lot_row_id: lotRowId,
+          detail_id: detailId,
+          success: false,
+          error: 'detail_id invalide pour cette livraison'
+        });
+        continue;
+      }
+
+      const ligneNumber = normalizePositiveInt(ligne?.ligne) || 1;
+      const articleId = normalizePositiveInt(ligne?.article_id);
+      const quantite = toFiniteNumber(ligne?.quantite, 0);
+      const serie = String(ligne?.serie ?? ligne?.numero_lot ?? '').trim().substring(0, 200);
+      const originalLigne = normalizePositiveInt(ligne?.original_ligne ?? ligne?.ligne);
+      const originalSerie = String(ligne?.original_serie ?? '').trim().substring(0, 200);
+
+      const setClauses = [];
+      const replacements = {};
+
+      if (lotColSet.has('stock_id')) {
+        setClauses.push('stock_id = :stockId');
+        replacements.stockId = stockId;
+      }
+      if (lotColSet.has('detail_id')) {
+        setClauses.push('detail_id = :detailId');
+        replacements.detailId = detailId;
+      }
+      if (lotColSet.has('ligne')) {
+        setClauses.push('ligne = :ligne');
+        replacements.ligne = ligneNumber;
+      }
+      if (lotColSet.has('article_id') && articleId) {
+        setClauses.push('article_id = :articleId');
+        replacements.articleId = articleId;
+      }
+      if (lotColSet.has('quantite')) {
+        setClauses.push('quantite = :quantite');
+        replacements.quantite = quantite;
+      }
+      if (lotColSet.has('serie')) {
+        setClauses.push('serie = :serie');
+        replacements.serie = serie;
+      }
+
+      if (!setClauses.length) {
+        results.push({
+          lot_row_id: lotRowId,
+          detail_id: detailId,
+          success: false,
+          error: 'Aucune colonne modifiable trouvee pour stock_detail_lot'
+        });
+        continue;
+      }
+
+      let whereClause = '';
+
+      if (lotRowId && lotColSet.has('id')) {
+        whereClause = 'id = :lotRowId';
+        replacements.lotRowId = lotRowId;
+      } else {
+        const filters = [];
+
+        if (lotColSet.has('stock_id')) {
+          filters.push('stock_id = :whereStockId');
+          replacements.whereStockId = stockId;
+        }
+        if (lotColSet.has('detail_id')) {
+          filters.push('detail_id = :whereDetailId');
+          replacements.whereDetailId = detailId;
+        }
+        if (lotColSet.has('ligne') && originalLigne) {
+          filters.push('ligne = :whereOriginalLigne');
+          replacements.whereOriginalLigne = originalLigne;
+        }
+        if (lotColSet.has('serie')) {
+          filters.push("ISNULL(serie, '') = :whereOriginalSerie");
+          replacements.whereOriginalSerie = originalSerie;
+        }
+
+        if (!filters.length) {
+          results.push({
+            lot_row_id: lotRowId,
+            detail_id: detailId,
+            success: false,
+            error: 'Impossible d identifier la ligne lot a modifier'
+          });
+          continue;
+        }
+
+        whereClause = filters.join(' AND ');
+      }
+
+      const existingLotRows = await sequelize.query(
+        `SELECT TOP 1 ${lotColSet.has('id') ? 'id' : '1 AS existing_flag'} FROM stock_detail_lot WHERE ${whereClause}`,
+        {
+          replacements,
+          type: sequelize.QueryTypes.SELECT
+        }
+      );
+
+      const existingLotRow = Array.isArray(existingLotRows) && existingLotRows.length > 0 ? existingLotRows[0] : null;
+      const existingLotRowId = lotColSet.has('id') ? normalizePositiveInt(existingLotRow?.id) : null;
+
+      if (existingLotRow) {
+        const updateWhereClause = existingLotRowId && lotColSet.has('id')
+          ? 'id = :targetLotRowId'
+          : whereClause;
+        const updateReplacements = existingLotRowId && lotColSet.has('id')
+          ? { ...replacements, targetLotRowId: existingLotRowId }
+          : replacements;
+
+        await sequelize.query(
+          `UPDATE stock_detail_lot SET ${setClauses.join(', ')} WHERE ${updateWhereClause}`,
+          {
+            replacements: updateReplacements,
+            type: sequelize.QueryTypes.UPDATE
+          }
+        );
+      } else if (serie) {
+        const insertColumns = [];
+        const insertValues = [];
+        const insertReplacements = {};
+
+        if (lotColSet.has('stock_id')) {
+          insertColumns.push('stock_id');
+          insertValues.push(':stockId');
+          insertReplacements.stockId = stockId;
+        }
+        if (lotColSet.has('detail_id')) {
+          insertColumns.push('detail_id');
+          insertValues.push(':detailId');
+          insertReplacements.detailId = detailId;
+        }
+        if (lotColSet.has('ligne')) {
+          insertColumns.push('ligne');
+          insertValues.push(':ligne');
+          insertReplacements.ligne = ligneNumber;
+        }
+        if (lotColSet.has('article_id') && articleId) {
+          insertColumns.push('article_id');
+          insertValues.push(':articleId');
+          insertReplacements.articleId = articleId;
+        }
+        if (lotColSet.has('quantite')) {
+          insertColumns.push('quantite');
+          insertValues.push(':quantite');
+          insertReplacements.quantite = quantite;
+        }
+        if (lotColSet.has('serie')) {
+          insertColumns.push('serie');
+          insertValues.push(':serie');
+          insertReplacements.serie = serie;
+        }
+        if (lotColSet.has('type')) {
+          insertColumns.push('type');
+          insertValues.push('1');
+        }
+        if (lotColSet.has('etat')) {
+          insertColumns.push('etat');
+          insertValues.push('1');
+        }
+        if (lotColSet.has('date')) {
+          insertColumns.push('date');
+          insertValues.push('GETDATE()');
+        }
+        if (lotColSet.has('cr_date')) {
+          insertColumns.push('cr_date');
+          insertValues.push('GETDATE()');
+        }
+
+        await sequelize.query(
+          `INSERT INTO stock_detail_lot (${insertColumns.join(', ')}) VALUES (${insertValues.join(', ')})`,
+          {
+            replacements: insertReplacements,
+            type: sequelize.QueryTypes.INSERT
+          }
+        );
+      }
+
+      results.push({
+        lot_row_id: existingLotRowId || lotRowId,
+        detail_id: detailId,
+        success: true
+      });
+    } catch (error) {
+      results.push({
+        lot_row_id: normalizePositiveInt(ligne?.lot_row_id ?? ligne?.id),
+        detail_id: normalizePositiveInt(ligne?.detail_id),
+        success: false,
+        error: error.message || 'Erreur inconnue'
+      });
+    }
+  }
+
+  return results;
+};
+
 const getLivraisonDataForTransfer = async (stockId, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
   try {
@@ -1367,6 +3186,132 @@ const transfererLivraisonVersFacturation = async (stockId, factureDate, partId, 
     } catch (error) {
       console.error('❌ Erreur lors du transfert livraison vers facturation:', error);
       throw new Error(`Erreur lors du transfert: ${error.message}`);
+    }
+  });
+};
+
+// Transférer plusieurs livraisons vers UNE SEULE facturation
+const transfererLivraisonsVersFacturation = async (stockIds, factureDate, partId, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  const { getCompteurCurrent } = require('../../services/compteur.service');
+
+  if (!Array.isArray(stockIds) || stockIds.length === 0) {
+    throw new Error('stockIds invalide');
+  }
+
+  const stockIdsNum = Array.from(
+    new Set(
+      stockIds
+        .map((id) => parseInt(id, 10))
+        .filter((id) => !isNaN(id) && id > 0)
+    )
+  );
+
+  if (stockIdsNum.length === 0) {
+    throw new Error('Aucun stockId valide');
+  }
+
+  const partIdNum = parseInt(partId, 10);
+  if (isNaN(partIdNum) || partIdNum <= 0) {
+    throw new Error('partId invalide');
+  }
+
+  if (!factureDate) {
+    throw new Error('La date de facture est requise');
+  }
+
+  const compteurFA = await getCompteurCurrent('FA');
+  if (compteurFA === null || compteurFA === undefined) {
+    throw new Error('Impossible de récupérer le compteur FA');
+  }
+
+  const anneeCourte = new Date(factureDate).getFullYear().toString().slice(2);
+  const factureNum = `FA${anneeCourte}-${compteurFA.toString().padStart(4, '0')}`;
+
+  return await sequelize.transaction(async (t) => {
+    try {
+      const idsSql = stockIdsNum.join(',');
+      const stocks = await sequelize.query(
+        `SELECT id, part_id, adresse_id, facture_id FROM stock WHERE id IN (${idsSql})`,
+        {
+          type: sequelize.QueryTypes.SELECT,
+          transaction: t
+        }
+      );
+
+      if (!Array.isArray(stocks) || stocks.length !== stockIdsNum.length) {
+        throw new Error('Une ou plusieurs livraisons sont introuvables');
+      }
+
+      const invalidClient = stocks.find((s) => Number(s.part_id) !== partIdNum);
+      if (invalidClient) {
+        throw new Error('Toutes les livraisons doivent appartenir au même client');
+      }
+
+      const alreadyFactured = stocks.find((s) => s.facture_id !== null && s.facture_id !== undefined);
+      if (alreadyFactured) {
+        throw new Error('Une ou plusieurs livraisons sont déjà facturées');
+      }
+
+      const adresseIdCandidate = stocks.find((s) => s.adresse_id !== null && s.adresse_id !== undefined);
+      const adresseId = adresseIdCandidate ? adresseIdCandidate.adresse_id : null;
+
+      const insertFactureSoucheQuery = `
+        INSERT INTO facture_souche (part_id, adresse_id, sens)
+        OUTPUT INSERTED.facture_id
+        VALUES (:partId, :adresseId, 1)
+      `;
+
+      const [factureSoucheResult] = await sequelize.query(insertFactureSoucheQuery, {
+        replacements: { partId: partIdNum, adresseId },
+        type: sequelize.QueryTypes.INSERT,
+        transaction: t
+      });
+
+      let factureId = null;
+      if (Array.isArray(factureSoucheResult) && factureSoucheResult.length > 0) {
+        factureId = factureSoucheResult[0].facture_id;
+      } else if (factureSoucheResult && factureSoucheResult.facture_id) {
+        factureId = factureSoucheResult.facture_id;
+      }
+
+      if (!factureId) {
+        throw new Error('Erreur lors de la création de facture_souche : facture_id non récupéré');
+      }
+
+      const insertFactureQuery = `
+        INSERT INTO facture (facture_id, facture_ind, facture_num, facture_dat, facture_typ, facture_ht, facture_tva)
+        VALUES (:factureId, 1, :factureNum, :factureDate, 'FA', 0, 0);
+      `;
+
+      await sequelize.query(insertFactureQuery, {
+        replacements: { factureId, factureNum, factureDate },
+        transaction: t
+      });
+
+      await sequelize.query(
+        `UPDATE stock SET facture_id = :factureId WHERE id IN (${idsSql})`,
+        {
+          replacements: { factureId },
+          transaction: t
+        }
+      );
+
+      await sequelize.query(
+        `UPDATE compteur SET compteur = compteur + 1 WHERE LTRIM(RTRIM(code)) = 'FA'`,
+        { transaction: t }
+      );
+
+      return {
+        success: true,
+        factureId,
+        factureNum,
+        stockIds: stockIdsNum,
+        message: 'Livraisons transférées vers une seule facture avec succès'
+      };
+    } catch (error) {
+      console.error('❌ Erreur lors du transfert multiple livraisons vers facturation:', error);
+      throw new Error(`Erreur lors du transfert multiple: ${error.message}`);
     }
   });
 };
@@ -1635,8 +3580,10 @@ const transfererCommandeVersFacturation = async (commandeId, factureDate, partId
 
 module.exports = {
   getAllLivraisons,
+  getLivraisonLocationByNumero,
   countAllLivraisons,
   getAllCommandesNonLivrees,
+  getCommandeProgress,
   getLivraisonById,
   getLivraisonDataForTransfer,
   addLivraison,
@@ -1644,12 +3591,14 @@ module.exports = {
   saveDetail,
   saveDetailStock,
   saveDetailLines,
+  saveCompositionLines,
+  saveLotDetailLines,
   updateDetailStock,
   saveInfo,
   updateLivraison,
   deleteLivraison,
   deleteLignesParIds,
   transfererLivraisonVersFacturation,
+  transfererLivraisonsVersFacturation,
   transfererCommandeVersFacturation
 };
-

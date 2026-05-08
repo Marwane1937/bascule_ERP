@@ -110,3 +110,49 @@ exports.resetPassword = async (req, res) => {
     });
   }
 };
+
+exports.changePassword = async (req, res) => {
+  let fallbackConnection = null;
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const userId = Number(req.user?.id || 0);
+    const { currentPassword, newPassword } = req.body || {};
+    const requestedDatabase = String(req.headers['x-database-name'] || '').trim();
+
+    try {
+      await userService.changePassword(userId, currentPassword, newPassword, sequelize);
+    } catch (err) {
+      const currentDatabase = sequelize?.config?.database || '';
+      const canRetryOnRequestedDb = requestedDatabase
+        && requestedDatabase !== currentDatabase
+        && String(err?.message || '').includes('Mot de passe actuel incorrect');
+
+      if (!canRetryOnRequestedDb) {
+        throw err;
+      }
+
+      fallbackConnection = databaseSwitchService.createConnection(requestedDatabase);
+      await userService.changePassword(userId, currentPassword, newPassword, fallbackConnection);
+    }
+
+    res.json({
+      success: true,
+      message: 'Mot de passe modifie'
+    });
+  } catch (err) {
+    console.error('❌ [UserController] Erreur changement mot de passe:', err);
+    res.status(400).json({
+      success: false,
+      error: 'Erreur de changement de mot de passe',
+      message: err.message
+    });
+  } finally {
+    if (fallbackConnection) {
+      try {
+        await fallbackConnection.close();
+      } catch (closeError) {
+        console.error('❌ [UserController] Erreur fermeture connexion fallback:', closeError);
+      }
+    }
+  }
+};

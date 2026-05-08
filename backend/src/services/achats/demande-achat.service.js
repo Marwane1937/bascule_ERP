@@ -1,6 +1,9 @@
 const demandeAchatModel = require('../../models/achats/demande-achat.model');
 const demandeAchatPdfService = require('./demande-achat-pdf.service');
 const documentSocieteService = require('../document_societe.service');
+const devisHtmlPdfService = require('../devis-html-pdf.service');
+const fs = require('fs');
+const path = require('path');
 
 // Obtenir toutes les demandes d'achat avec pagination
 const getDemandeAchat = async (options = {}, sequelizeConnection = null) => {
@@ -86,12 +89,29 @@ const genererPDF = async (id, options = {}) => {
   const documentSociete = pdfConfigService.getDocumentSociete();
   
   // Générer le PDF
-  const pdfPath = await demandeAchatPdfService.genererPDF(demandeAchatData, {
-    ...options,
-    documentSociete
-  });
-  
-  return pdfPath;
+  const demandeDir = path.join(__dirname, '..', '..', 'public', 'demandes-achat');
+  if (!fs.existsSync(demandeDir)) {
+    fs.mkdirSync(demandeDir, { recursive: true });
+  }
+
+  try {
+    const pdfBuffer = await devisHtmlPdfService.generatePdfBuffer(demandeAchatData, {
+      ...options,
+      documentSociete,
+      forceDocumentType: 'DEMANDE_ACHAT'
+    });
+
+    const numeroDoc = (demandeAchatData[0]?.numero || `DA-${id}`).toString().replace(/[^\w\-]+/g, '_');
+    const fileName = `demande-achat-${numeroDoc}-${Date.now()}.pdf`;
+    const pdfPath = path.join(demandeDir, fileName);
+    fs.writeFileSync(pdfPath, pdfBuffer);
+    return pdfPath;
+  } catch (error) {
+    return await demandeAchatPdfService.genererPDF(demandeAchatData, {
+      ...options,
+      documentSociete
+    });
+  }
 };
 
 // Récupérer les demandes d'achat non transformées en bon de commande
@@ -159,4 +179,3 @@ module.exports = {
   genererPDF,
   getDemandesAchatNonTransformees
 };
-

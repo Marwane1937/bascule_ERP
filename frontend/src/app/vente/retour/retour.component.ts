@@ -15,6 +15,11 @@ import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
   styleUrls: ['./retour.component.css']
 })
 export class RetourComponent implements OnInit, AfterViewInit, OnDestroy {
+  private readonly amountFormatter = new Intl.NumberFormat('fr-FR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+
   retours: any[] = [];
   dataTableRetour: any;
   loading: boolean = true;
@@ -103,6 +108,11 @@ export class RetourComponent implements OnInit, AfterViewInit, OnDestroy {
     this.initForm();
     this.resetFormState();
     this.loadNextRetourNumero();
+  }
+
+  formatAmount(value: any): string {
+    const numericValue = Number(value ?? 0);
+    return Number.isFinite(numericValue) ? this.amountFormatter.format(numericValue) : '0,00';
   }
 
   initForm(): void {
@@ -834,4 +844,3 @@ export class RetourComponent implements OnInit, AfterViewInit, OnDestroy {
     this.commercialSearchSub?.unsubscribe();
   }
 }
-

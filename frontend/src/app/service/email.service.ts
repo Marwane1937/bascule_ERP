@@ -34,7 +34,7 @@ export class EmailService {
     window.open(whatsappUrl, '_blank');
   }
 
-  generateDevisPDF(document_id: string, options?: { withStamp?: boolean; printMode?: 'normal' | 'nomenclature' | 'non_valorise'; composeArticle?: any; forceDocumentType?: string }) {
+  generateDevisPDF(document_id: string, options?: { withStamp?: boolean; printMode?: 'normal' | 'simple' | 'nomenclature' | 'non_valorise' | 'composition'; composeArticle?: any; forceDocumentType?: string }) {
     return this.http.post<any>(`${environment.apiUrl}/pdf/generate`, {
       document_id,
       withStamp: !!options?.withStamp,
@@ -81,8 +81,11 @@ export class EmailService {
   }
 
   // Méthode pour générer le PDF de facturation
-  generateFacturePDF(facture_id: string) {
-    return this.http.post<any>(`${environment.apiUrl}/facturation-pdf/generate`, { facture_id });
+  generateFacturePDF(facture_id: string, options?: { simple?: boolean }) {
+    return this.http.post<any>(`${environment.apiUrl}/facturation-pdf/generate`, {
+      facture_id,
+      simple: !!options?.simple
+    });
   }
 
   // Méthode pour générer le PDF de facture contrat

@@ -14,6 +14,7 @@ import Swal from 'sweetalert2';
 export class CaisseComponent implements OnInit, OnDestroy {
   activeTab: 'all' | 'recettes' | 'depenses' = 'all';
   solde: any = {
+    total_fond: 0,
     total_entrees: 0,
     total_sorties: 0,
     solde: 0
@@ -132,12 +133,14 @@ export class CaisseComponent implements OnInit, OnDestroy {
       next: (response) => {
         if (response && response.success) {
           this.solde = response.data || {
+            total_fond: 0,
             total_entrees: 0,
             total_sorties: 0,
             solde: 0
           };
         } else {
           this.solde = {
+            total_fond: 0,
             total_entrees: 0,
             total_sorties: 0,
             solde: 0
@@ -147,6 +150,7 @@ export class CaisseComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         this.solde = {
+          total_fond: 0,
           total_entrees: 0,
           total_sorties: 0,
           solde: 0
@@ -166,12 +170,16 @@ export class CaisseComponent implements OnInit, OnDestroy {
 
   // Méthode supprimée - le mode est maintenant géré par le service via le footer
 
+  navigateToRecetteDepense(): void {
+    this.router.navigate(['/Caisse-Recette-Depense']);
+  }
+
   navigateToRecettes(): void {
-    this.router.navigate(['/Caisse-Recettes']);
+    this.navigateToRecetteDepense();
   }
 
   navigateToDepenses(): void {
-    this.router.navigate(['/Caisse-Depenses']);
+    this.navigateToRecetteDepense();
   }
 
   // Vérifier si le solde est négatif
@@ -411,4 +419,3 @@ export class CaisseComponent implements OnInit, OnDestroy {
     });
   }
 }
-

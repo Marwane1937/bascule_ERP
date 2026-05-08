@@ -1,0 +1,10 @@
+.table-hover tbody tr:hover {
+  background-color: #f6f8fc;
+}
+
+.btn-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  border-radius: 8px;
+}
+

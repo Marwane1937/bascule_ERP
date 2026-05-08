@@ -39,13 +39,24 @@
                 <div class="col-md-6 mb-3">
                   <label for="code" class="form-label">Code</label>
                   <input type="text" id="code" class="form-control" formControlName="code"
+                    [class.is-invalid]="commercialForm.get('code')?.invalid && (commercialForm.get('code')?.dirty || commercialForm.get('code')?.touched)"
                     placeholder="Ex: C0001" />
+                  <div class="invalid-feedback d-block" *ngIf="commercialForm.get('code')?.hasError('duplicate')">
+                    Ce code existe deja.
+                  </div>
                 </div>
 
                 <div class="col-md-6 mb-3">
                   <label for="nom" class="form-label">Nom <span class="text-danger">*</span></label>
                   <input type="text" id="nom" class="form-control" formControlName="nom"
+                    [class.is-invalid]="commercialForm.get('nom')?.invalid && (commercialForm.get('nom')?.dirty || commercialForm.get('nom')?.touched)"
                     placeholder="Ex: Nom" required />
+                  <div class="invalid-feedback d-block" *ngIf="commercialForm.get('nom')?.hasError('required') && (commercialForm.get('nom')?.dirty || commercialForm.get('nom')?.touched)">
+                    Le nom est obligatoire.
+                  </div>
+                  <div class="invalid-feedback d-block" *ngIf="commercialForm.get('nom')?.hasError('duplicate')">
+                    Ce nom existe deja.
+                  </div>
                 </div>
 
                 <div class="col-md-6 mb-3">
@@ -74,7 +85,7 @@
               </div>
               <div class="modal-footer bg-light border-top">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="submit" class="btn btn-info" [disabled]="!commercialForm.valid">
+                <button type="submit" class="btn btn-info" [disabled]="!commercialForm.valid || checkingUnique">
                   {{ isEditMode ? '💾 Enregistrer les modifications' : '✅ Enregistrer' }}
                 </button>
               </div>
@@ -217,3 +228,4 @@
 
   <router-outlet></router-outlet>
 </div>
+

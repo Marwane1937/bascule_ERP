@@ -1,5 +1,5 @@
-<div class="container py-4">
-    <div class="page-inner">
+<div class="container-fluid py-4 facturation-page" [class.facturation-page--detail]="detailMode">
+    <div class="page-inner" [class.page-inner--detail]="detailMode">
 
         <!-- En-tête -->
         <div class="page-header mb-4">
@@ -49,6 +49,10 @@
                 </select>
             </div>
             <div class="col-md-5 text-end">
+                <button class="btn me-2" [ngClass]="detailMode ? 'btn-primary' : 'btn-outline-primary'" (click)="toggleDetailMode()">
+                    <i class="fas" [ngClass]="detailMode ? 'fa-compress-alt' : 'fa-expand-alt'"></i>
+                    {{ detailMode ? 'Vue compacte' : 'Plus de detail' }}
+                </button>
                 <button class="btn btn-outline-secondary me-2" (click)="toggleAdvancedFilters()">
                     <i class="fas fa-filter"></i> Filtres avancés
                     <i class="fas" [class.fa-chevron-down]="!showAdvancedFilters" [class.fa-chevron-up]="showAdvancedFilters"></i>
@@ -106,7 +110,7 @@
             <div class="col-md-12">
                 <div class="card border-0 shadow-sm rounded-3">
                     <div class="card-body">
-                        <div class="table-responsive" style="position: relative; min-height: 400px;">
+                        <div class="table-responsive facturation-table-wrap" style="position: relative; min-height: 400px;">
                             <!-- Loader amélioré avec overlay -->
                             <div *ngIf="loading" 
                                 class="text-center my-4" 
@@ -120,9 +124,22 @@
 
                             <table 
                                 id="facturationTable" 
-                                class="table table-bordered table-striped table-hover" 
+                                class="table table-bordered table-striped table-hover facturation-list-table"
                                 width="100%"
                                 [style.opacity]="loading ? '0.5' : '1'">
+                                <colgroup>
+                                    <col *ngIf="columnVisibility.facture_num" [style.width]="getColumnWidth('facture_num')">
+                                    <col *ngIf="columnVisibility.facture_dat" [style.width]="getColumnWidth('facture_dat')">
+                                    <col *ngIf="columnVisibility.client" [style.width]="getColumnWidth('client')">
+                                    <col *ngIf="columnVisibility.total_ht" [style.width]="getColumnWidth('total_ht')">
+                                    <col *ngIf="columnVisibility.total_tva" [style.width]="getColumnWidth('total_tva')">
+                                    <col *ngIf="columnVisibility.total_ttc" [style.width]="getColumnWidth('total_ttc')">
+                                    <col *ngIf="columnVisibility.status" [style.width]="getColumnWidth('status')">
+                                    <col *ngIf="columnVisibility.date_echeance" [style.width]="getColumnWidth('date_echeance')">
+                                    <col *ngIf="columnVisibility.jours_restants_echeance" [style.width]="getColumnWidth('jours_restants_echeance')">
+                                    <col *ngIf="columnVisibility.numero_livraison" [style.width]="getColumnWidth('numero_livraison')">
+                                    <col style="width: 118px;">
+                                </colgroup>
                                 <thead class="table-light">
                                     <!-- Bouton pour afficher/masquer les filtres -->
                                     <tr *ngIf="!showFilterRow" style="background-color: #f8f9fa; border-bottom: 2px solid #dee2e6;">
@@ -139,147 +156,209 @@
                                     </tr>
                                     <!-- Ligne des en-têtes -->
                                     <tr>
-                                        <th *ngIf="columnVisibility.facture_num" 
+                                        <th *ngIf="columnVisibility.facture_num"
+                                            #factureNumHeader
                                             (click)="onSort('facture_num')" 
                                             (contextmenu)="showColumnContextMenu($event, 'facture_num')"
                                             class="sortable column-header" 
                                             style="cursor: pointer; position: relative;"
-                                            [style.width]="columnWidths.facture_num"
+                                            [style.width]="getColumnWidth('facture_num')"
                                             [class.pinned-column]="isColumnPinned('facture_num')">
                                             <div class="d-flex align-items-center justify-content-between">
                                                 <span>Numéro</span>
                                                 <div class="d-flex align-items-center gap-1">
                                                     <i *ngIf="isColumnPinned('facture_num')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
                                                     <i class="fas ms-1" [ngClass]="getSortIcon('facture_num')"></i>
-                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
-                                                            (click)="showColumnContextMenu($event, 'facture_num'); $event.stopPropagation()"
+                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn"
+                                                            (click)="openColumnMenu($event, 'facture_num')"
                                                             style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
                                                         <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
                                                     </button>
                                                 </div>
                                             </div>
+                                            <span class="column-resize-handle" title="Redimensionner" (mousedown)="startColumnResize($event, 'facture_num', factureNumHeader)"></span>
                                         </th>
-                                        <th *ngIf="columnVisibility.facture_dat" 
+                                        <th *ngIf="columnVisibility.facture_dat"
+                                            #factureDateHeader
                                             (click)="onSort('facture_dat')" 
                                             (contextmenu)="showColumnContextMenu($event, 'facture_dat')"
-                                            class="sortable column-header" 
+                                            class="sortable column-header facture-date-column"
                                             style="cursor: pointer; position: relative;"
-                                            [style.width]="columnWidths.facture_dat"
+                                            [style.width]="getColumnWidth('facture_dat')"
                                             [class.pinned-column]="isColumnPinned('facture_dat')">
                                             <div class="d-flex align-items-center justify-content-between">
                                                 <span>Date</span>
                                                 <div class="d-flex align-items-center gap-1">
                                                     <i *ngIf="isColumnPinned('facture_dat')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
                                                     <i class="fas ms-1" [ngClass]="getSortIcon('facture_dat')"></i>
-                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
-                                                            (click)="showColumnContextMenu($event, 'facture_dat'); $event.stopPropagation()"
+                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn"
+                                                            (click)="openColumnMenu($event, 'facture_dat')"
                                                             style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
                                                         <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
                                                     </button>
                                                 </div>
                                             </div>
+                                            <span class="column-resize-handle" title="Redimensionner" (mousedown)="startColumnResize($event, 'facture_dat', factureDateHeader)"></span>
                                         </th>
-                                        <th *ngIf="columnVisibility.client" 
+                                        <th *ngIf="columnVisibility.client"
+                                            #factureClientHeader
                                             (click)="onSort('client')" 
                                             (contextmenu)="showColumnContextMenu($event, 'client')"
                                             class="sortable column-header" 
-                                            style="cursor: pointer; position: relative;"
-                                            [style.width]="columnWidths.client"
+                                            style="cursor: pointer; position: relative; min-width: 180px;"
+                                            [style.width]="getColumnWidth('client')"
                                             [class.pinned-column]="isColumnPinned('client')">
                                             <div class="d-flex align-items-center justify-content-between">
                                                 <span>Client</span>
                                                 <div class="d-flex align-items-center gap-1">
                                                     <i *ngIf="isColumnPinned('client')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
                                                     <i class="fas ms-1" [ngClass]="getSortIcon('client')"></i>
-                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
-                                                            (click)="showColumnContextMenu($event, 'client'); $event.stopPropagation()"
+                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn"
+                                                            (click)="openColumnMenu($event, 'client')"
                                                             style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
                                                         <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
                                                     </button>
                                                 </div>
                                             </div>
+                                            <span class="column-resize-handle" title="Redimensionner" (mousedown)="startColumnResize($event, 'client', factureClientHeader)"></span>
                                         </th>
-                                        <th *ngIf="columnVisibility.total_ht" 
+                                        <th *ngIf="columnVisibility.total_ht"
+                                            #factureHtHeader
                                             (click)="onSort('total_ht')" 
                                             (contextmenu)="showColumnContextMenu($event, 'total_ht')"
                                             class="sortable text-end column-header" 
                                             style="cursor: pointer; position: relative;"
-                                            [style.width]="columnWidths.total_ht"
+                                            [style.width]="getColumnWidth('total_ht')"
                                             [class.pinned-column]="isColumnPinned('total_ht')">
                                             <div class="d-flex align-items-center justify-content-end">
                                                 <span>HT</span>
                                                 <div class="d-flex align-items-center gap-1 ms-2">
                                                     <i *ngIf="isColumnPinned('total_ht')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
                                                     <i class="fas ms-1" [ngClass]="getSortIcon('total_ht')"></i>
-                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
-                                                            (click)="showColumnContextMenu($event, 'total_ht'); $event.stopPropagation()"
+                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn"
+                                                            (click)="openColumnMenu($event, 'total_ht')"
                                                             style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
                                                         <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
                                                     </button>
                                                 </div>
                                             </div>
+                                            <span class="column-resize-handle" title="Redimensionner" (mousedown)="startColumnResize($event, 'total_ht', factureHtHeader)"></span>
                                         </th>
-                                        <th *ngIf="columnVisibility.total_tva" 
+                                        <th *ngIf="columnVisibility.total_tva"
+                                            #factureTvaHeader
                                             (click)="onSort('total_tva')" 
                                             (contextmenu)="showColumnContextMenu($event, 'total_tva')"
                                             class="sortable text-end column-header" 
                                             style="cursor: pointer; position: relative;"
-                                            [style.width]="columnWidths.total_tva"
+                                            [style.width]="getColumnWidth('total_tva')"
                                             [class.pinned-column]="isColumnPinned('total_tva')">
                                             <div class="d-flex align-items-center justify-content-end">
                                                 <span>TVA</span>
                                                 <div class="d-flex align-items-center gap-1 ms-2">
                                                     <i *ngIf="isColumnPinned('total_tva')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
                                                     <i class="fas ms-1" [ngClass]="getSortIcon('total_tva')"></i>
-                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
-                                                            (click)="showColumnContextMenu($event, 'total_tva'); $event.stopPropagation()"
+                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn"
+                                                            (click)="openColumnMenu($event, 'total_tva')"
                                                             style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
                                                         <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
                                                     </button>
                                                 </div>
                                             </div>
+                                            <span class="column-resize-handle" title="Redimensionner" (mousedown)="startColumnResize($event, 'total_tva', factureTvaHeader)"></span>
                                         </th>
-                                        <th *ngIf="columnVisibility.total_ttc" 
+                                        <th *ngIf="columnVisibility.total_ttc"
+                                            #factureTtcHeader
                                             (click)="onSort('total_ttc')" 
                                             (contextmenu)="showColumnContextMenu($event, 'total_ttc')"
                                             class="sortable text-end column-header" 
                                             style="cursor: pointer; position: relative;"
-                                            [style.width]="columnWidths.total_ttc"
+                                            [style.width]="getColumnWidth('total_ttc')"
                                             [class.pinned-column]="isColumnPinned('total_ttc')">
                                             <div class="d-flex align-items-center justify-content-end">
                                                 <span>TTC</span>
                                                 <div class="d-flex align-items-center gap-1 ms-2">
                                                     <i *ngIf="isColumnPinned('total_ttc')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
                                                     <i class="fas ms-1" [ngClass]="getSortIcon('total_ttc')"></i>
-                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
-                                                            (click)="showColumnContextMenu($event, 'total_ttc'); $event.stopPropagation()"
+                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn"
+                                                            (click)="openColumnMenu($event, 'total_ttc')"
                                                             style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
                                                         <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
                                                     </button>
                                                 </div>
                                             </div>
+                                            <span class="column-resize-handle" title="Redimensionner" (mousedown)="startColumnResize($event, 'total_ttc', factureTtcHeader)"></span>
                                         </th>
-                                        <th *ngIf="columnVisibility.status" 
+                                        <th *ngIf="columnVisibility.status"
+                                            #factureStatusHeader
                                             (click)="onSort('status')" 
                                             (contextmenu)="showColumnContextMenu($event, 'status')"
                                             class="sortable text-center column-header" 
                                             style="cursor: pointer; position: relative;"
-                                            [style.width]="columnWidths.status"
+                                            [style.width]="getColumnWidth('status')"
                                             [class.pinned-column]="isColumnPinned('status')">
                                             <div class="d-flex align-items-center justify-content-center">
                                                 <span>Statut</span>
                                                 <div class="d-flex align-items-center gap-1 ms-2">
                                                     <i *ngIf="isColumnPinned('status')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
                                                     <i class="fas ms-1" [ngClass]="getSortIcon('status')"></i>
-                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
-                                                            (click)="showColumnContextMenu($event, 'status'); $event.stopPropagation()"
+                                                    <button class="btn btn-sm p-0 ms-1 column-menu-btn"
+                                                            (click)="openColumnMenu($event, 'status')"
                                                             style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
                                                         <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
                                                     </button>
                                                 </div>
                                             </div>
+                                            <span class="column-resize-handle" title="Redimensionner" (mousedown)="startColumnResize($event, 'status', factureStatusHeader)"></span>
                                         </th>
-                                        <th style="width: 100px;" class="text-center">Actions</th>
+                                        <th *ngIf="columnVisibility.date_echeance"
+                                            #factureEcheanceHeader
+                                            (contextmenu)="showColumnContextMenu($event, 'date_echeance')"
+                                            class="column-header"
+                                            style="position: relative;"
+                                            [style.width]="getColumnWidth('date_echeance')">
+                                            <div class="d-flex align-items-center justify-content-between">
+                                                <span>Echeance</span>
+                                                <button class="btn btn-sm p-0 ms-1 column-menu-btn"
+                                                        (click)="openColumnMenu($event, 'date_echeance')"
+                                                        style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
+                                                    <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
+                                                </button>
+                                            </div>
+                                            <span class="column-resize-handle" title="Redimensionner" (mousedown)="startColumnResize($event, 'date_echeance', factureEcheanceHeader)"></span>
+                                        </th>
+                                        <th *ngIf="columnVisibility.jours_restants_echeance"
+                                            #factureRestantsHeader
+                                            (contextmenu)="showColumnContextMenu($event, 'jours_restants_echeance')"
+                                            class="text-center column-header"
+                                            style="position: relative;"
+                                            [style.width]="getColumnWidth('jours_restants_echeance')">
+                                            <div class="d-flex align-items-center justify-content-center">
+                                                <span>Reste/J</span>
+                                                <button class="btn btn-sm p-0 ms-2 column-menu-btn"
+                                                        (click)="openColumnMenu($event, 'jours_restants_echeance')"
+                                                        style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
+                                                    <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
+                                                </button>
+                                            </div>
+                                            <span class="column-resize-handle" title="Redimensionner" (mousedown)="startColumnResize($event, 'jours_restants_echeance', factureRestantsHeader)"></span>
+                                        </th>
+                                        <th *ngIf="columnVisibility.numero_livraison"
+                                            #factureBlHeader
+                                            (contextmenu)="showColumnContextMenu($event, 'numero_livraison')"
+                                            class="column-header"
+                                            style="position: relative;"
+                                            [style.width]="getColumnWidth('numero_livraison')">
+                                            <div class="d-flex align-items-center justify-content-between">
+                                                <span>BL affectes</span>
+                                                <button class="btn btn-sm p-0 ms-1 column-menu-btn"
+                                                        (click)="openColumnMenu($event, 'numero_livraison')"
+                                                        style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
+                                                    <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
+                                                </button>
+                                            </div>
+                                            <span class="column-resize-handle" title="Redimensionner" (mousedown)="startColumnResize($event, 'numero_livraison', factureBlHeader)"></span>
+                                        </th>
+                                        <th style="width: 118px;" class="text-center">Actions</th>
                                     </tr>
                                     <!-- Ligne des filtres (style Excel) -->
                                     <tr *ngIf="showFilterRow" class="filter-row" style="background-color: #f8f9fa; border-top: 2px solid #dee2e6;">
@@ -306,7 +385,7 @@
                                                 <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
                                             </div>
                                         </th>
-                                        <th *ngIf="columnVisibility.client" style="padding: 4px; position: relative;">
+                                        <th *ngIf="columnVisibility.client" style="padding: 4px; position: relative;" [style.width]="getColumnWidth('client')">
                                             <div class="d-flex align-items-center">
                                                 <input 
                                                     type="text" 
@@ -369,6 +448,35 @@
                                                 <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
                                             </div>
                                         </th>
+                                        <th *ngIf="columnVisibility.date_echeance" style="padding: 4px; position: relative;" [style.width]="getColumnWidth('date_echeance')">
+                                            <div class="d-flex align-items-center">
+                                                <input
+                                                    type="date"
+                                                    class="form-control form-control-sm filter-input"
+                                                    [(ngModel)]="columnFilters.date_echeance"
+                                                    (change)="onColumnFilterChange('date_echeance', $any($event.target).value)">
+                                            </div>
+                                        </th>
+                                        <th *ngIf="columnVisibility.jours_restants_echeance" style="padding: 4px; position: relative;" class="text-end" [style.width]="getColumnWidth('jours_restants_echeance')">
+                                            <div class="d-flex align-items-center justify-content-end">
+                                                <input
+                                                    type="number"
+                                                    class="form-control form-control-sm filter-input text-end"
+                                                    placeholder="<= jours"
+                                                    [(ngModel)]="columnFilters.jours_restants_echeance"
+                                                    (input)="onColumnFilterChange('jours_restants_echeance', $any($event.target).value)">
+                                            </div>
+                                        </th>
+                                        <th *ngIf="columnVisibility.numero_livraison" style="padding: 4px; position: relative;">
+                                            <div class="d-flex align-items-center">
+                                                <input
+                                                    type="text"
+                                                    class="form-control form-control-sm filter-input"
+                                                    placeholder="BL..."
+                                                    [(ngModel)]="columnFilters.numero_livraison"
+                                                    (input)="onColumnFilterChange('numero_livraison', $any($event.target).value)">
+                                            </div>
+                                        </th>
                                         <th style="padding: 4px;" class="text-center">
                                             <div class="d-flex align-items-center justify-content-center gap-2">
                                                 <button 
@@ -391,35 +499,70 @@
                                 </thead>
                                 <tbody>
                                     <tr *ngIf="!loading && factures.length === 0">
-                                        <td colspan="8" class="text-center py-4">
+                                        <td [attr.colspan]="getVisibleColumnsCount() + 1" class="text-center py-4">
                                             <p class="text-muted mb-0">Aucune facture trouvée</p>
                                         </td>
                                     </tr>
                                     <tr *ngFor="let f of factures; let i = index">
-                                        <td *ngIf="columnVisibility.facture_num">{{ f.facture_num }}</td>
-                                        <td *ngIf="columnVisibility.facture_dat">{{ f.facture_dat ? (f.facture_dat | date:'dd/MM/yyyy') : '-' }}</td>
-                                        <td *ngIf="columnVisibility.client">{{ f.client || '-' }}</td>
-                                        <td *ngIf="columnVisibility.total_ht" class="text-end">{{ f.total_ht | number:'1.2-2' }} dh</td>
-                                        <td *ngIf="columnVisibility.total_tva" class="text-end">{{ f.total_tva | number:'1.2-2' }} dh</td>
-                                        <td *ngIf="columnVisibility.total_ttc" class="text-end fw-bold">{{ f.total_ttc | number:'1.2-2' }} dh</td>
+                                        <td *ngIf="columnVisibility.facture_num">
+                                            <div class="facture-cell-stack">
+                                                <button type="button" class="facture-link-button" (click)="openFactureParcours(f)">
+                                                    {{ f.facture_num }}
+                                                </button>
+                                                <span class="facture-cell-sub">{{ isFactureReglee(f.status) ? 'Reglé' : formatTableDate(f.date_echeance) }}</span>
+                                            </div>
+                                        </td>
+                                        <td *ngIf="columnVisibility.facture_dat" class="facture-date-cell">{{ formatTableDate(f.facture_dat) }}</td>
+                                        <td *ngIf="columnVisibility.client" [style.width]="getColumnWidth('client')">
+                                            <div class="facture-client-stack" [title]="f.client || '-'">
+                                                <div class="facture-client-name">{{ f.client || '-' }}</div>
+                                                <div class="facture-client-ice" *ngIf="f.ice">ICE: {{ f.ice }}</div>
+                                            </div>
+                                        </td>
+                                        <td *ngIf="columnVisibility.total_ht" class="text-end">{{ f.total_ht | number:'1.2-2' }}</td>
+                                        <td *ngIf="columnVisibility.total_tva" class="text-end">{{ f.total_tva | number:'1.2-2' }}</td>
+                                        <td *ngIf="columnVisibility.total_ttc" class="text-end fw-bold">{{ f.total_ttc | number:'1.2-2' }}</td>
                                         <td *ngIf="columnVisibility.status" class="text-center">
                                             <span class="badge" [ngClass]="getStatusBadgeClass(f.status)">
                                                 {{ f.status || '-' }}
                                             </span>
                                         </td>
+                                        <td *ngIf="columnVisibility.date_echeance" [style.width]="getColumnWidth('date_echeance')">
+                                            <div class="facture-echeance-stack">
+                                                <div>{{ isFactureReglee(f.status) ? 'Reglé' : formatTableDate(f.date_echeance) }}</div>
+                                                <div class="facture-cell-sub" *ngIf="!isFactureReglee(f.status) && f.condition_paiement">{{ f.condition_paiement }}</div>
+                                            </div>
+                                        </td>
+                                        <td *ngIf="columnVisibility.jours_restants_echeance" class="text-center" [style.width]="getColumnWidth('jours_restants_echeance')">
+                                            <span *ngIf="!isFactureReglee(f.status)" [class]="getJoursRestantsBadgeClass(f.jours_restants_echeance)">
+                                                {{ getJoursRestantsLabel(f.jours_restants_echeance) }}
+                                            </span>
+                                            <span *ngIf="isFactureReglee(f.status)" class="jours-badge jours-badge--muted">Reglé</span>
+                                        </td>
+                                        <td *ngIf="columnVisibility.numero_livraison" [title]="f.numero_livraison || '-'">
+                                            <span class="facture-bl-list">{{ f.numero_livraison || '-' }}</span>
+                                        </td>
                                         <td class="text-center">
-                                            <div class="btn-group" role="group" *ngIf="pdfPermissionsService.hasAnyPdfAccess('facturation')">
-                                                <button type="button" class="btn btn-sm btn-outline-purple dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Imprimer">
-                                                    <i class="fas fa-file-pdf"></i>
+                                            <div class="facture-actions-cell">
+                                                <div class="btn-group" role="group" *ngIf="pdfPermissionsService.hasAnyPdfAccess('facturation')">
+                                                    <button type="button" class="btn btn-sm btn-outline-purple dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Imprimer">
+                                                        <i class="fas fa-file-pdf"></i>
+                                                    </button>
+                                                    <ul class="dropdown-menu">
+                                                        <li><a *ngIf="pdfPermissionsService.canAccessPdf('facturation', 'normal')" class="dropdown-item" href="javascript:void(0)" (click)="onPrintFacture(f.facture_id, 'standard')">
+                                                            <i class="fas fa-file-invoice me-2"></i> Facture standard
+                                                        </a></li>
+                                                        <li><a *ngIf="pdfPermissionsService.canAccessPdf('facturation', 'normal')" class="dropdown-item" href="javascript:void(0)" (click)="onPrintFacture(f.facture_id, 'simple')">
+                                                            <i class="fas fa-file-alt me-2"></i> Facture simple
+                                                        </a></li>
+                                                        <li *ngIf="hasContratAccess && pdfPermissionsService.canAccessPdf('facturation', 'normal')"><a class="dropdown-item" href="javascript:void(0)" (click)="onPrintFacture(f.facture_id, 'contrat')">
+                                                            <i class="fas fa-file-contract me-2"></i> Facture contrat
+                                                        </a></li>
+                                                    </ul>
+                                                </div>
+                                                <button type="button" class="btn btn-sm btn-outline-primary" (click)="openFactureLivraisonDetails(f)" title="Modifier">
+                                                    <i class="fas fa-pen"></i>
                                                 </button>
-                                                <ul class="dropdown-menu">
-                                                    <li><a *ngIf="pdfPermissionsService.canAccessPdf('facturation', 'normal')" class="dropdown-item" href="javascript:void(0)" (click)="onPrintFacture(f.facture_id, 'standard')">
-                                                        <i class="fas fa-file-invoice me-2"></i> Facture standard
-                                                    </a></li>
-                                                    <li *ngIf="hasContratAccess && pdfPermissionsService.canAccessPdf('facturation', 'normal')"><a class="dropdown-item" href="javascript:void(0)" (click)="onPrintFacture(f.facture_id, 'contrat')">
-                                                        <i class="fas fa-file-contract me-2"></i> Facture contrat
-                                                    </a></li>
-                                                </ul>
                                             </div>
                                         </td>
                                     </tr>
@@ -529,6 +672,209 @@
          class="menu-overlay"
          (click)="hideColumnContextMenu()"
          (contextmenu)="hideColumnContextMenu(); $event.preventDefault()">
+    </div>
+
+    <div *ngIf="showParcoursModal" class="facture-parcours-backdrop" (click)="closeFactureParcours()">
+        <div class="facture-parcours-modal" (click)="$event.stopPropagation()">
+            <div class="facture-parcours-modal__header">
+                <div>
+                    <div class="facture-parcours-modal__eyebrow">Parcours de facture</div>
+                    <h4 class="facture-parcours-modal__title mb-1">
+                        {{ factureParcours?.facture?.numero || selectedFacture?.facture_num || 'Facture' }}
+                    </h4>
+                    <div class="facture-parcours-modal__meta">
+                        <span>{{ factureParcours?.facture?.client || selectedFacture?.client || '-' }}</span>
+                        <span>{{ formatTableDate(factureParcours?.facture?.date || selectedFacture?.facture_dat) }}</span>
+                    </div>
+                </div>
+                <button type="button" class="facture-parcours-close" (click)="closeFactureParcours()" aria-label="Fermer">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div *ngIf="parcoursLoading" class="facture-parcours-state">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Chargement...</span>
+                </div>
+                <p class="mb-0">Chargement du parcours de facture...</p>
+            </div>
+
+            <div *ngIf="!parcoursLoading && parcoursError" class="facture-parcours-state facture-parcours-state--error">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p class="mb-0">{{ parcoursError }}</p>
+            </div>
+
+            <ng-container *ngIf="!parcoursLoading && !parcoursError && factureParcours">
+                <div class="facture-parcours-steps">
+                    <div class="facture-parcours-step" *ngFor="let step of factureParcours?.steps" [ngClass]="getParcoursStepClass(step)">
+                        <div class="facture-parcours-step__bullet">
+                            <span *ngIf="step?.count">{{ step.count }}</span>
+                            <i *ngIf="!step?.count && step?.status === 'current'" class="fas fa-file-invoice"></i>
+                            <i *ngIf="!step?.count && step?.status !== 'current'" class="fas fa-circle"></i>
+                        </div>
+                        <div class="facture-parcours-step__label">{{ step.label }}</div>
+                        <div class="facture-parcours-step__sub">{{ getParcoursStepSubtitle(step) }}</div>
+                    </div>
+                </div>
+
+                <div class="facture-parcours-grid">
+                    <section class="facture-parcours-card">
+                        <div class="facture-parcours-card__header">
+                            <h5>Bon de commande</h5>
+                            <span class="badge bg-primary-subtle text-primary">{{ getParcoursDocuments('commandes').length }}</span>
+                        </div>
+                        <div class="facture-parcours-card__empty" *ngIf="getParcoursDocuments('commandes').length === 0">
+                            Aucun bon de commande lié.
+                        </div>
+                        <div class="facture-parcours-doc" *ngFor="let commande of getParcoursDocuments('commandes')">
+                            <div class="facture-parcours-doc__title">{{ commande.numero || '-' }}</div>
+                            <div class="facture-parcours-doc__date">{{ formatTableDate(commande.date) }}</div>
+                        </div>
+                    </section>
+
+                    <section class="facture-parcours-card">
+                        <div class="facture-parcours-card__header">
+                            <h5>Bon de préparation</h5>
+                            <span class="badge bg-warning-subtle text-warning-emphasis">{{ getParcoursDocuments('preparations').length }}</span>
+                        </div>
+                        <div class="facture-parcours-card__empty" *ngIf="getParcoursDocuments('preparations').length === 0">
+                            Transfert direct vers livraison, sans bon de préparation.
+                        </div>
+                        <div class="facture-parcours-doc" *ngFor="let preparation of getParcoursDocuments('preparations')">
+                            <div class="facture-parcours-doc__title">{{ preparation.numero || '-' }}</div>
+                            <div class="facture-parcours-doc__date">{{ formatTableDate(preparation.date) }}</div>
+                        </div>
+                    </section>
+
+                    <section class="facture-parcours-card">
+                        <div class="facture-parcours-card__header">
+                            <h5>Bon de livraison</h5>
+                            <span class="badge bg-success-subtle text-success">{{ getParcoursDocuments('livraisons').length }}</span>
+                        </div>
+                        <div class="facture-parcours-card__empty" *ngIf="getParcoursDocuments('livraisons').length === 0">
+                            Aucun bon de livraison lié.
+                        </div>
+                        <div class="facture-parcours-doc" *ngFor="let livraison of getParcoursDocuments('livraisons')">
+                            <div class="facture-parcours-doc__title">{{ livraison.numero || '-' }}</div>
+                            <div class="facture-parcours-doc__date">{{ formatTableDate(livraison.date) }}</div>
+                            <div class="facture-parcours-doc__hint" *ngIf="getLivraisonSourceLabel(livraison)">{{ getLivraisonSourceLabel(livraison) }}</div>
+                        </div>
+                    </section>
+
+                    <section class="facture-parcours-card facture-parcours-card--current">
+                        <div class="facture-parcours-card__header">
+                            <h5>Facture</h5>
+                            <span class="badge bg-danger-subtle text-danger">Courante</span>
+                        </div>
+                        <div class="facture-parcours-doc facture-parcours-doc--current">
+                            <div class="facture-parcours-doc__title">{{ factureParcours?.facture?.numero || '-' }}</div>
+                            <div class="facture-parcours-doc__date">{{ formatTableDate(factureParcours?.facture?.date) }}</div>
+                            <div class="facture-parcours-doc__hint">{{ factureParcours?.facture?.client || '-' }}</div>
+                        </div>
+                    </section>
+                </div>
+            </ng-container>
+        </div>
+    </div>
+
+    <div *ngIf="showLivraisonDetailsModal" class="facture-parcours-backdrop facture-details-backdrop" (click)="closeFactureLivraisonDetails()">
+        <div class="facture-parcours-modal facture-details-modal" (click)="$event.stopPropagation()">
+            <div class="facture-parcours-modal__header">
+                <div>
+                    <div class="facture-parcours-modal__eyebrow">Modification via bons de livraison</div>
+                    <h4 class="facture-parcours-modal__title mb-1">
+                        {{ factureLivraisonDetails?.facture?.numero || selectedFacture?.facture_num || 'Facture' }}
+                    </h4>
+                    <div class="facture-parcours-modal__meta">
+                        <span>{{ factureLivraisonDetails?.facture?.client || selectedFacture?.client || '-' }}</span>
+                        <span>{{ formatTableDate(factureLivraisonDetails?.facture?.date || selectedFacture?.facture_dat) }}</span>
+                        <span>{{ getFactureLivraisonDocuments().length }} BL</span>
+                    </div>
+                </div>
+                <button type="button" class="facture-parcours-close" (click)="closeFactureLivraisonDetails()" aria-label="Fermer">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div *ngIf="livraisonDetailsLoading" class="facture-parcours-state">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Chargement...</span>
+                </div>
+                <p class="mb-0">Chargement des bons de livraison associés...</p>
+            </div>
+
+            <div *ngIf="!livraisonDetailsLoading && livraisonDetailsError" class="facture-parcours-state facture-parcours-state--error">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p class="mb-0">{{ livraisonDetailsError }}</p>
+            </div>
+
+            <ng-container *ngIf="!livraisonDetailsLoading && !livraisonDetailsError">
+                <div class="facture-details-empty" *ngIf="getFactureLivraisonDocuments().length === 0">
+                    Aucun bon de livraison lié à cette facture.
+                </div>
+
+                <div class="facture-details-timeline" *ngIf="getFactureLivraisonDocuments().length > 0">
+                    <section class="facture-details-group" *ngFor="let livraison of getFactureLivraisonDocuments(); let idx = index">
+                        <div class="facture-details-index">{{ idx + 1 }}</div>
+                        <div class="facture-details-card">
+                            <div class="facture-details-card__header">
+                                <div>
+                                    <div class="facture-details-card__title">{{ livraison.numero || '-' }}</div>
+                                    <div class="facture-details-card__meta">
+                                        <span>{{ formatTableDate(livraison.date) }}</span>
+                                        <span>{{ livraison?.totals?.line_count || 0 }} ligne(s)</span>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-success" (click)="openLivraisonFromFacture(livraison)">
+                                    Ouvrir BL
+                                </button>
+                            </div>
+
+                            <div class="table-responsive facture-details-lines-wrap" *ngIf="livraison.lines?.length">
+                                <table class="table table-sm facture-details-lines-table mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th class="text-center">Ordre</th>
+                                            <th>Article</th>
+                                            <th class="text-end">Qte</th>
+                                            <th class="text-end">Prix</th>
+                                            <th class="text-end">TVA</th>
+                                            <th class="text-end">HT</th>
+                                            <th class="text-end">TTC</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr *ngFor="let line of livraison.lines; let lineIndex = index">
+                                            <td class="text-center">{{ line.ordre_ligne || (lineIndex + 1) }}</td>
+                                            <td>
+                                                <div class="facture-details-article">{{ line.article || line.article_cod || '-' }}</div>
+                                                <div class="facture-details-article-code" *ngIf="line.article_cod">{{ line.article_cod }}</div>
+                                            </td>
+                                            <td class="text-end">{{ line.quantite | number:'1.0-2' }}</td>
+                                            <td class="text-end">{{ line.prix | number:'1.2-2' }}</td>
+                                            <td class="text-end">{{ (line.taux_tva || 0) * 100 | number:'1.0-2' }}%</td>
+                                            <td class="text-end">{{ line.total_ht | number:'1.2-2' }}</td>
+                                            <td class="text-end">{{ line.total_ttc | number:'1.2-2' }}</td>
+                                        </tr>
+                                    </tbody>
+                                    <tfoot>
+                                        <tr>
+                                            <td colspan="5" class="text-end fw-bold">Total BL</td>
+                                            <td class="text-end fw-bold">{{ livraison?.totals?.total_ht | number:'1.2-2' }}</td>
+                                            <td class="text-end fw-bold">{{ livraison?.totals?.total_ttc | number:'1.2-2' }}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            <div class="facture-details-empty facture-details-empty--inline" *ngIf="!livraison.lines?.length">
+                                Aucun article trouvé pour ce BL.
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </ng-container>
+        </div>
     </div>
 
     <router-outlet></router-outlet>

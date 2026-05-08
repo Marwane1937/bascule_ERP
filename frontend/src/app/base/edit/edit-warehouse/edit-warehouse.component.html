@@ -1,0 +1,56 @@
+<div class="container-fluid py-4">
+  <div class="page-inner">
+    <div class="page-header">
+      <h3 class="fw-bold mb-3">Warehouse</h3>
+      <ul class="breadcrumbs mb-3">
+        <li class="nav-home">
+          <a href="#"><i class="icon-home"></i></a>
+        </li>
+        <li class="separator"><i class="icon-arrow-right"></i></li>
+        <li class="nav-item"><a href="#">Base</a></li>
+        <li class="separator"><i class="icon-arrow-right"></i></li>
+        <li class="nav-item"><a href="#">Modifier Warehouse</a></li>
+      </ul>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4">
+      <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 text-primary fw-semibold">Informations Warehouse</h5>
+        <button class="btn btn-outline-secondary btn-sm" (click)="backToList()">
+          <i class="fas fa-arrow-left me-1"></i> Retour
+        </button>
+      </div>
+      <div class="card-body">
+        <div *ngIf="loading" class="text-center py-4">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Chargement...</span>
+          </div>
+        </div>
+
+        <form *ngIf="!loading" [formGroup]="warehouseForm" (ngSubmit)="onSave()">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Code</label>
+              <input type="text" class="form-control" formControlName="code" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Nom</label>
+              <input type="text" class="form-control" formControlName="nom" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Status</label>
+              <input type="text" class="form-control" formControlName="status" placeholder="fonctionnel / ..."/>
+            </div>
+          </div>
+
+          <div class="mt-4 text-end">
+            <button type="submit" class="btn btn-info" [disabled]="saving || warehouseForm.invalid">
+              <i class="fas fa-save me-1"></i> Enregistrer
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+

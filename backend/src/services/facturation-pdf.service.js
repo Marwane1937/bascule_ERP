@@ -319,6 +319,7 @@ class FacturationPdfService {
         const tableBorderRadius = 5;
         const articlesTableHeaderHeight = 20;
         const firstLine = factureData[0];
+        const isSimpleMode = !!options.simpleMode;
         
         // Compteur de pages pour la numérotation
         let currentPageNumber = 1;
@@ -327,7 +328,10 @@ class FacturationPdfService {
         // === FONCTION: Dessiner l'en-tête du document (logo, titre, client) ===
         const drawDocumentHeader = (isFirstPage = false) => {
           // Récupérer la taille du logo depuis la configuration
+          if (!isSimpleMode) {
           const logoSize = options.documentSociete?.logoSize || { width: 100, height: null };
+          const configuredLogoTop = Number(options.documentSociete?.logoTop);
+          const logoTop = Number.isFinite(configuredLogoTop) ? configuredLogoTop : pdfConfigService.getLogoTop();
           const imageOptions = { width: logoSize.width };
           if (logoSize.height) {
             imageOptions.height = logoSize.height;
@@ -337,14 +341,14 @@ class FacturationPdfService {
           if (options.documentSociete && options.documentSociete.logo) {
             try {
               const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-              doc.image(logoBuffer, 50, 20, imageOptions);
+              doc.image(logoBuffer, 50, logoTop, imageOptions);
             } catch (error) {
-              const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-              if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
+              const logoPath = options.documentSociete?.logoPath;
+              if (logoPath && fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop, imageOptions);
             }
           } else {
-            const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-            if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
+            const logoPath = options.documentSociete?.logoPath;
+            if (logoPath && fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop, imageOptions);
           }
 
           // En-tête entreprise - à côté du logo (x=160, y aligné avec le logo)
@@ -365,6 +369,8 @@ class FacturationPdfService {
             }
           }
 
+          }
+
           // Ligne de séparation
           doc.rect(40, 100, 520, 1).fill('#000');
 
@@ -374,94 +380,34 @@ class FacturationPdfService {
           // Bloc client
           const clientTop = 110;
           const clientBoxWidth = 260;
-          const clientBoxHeight = 80; // Augmenté pour accommoder ICE
           const clientBoxX = 300;
           const clientPadding = 10;
-          const clientTextWidth = clientBoxWidth - (clientPadding * 2); // Largeur disponible pour le texte
-          const lineSpacing = 20; // Espacement augmenté entre les lignes pour meilleure lisibilité
+          const clientTextWidth = clientBoxWidth - (clientPadding * 2);
+          const clientGap = 3;
+          const clientLines = [
+            `Client : ${firstLine.client || firstLine.nom_client || ''}`,
+            `Adresse : ${firstLine.adresse || ''}`,
+            `${firstLine.ville || ''}`,
+            `ICE : ${firstLine.ice || ''}`
+          ].filter((line, idx) => idx < 2 || String(line || '').trim().length > 0);
+
+          doc.fontSize(10).font('Helvetica').fillColor('#000');
+          const clientLineHeights = clientLines.map((line) => {
+            const h = doc.heightOfString(String(line || ''), { width: clientTextWidth, align: 'left' });
+            return Math.max(12, Number.isFinite(h) ? h : 12);
+          });
+          const clientBoxHeight = Math.max(80, Math.ceil((clientPadding * 2) + clientLineHeights.reduce((s, h) => s + h, 0) + (Math.max(0, clientLines.length - 1) * clientGap)));
 
           doc.roundedRect(clientBoxX, clientTop, clientBoxWidth, clientBoxHeight, tableBorderRadius).stroke('#000');
-          doc.fontSize(10).font('Helvetica').fillColor('#000');
-          
-          // Client avec gestion du retour à la ligne intelligent
-          let currentY = clientTop + 10;
-          const clientName = firstLine.client || firstLine.nom_client || '';
-          if (clientName) {
-            const clientText = `Client : ${clientName}`;
-            // Vérifier si le texte tient sur une ligne
-            const textWidth = doc.widthOfString(clientText);
-            if (textWidth <= clientTextWidth) {
-              // Le texte tient sur une ligne, ne pas utiliser width pour éviter les retours à la ligne inutiles
-              doc.text(clientText, clientBoxX + clientPadding, currentY);
-              currentY += lineSpacing;
-            } else {
-              // Le texte dépasse, utiliser width pour permettre le retour à la ligne
-              doc.text(clientText, clientBoxX + clientPadding, currentY, { 
-                width: clientTextWidth, 
-                align: 'left' 
-              });
-              const clientTextHeight = doc.heightOfString(clientText, { width: clientTextWidth });
-              currentY += Math.max(lineSpacing, Math.ceil(clientTextHeight) + 4);
-            }
-          } else {
-            currentY += lineSpacing;
-          }
-          
-          // Adresse avec gestion du retour à la ligne intelligent
-          const clientAdresse = firstLine.adresse || '';
-          if (clientAdresse) {
-            const adresseText = `Adresse : ${clientAdresse}`;
-            const textWidth = doc.widthOfString(adresseText);
-            if (textWidth <= clientTextWidth) {
-              // Le texte tient sur une ligne
-              doc.text(adresseText, clientBoxX + clientPadding, currentY);
-              currentY += lineSpacing;
-            } else {
-              // Le texte dépasse, utiliser width pour permettre le retour à la ligne
-              doc.text(adresseText, clientBoxX + clientPadding, currentY, { 
-                width: clientTextWidth, 
-                align: 'left' 
-              });
-              const adresseTextHeight = doc.heightOfString(adresseText, { width: clientTextWidth });
-              currentY += Math.max(lineSpacing, Math.ceil(adresseTextHeight) + 4);
-            }
-          } else {
-            currentY += lineSpacing;
-          }
-          
-          // Ville
-          const clientVille = firstLine.ville || '';
-          if (clientVille) {
-            const textWidth = doc.widthOfString(clientVille);
-            if (textWidth <= clientTextWidth) {
-              doc.text(clientVille, clientBoxX + clientPadding, currentY);
-            } else {
-              doc.text(clientVille, clientBoxX + clientPadding, currentY, { 
-                width: clientTextWidth, 
-                align: 'left' 
-              });
-            }
-            currentY += lineSpacing;
-          }
-          
-          // ICE
-          const clientICE = firstLine.ice || '';
-          if (clientICE) {
-            const iceText = `ICE : ${clientICE}`;
-            const textWidth = doc.widthOfString(iceText);
-            if (textWidth <= clientTextWidth) {
-              doc.text(iceText, clientBoxX + clientPadding, currentY);
-            } else {
-              doc.text(iceText, clientBoxX + clientPadding, currentY, { 
-                width: clientTextWidth, 
-                align: 'left' 
-              });
-            }
-          }
+          let currentY = clientTop + clientPadding;
+          clientLines.forEach((line, idx) => {
+            doc.text(String(line || ''), clientBoxX + clientPadding, currentY, { width: clientTextWidth, align: 'left' });
+            currentY += clientLineHeights[idx] + clientGap;
+          });
 
           // Tableau d'info (Numéro, Date, BL) - uniquement sur la première page
           if (isFirstPage) {
-            const infoTableY = 230; // Ajusté pour accommoder le bloc client agrandi (80px au lieu de 60px)
+            const infoTableY = Math.max(230, clientTop + clientBoxHeight + 12); // Ajuste selon bloc client
             const infoTableHeaderHeight = 25;
             const infoTableRowHeight = 20;
             const infoTableTotalHeight = infoTableHeaderHeight + infoTableRowHeight;
@@ -486,7 +432,7 @@ class FacturationPdfService {
           } else {
             // Pages suivantes : retourner position après l'en-tête client avec espacement supplémentaire
             // Ajouter 20px d'espace entre le cadre client et le tableau pour une meilleure lisibilité
-            return 200; // Augmenté de 180 à 200 pour ajouter de l'espace
+            return Math.max(200, clientTop + clientBoxHeight + 12);
           }
         };
 
@@ -525,6 +471,7 @@ class FacturationPdfService {
 
         // === FONCTION: Dessiner le pied de page (appelée sur CHAQUE page) ===
         const drawPageFooter = (pageNum = null) => {
+          if (isSimpleMode) return;
           const footerBgColor = '#E8F4F8';
           const footerPageHeight = 842;
           const bottomMargin = 40;
@@ -755,8 +702,8 @@ class FacturationPdfService {
           // Désignation (gauche avec padding)
           renderInlineHtml(doc, line.article_nom || line.article || line.designation || '', colDesignationX + colDesignationPadding, validY + colDesignationPadding, effectiveDesignationWidth, validRowHeight - colDesignationPadding * 2);
 
-          // Qté (centré)
-          doc.text(qte.toFixed(2).replace('.', ','), colQteX, centerY, { width: colQteWidth, align: 'center' });
+          // Qté (centré) - afficher en entier
+          doc.text(String(Math.round(qte)), colQteX, centerY, { width: colQteWidth, align: 'center' });
 
           // P.U. (centré)
           doc.text(pu.toFixed(2).replace('.', ','), colPUX, centerY, { width: colPUWidth, align: 'center' });
@@ -989,6 +936,9 @@ class FacturationPdfService {
 
         doc.pipe(writeStream);
 
+        let currentPageNumber = 1;
+        let totalPagesNumber = 1;
+
         // === CONSTANTES POUR LA PAGINATION ===
         const tableBorderRadius = 5;
         const articlesTableHeaderHeight = 30; // Augmenté pour facture contrat (plus d'espace vertical)
@@ -1004,6 +954,8 @@ class FacturationPdfService {
 
           // Récupérer la taille du logo depuis la configuration
           const logoSize = documentSociete?.logoSize || pdfConfigService.getLogoSize() || { width: 100, height: null };
+          const configuredLogoTop = Number(documentSociete?.logoTop);
+          const logoTop = Number.isFinite(configuredLogoTop) ? configuredLogoTop : pdfConfigService.getLogoTop();
           const imageOptions = { width: logoSize.width };
           if (logoSize.height) {
             imageOptions.height = logoSize.height;
@@ -1011,13 +963,14 @@ class FacturationPdfService {
           
           // Logo - Charger depuis la configuration centralisée (pdf-config.json)
           // Priorité : 1) documentSociete.logo (base64), 2) pdfConfigService.getLogoPath(), 3) rien
+          if (false) {
           let logoDrawn = false;
           
           // Essayer d'abord avec le logo en base64 depuis documentSociete
           if (documentSociete && documentSociete.logo) {
             try {
               const logoBuffer = Buffer.from(documentSociete.logo, 'base64');
-              doc.image(logoBuffer, 50, 20, imageOptions);
+              doc.image(logoBuffer, 50, logoTop, imageOptions);
               logoDrawn = true;
               console.log('[genererPDFContrat] ✅ Logo chargé depuis documentSociete (base64)');
             } catch (error) {
@@ -1034,7 +987,7 @@ class FacturationPdfService {
               console.log('[genererPDFContrat] 🔍 Chemin logo depuis pdf-config.json:', logoPath);
               
               if (logoPath && fs.existsSync(logoPath)) {
-                doc.image(logoPath, 50, 20, imageOptions);
+                doc.image(logoPath, 50, logoTop, imageOptions);
                 logoDrawn = true;
                 console.log('[genererPDFContrat] ✅ Logo chargé depuis pdf-config.json:', logoPath);
               } else {
@@ -1056,6 +1009,7 @@ class FacturationPdfService {
 
           // En-tête entreprise - à côté du logo
           // Ne pas afficher d'en-tête par défaut, uniquement si configuré dans pdf-config.json
+          }
           const entete = documentSociete?.entete || pdfConfigService.getEntete();
           
           // Vérifier que l'en-tête existe et n'est pas vide
@@ -1090,19 +1044,33 @@ class FacturationPdfService {
           // Bloc client
           const clientTop = 140;
           const clientBoxWidth = 265;
-          const clientBoxHeight = 75; // Augmenté pour accommoder ICE
           const clientBoxX = 300;
+          const clientPadding = 10;
+          const clientTextWidth = clientBoxWidth - (clientPadding * 2);
+          const clientGap = 3;
+          const clientLines = [
+            `Client : ${firstLine.client || firstLine.nom_client || ''}`,
+            `Adresse : ${firstLine.adresse || ''}`,
+            `${firstLine.ville || ''}`,
+            `ICE : ${firstLine.ice || ''}`
+          ].filter((line, idx) => idx < 2 || String(line || '').trim().length > 0);
+
+          doc.fontSize(10).font('Helvetica').fillColor('#000');
+          const clientLineHeights = clientLines.map((line) => {
+            const h = doc.heightOfString(String(line || ''), { width: clientTextWidth, align: 'left' });
+            return Math.max(12, Number.isFinite(h) ? h : 12);
+          });
+          const clientBoxHeight = Math.max(75, Math.ceil((clientPadding * 2) + clientLineHeights.reduce((s, h) => s + h, 0) + (Math.max(0, clientLines.length - 1) * clientGap)));
 
           doc.roundedRect(clientBoxX, clientTop, clientBoxWidth, clientBoxHeight, tableBorderRadius).stroke('#000');
-          doc.fontSize(10).font('Helvetica').fillColor('#000');
-          doc.text(`Client : ${firstLine.client || firstLine.nom_client || ''}`, clientBoxX + 10, clientTop + 10);
-          doc.text(`Adresse : ${firstLine.adresse || ''}`, clientBoxX + 10, clientTop + 28);
-          doc.text(`${firstLine.ville || ''}`, clientBoxX + 10, clientTop + 46);
-          doc.text(`ICE : ${firstLine.ice || ''}`, clientBoxX + 10, clientTop + 64);
-
+          let clientY = clientTop + clientPadding;
+          clientLines.forEach((line, idx) => {
+            doc.text(String(line || ''), clientBoxX + clientPadding, clientY, { width: clientTextWidth, align: 'left' });
+            clientY += clientLineHeights[idx] + clientGap;
+          });
           // Tableau d'info (Facture N°, Date, Période divisée en deux colonnes, Contrat N°, Condition de Paiement) - uniquement sur la première page
           if (isFirstPage) {
-            const infoTableY = 240; // Ajusté pour accommoder ICE
+            const infoTableY = Math.max(240, clientTop + clientBoxHeight + 12); // Ajuste dynamiquement selon le bloc client
             const infoTableHeaderHeight = 25;
             const infoTableRowHeight = 25;
             const infoTableTotalHeight = infoTableHeaderHeight + infoTableRowHeight;
@@ -1158,7 +1126,7 @@ class FacturationPdfService {
 
             return infoTableY + infoTableTotalHeight + 10;
           } else {
-            return 180;
+            return Math.max(180, clientTop + clientBoxHeight + 12);
           }
         };
 
@@ -1197,7 +1165,8 @@ class FacturationPdfService {
         };
 
         // === FONCTION: Dessiner le pied de page ===
-        const drawPageFooter = () => {
+        const drawPageFooter = (pageNum = null) => {
+          return;
           const footerBgColor = '#f3f5ef';
           const footerPageHeight = 842;
           const bottomMargin = 40;
@@ -1242,6 +1211,19 @@ class FacturationPdfService {
               50, footerStartY + footerLineSpacing * 3, { width: 495, align: 'center', lineBreak: false }
             );
           }
+
+          const pageNumToDisplay =
+            pageNum !== null && pageNum !== undefined ? pageNum : currentPageNumber;
+          const totalPagesToDisplay =
+            totalPagesNumber && totalPagesNumber > 0 ? totalPagesNumber : currentPageNumber;
+
+          doc.font('Helvetica').fontSize(8).fillColor('#000000');
+          doc.text(
+            `Page ${pageNumToDisplay} / ${totalPagesToDisplay}`,
+            50,
+            footerY - 5,
+            { width: 495, align: 'center' }
+          );
         };
 
         // === DESSINER L'EN-TÊTE DE LA PREMIÈRE PAGE ===
@@ -1350,7 +1332,7 @@ class FacturationPdfService {
               // Désignation vide, afficher un tiret
               doc.text('-', colDesignationX + colDesignationPadding, topY, { width: colDesignationWidth - colDesignationPadding * 2, align: 'left' });
             }
-            doc.text(qte.toFixed(2).replace('.', ','), colQteX, topY, { width: colQteWidth, align: 'center' });
+            doc.text(String(Math.round(qte)), colQteX, topY, { width: colQteWidth, align: 'center' });
             doc.text(pu.toFixed(2).replace('.', ','), colPUX, topY, { width: colPUWidth, align: 'center' });
             const remiseText = remiseValueText + (remiseSymbol === '%' ? '%' : '');
             doc.text(remiseText, colRX, topY, { width: colRWidth, align: 'center' });
@@ -1478,3 +1460,5 @@ class FacturationPdfService {
 }
 
 module.exports = new FacturationPdfService();
+
+

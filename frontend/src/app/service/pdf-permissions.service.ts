@@ -14,7 +14,7 @@ export class PdfPermissionsService {
   /**
    * Vérifie si l'utilisateur peut accéder à un type de PDF avec un mode spécifique
    */
-  canAccessPdf(pdfType: PdfType, printMode: 'normal' | 'nomenclature' | 'non_valorise' = 'normal'): boolean {
+  canAccessPdf(pdfType: PdfType, printMode: 'normal' | 'simple' | 'nomenclature' | 'non_valorise' = 'normal'): boolean {
     let permissionName: string;
     
     if (pdfType === 'devis') {
@@ -52,4 +52,3 @@ export class PdfPermissionsService {
     }
   }
 }
-

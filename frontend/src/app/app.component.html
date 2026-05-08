@@ -1,5 +1,14 @@
 <!-- Affichage conditionnel : menu complet si connecté, sinon juste le router-outlet -->
-<div class="wrapper" [class.sidebar-hidden-desktop]="sidebarHidden" *ngIf="authService.isAuthenticated()">
+<div class="wrapper" [class.sidebar-hidden-desktop]="sidebarHidden" [class.nav_open]="mobileNavOpen" *ngIf="authService.isAuthenticated()">
+      <button
+        class="mobile-menu-toggle"
+        (click)="toggleMobileMenu($event)"
+        title="Ouvrir/Fermer le menu">
+        <i class="fas fa-bars"></i>
+      </button>
+
+      <div class="mobile-sidebar-backdrop" *ngIf="mobileNavOpen" (click)="closeMobileMenu()"></div>
+
       <!-- Sidebar -->
       <div class="sidebar" data-background-color="dark">
         <div class="sidebar-logo">
@@ -35,6 +44,7 @@
                 <a
                   data-bs-toggle="collapse"
                   [routerLink]="'/Dashbord'"
+                  (click)="closeMobileMenuOnSmallScreen()"
                   class="collapsed"
                   aria-expanded="false"
                 >
@@ -59,7 +69,7 @@
                   <div class="collapse" [id]="getCategoryId(category.category)">
                     <ul class="nav nav-collapse">
                       <li *ngFor="let item of category.items">
-                        <a [routerLink]="item.route">
+                        <a [routerLink]="item.route" (click)="closeMobileMenuOnSmallScreen()">
                           <span class="sub-item">{{ item.name }}</span>
                         </a>
                       </li>

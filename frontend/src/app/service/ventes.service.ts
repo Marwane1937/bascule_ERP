@@ -95,17 +95,17 @@ RemoveDevis(ids: any[]): Observable<any> {
 }
 
 ////////////////////////// METHOD PUT
-  // 🔁 Méthode pour modifier un devis
+  // Méthode pour modifier un devis
   updateDevis(id: number, data: any): Observable<any> {
     return this.http.put(`${this.apiUrl}/devis/${id}`, data);
   }
 
-  // 🔁 Méthode pour modifier une commande
+  // Méthode pour modifier une commande
   updateCommande(id: number, data: any): Observable<any> {
     return this.http.put(`${this.apiUrl}/devis/${id}`, data);
   }
 
-  // 🔄 Méthode pour transférer un devis vers une commande
+  // Méthode pour transférer un devis vers une commande
   transfererDevisVersCommande(devisId: number): Observable<any> {
     return this.http.post(`${this.apiUrl}/devis/transfer`, { devisId });
   }
@@ -130,6 +130,11 @@ RemoveDevis(ids: any[]): Observable<any> {
     return this.http.get(url);
   }
 
+  getLivraisonCommandeProgress(commandeId: number): Observable<any> {
+    const url = `${this.apiUrl}/livraisons/commande-progress/${commandeId}`;
+    return this.http.get(url);
+  }
+
   // Obtenir une livraison par ID
   getLivraisonById(id: number): Observable<any> {
     const url = `${this.apiUrl}/livraisons/${id}`;
@@ -150,6 +155,18 @@ RemoveDevis(ids: any[]): Observable<any> {
   // Sauvegarder les lignes de détail d'une livraison
   SaveLignesDetailLivraison(lignes: any[]): Observable<any> {
     return this.http.post(`${this.apiUrl}/livraisons/save`, { lignes });
+  }
+
+  SaveLivraisonComposition(document_id: number, lignes: any[]): Observable<any> {
+    return this.http.post(`${this.apiUrl}/livraisons/composition/save`, { document_id, lignes }, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  SaveLivraisonLots(document_id: number, lignes: any[]): Observable<any> {
+    return this.http.post(`${this.apiUrl}/livraisons/lots/save`, { document_id, lignes }, {
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 
   // Sauvegarder les informations d'une livraison
@@ -193,6 +210,11 @@ RemoveDevis(ids: any[]): Observable<any> {
     return this.http.post(`${this.apiUrl}/livraisons/transfer-to-facturation`, { stockId, factureDate, partId });
   }
 
+  
+  // Transférer plusieurs livraisons vers UNE SEULE facturation
+  transfererLivraisonsVersFacturation(stockIds: number[], factureDate: string, partId: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}/livraisons/transfer-multiple-to-facturation`, { stockIds, factureDate, partId });
+  }
   // Transférer une commande vers la facturation (crée deux fois dans stock/stock_detail ET dans facture/facture_souche)
   transfererCommandeVersFacturation(commandeId: number, factureDate: string, partId: number): Observable<any> {
     return this.http.post(`${this.apiUrl}/livraisons/commande-to-facturation`, { commandeId, factureDate, partId });
@@ -260,7 +282,7 @@ RemoveDevis(ids: any[]): Observable<any> {
     return this.http.put(`${this.apiUrl}/retours/${id}`, data);
   }
 
-  // ============ RÈGLEMENTS ============
+  // ============ REGLEMENTS ============
   getReglements(options?: {
     page?: number;
     pageSize?: number;
@@ -435,6 +457,37 @@ RemoveDevis(ids: any[]): Observable<any> {
     return this.http.get(url);
   }
 
+  getFactureParcours(id: number): Observable<any> {
+    const url = `${this.apiUrl}/facturations/${id}/parcours`;
+    return this.http.get(url);
+  }
+
+  getFactureLivraisonDetails(id: number): Observable<any> {
+    const url = `${this.apiUrl}/facturations/${id}/livraisons-details`;
+    return this.http.get(url);
+  }
+
+  getLivraisonLocationByNumero(numero: string, options?: {
+    pageSize?: number;
+    orderBy?: string;
+    orderDirection?: string;
+  }): Observable<any> {
+    let url = `${this.apiUrl}/livraisons/location/by-numero/${encodeURIComponent(numero)}`;
+
+    if (options) {
+      const params = new URLSearchParams();
+      if (options.pageSize) params.append('pageSize', options.pageSize.toString());
+      if (options.orderBy) params.append('orderBy', options.orderBy);
+      if (options.orderDirection) params.append('orderDirection', options.orderDirection);
+      const queryString = params.toString();
+      if (queryString) {
+        url += '?' + queryString;
+      }
+    }
+
+    return this.http.get(url);
+  }
+
   // Obtenir les montants HT et TVA d'une facture depuis v_facture_montant
   getFactureMontant(factureId: number): Observable<any> {
     const url = `${this.apiUrl}/facturations/${factureId}/montant`;
@@ -514,6 +567,21 @@ RemoveDevis(ids: any[]): Observable<any> {
     });
   }
 
+  getContratLocation(id: number, options: any = {}): Observable<any> {
+    const params = new URLSearchParams();
+    if (options.pageSize) params.append('pageSize', options.pageSize.toString());
+    if (options.orderBy) params.append('orderBy', options.orderBy);
+    if (options.orderDirection) params.append('orderDirection', options.orderDirection);
+    if (options.search) params.append('search', options.search);
+    if (options.dateFrom) params.append('dateFrom', options.dateFrom);
+    if (options.dateTo) params.append('dateTo', options.dateTo);
+
+    const queryString = params.toString();
+    return this.http.get(`${this.apiUrl}/contrats/${id}/location${queryString ? '?' + queryString : ''}`, {
+      headers: this.httpHeaders
+    });
+  }
+
   // Créer un nouveau contrat
   createContrat(data: any): Observable<any> {
     return this.http.post(`${this.apiUrl}/contrats`, data, {
@@ -524,6 +592,20 @@ RemoveDevis(ids: any[]): Observable<any> {
   // Mettre à jour un contrat
   updateContrat(id: number, data: any): Observable<any> {
     return this.http.put(`${this.apiUrl}/contrats/${id}`, data, {
+      headers: this.httpHeaders
+    });
+  }
+
+  // Marquer un contrat pour renouvellement
+  markContratForRenewal(id: number, enabled: boolean): Observable<any> {
+    return this.http.put(`${this.apiUrl}/contrats/${id}/renewal-flag`, { enabled }, {
+      headers: this.httpHeaders
+    });
+  }
+
+  // Renouveler un contrat
+  renewContrat(id: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}/contrats/${id}/renew`, {}, {
       headers: this.httpHeaders
     });
   }

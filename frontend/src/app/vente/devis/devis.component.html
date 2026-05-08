@@ -1,4 +1,4 @@
-<div class="container py-4">
+<div class="container-fluid py-4">
     <div class="page-inner">
 
         <!-- En-tête -->
@@ -413,9 +413,23 @@
                                                 <button class="btn btn-sm btn-outline-info" (click)="OnEdit(d.document_id)" title="Modifier">
                                                     <i class="fas fa-edit"></i>
                                                 </button>
-                                                <button *ngIf="pdfPermissionsService.hasAnyPdfAccess('devis')" class="btn btn-sm btn-outline-purple" (click)="onPrintDevis(d.document_id)" title="Imprimer PDF">
-                                                    <i class="fas fa-file-pdf"></i>
-                                                </button>
+                                                <div class="btn-group" role="group" *ngIf="pdfPermissionsService.canAccessPdf('devis', 'normal')">
+                                                    <button type="button" class="btn btn-sm btn-outline-purple dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Imprimer">
+                                                        <i class="fas fa-file-pdf"></i>
+                                                    </button>
+                                                    <ul class="dropdown-menu">
+                                                        <li>
+                                                            <a class="dropdown-item" href="javascript:void(0)" (click)="onPrintDevis(d.document_id, 'normal')">
+                                                                <i class="fas fa-file-invoice me-2"></i> Devis
+                                                            </a>
+                                                        </li>
+                                                        <li>
+                                                            <a class="dropdown-item" href="javascript:void(0)" (click)="onPrintDevis(d.document_id, 'simple')">
+                                                                <i class="fas fa-file-alt me-2"></i> Devis simple
+                                                            </a>
+                                                        </li>
+                                                    </ul>
+                                                </div>
                                                 <button class="btn btn-sm btn-outline-danger" (click)="removeDevis(i)" title="Supprimer">
                                                     <i class="fas fa-trash-alt"></i>
                                                 </button>

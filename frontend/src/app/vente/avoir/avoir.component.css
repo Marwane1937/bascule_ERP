@@ -93,6 +93,31 @@
   transition: opacity 0.2s;
 }
 
+.column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -1px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 3;
+}
+
+.column-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 22%;
+  bottom: 22%;
+  right: 3px;
+  width: 2px;
+  background: rgba(33, 37, 41, 0.2);
+  border-radius: 2px;
+}
+
+.column-header:hover .column-resize-handle::after {
+  background: rgba(13, 110, 253, 0.75);
+}
+
 .pinned-column {
   background-color: #e7f3ff !important;
   font-weight: 600;
@@ -185,4 +210,101 @@
 
 .table thead th.sortable i {
   font-size: 0.85em;
+}
+
+.payment-choice-group .btn {
+  white-space: normal;
+}
+
+.payment-treatment-section {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.65rem;
+  transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.payment-treatment-section--disabled {
+  background: #f8f9fa;
+  border-color: #e9ecef;
+  opacity: 0.72;
+}
+
+.avoir-page.avoir-page--detail {
+  max-width: 100%;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.avoir-page .page-inner--detail {
+  max-width: 100%;
+}
+
+.avoir-page--detail .avoir-table-wrap {
+  overflow-x: visible;
+}
+
+.avoir-table-wrap {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.avoir-list-table {
+  table-layout: fixed;
+  min-width: 1120px;
+  width: 100%;
+  font-size: 0.82rem;
+}
+
+.avoir-list-table th,
+.avoir-list-table td {
+  vertical-align: middle;
+  padding: 0.32rem 0.38rem;
+}
+
+.avoir-list-table .avoir-numero-col,
+.avoir-list-table .avoir-numero-cell {
+  width: 124px;
+  min-width: 124px;
+  white-space: nowrap;
+}
+
+.avoir-list-table .avoir-date-col,
+.avoir-list-table .avoir-date-cell {
+  width: 120px;
+  min-width: 120px;
+  white-space: nowrap;
+}
+
+.avoir-list-table .avoir-client-col,
+.avoir-list-table .avoir-client-cell {
+  min-width: 150px;
+}
+
+.avoir-list-table .avoir-client-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.avoir-list-table .avoir-amount-cell {
+  width: 112px;
+  min-width: 112px;
+  white-space: nowrap;
+}
+
+.avoir-list-table .btn-group > .btn,
+.avoir-list-table .dropdown-toggle,
+.avoir-list-table .badge {
+  white-space: nowrap;
+}
+
+.avoir-list-table .btn-group > .btn {
+  padding-left: 0.32rem;
+  padding-right: 0.32rem;
+  font-size: 0.76rem;
+}
+
+.avoir-list-table .badge {
+  font-size: 0.72rem;
+  padding: 0.24rem 0.42rem;
 }

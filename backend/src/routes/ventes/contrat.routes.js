@@ -9,13 +9,15 @@ router.use(databaseInjector.injectConnection.bind(databaseInjector));
 // Routes CRUD
 router.get('/conditions-paiement', contratController.getConditionsPaiement);
 router.get('/', contratController.getContrats);
+router.get('/:id/location', contratController.getContratLocation);
 router.get('/:id', contratController.getContrat);
 router.post('/', contratController.createContrat);
 router.post('/:id/facturer', contratController.transfererContratVersFacturation);
+router.post('/:id/renew', contratController.renewContrat);
 router.post('/save-detail', contratController.saveDetail);
 router.post('/delete-lignes', contratController.deleteLignes);
 router.put('/:id', contratController.updateContrat);
+router.put('/:id/renewal-flag', contratController.markContratForRenewal);
 router.delete('/:id', contratController.deleteContrat);
 
 module.exports = router;
-

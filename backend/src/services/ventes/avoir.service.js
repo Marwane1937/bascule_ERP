@@ -58,7 +58,16 @@ const createAvoirFinancier = async (avoirData, sequelizeConnection = null) => {
     montant_ht: avoirData.montant_ht || 0,
     montant_tva: avoirData.montant_tva || 0,
     description: avoirData.description || null,
-    adresse_id: avoirData.adresse_id || null
+    adresse_id: avoirData.adresse_id || null,
+    traitement_paiement: avoirData.traitement_paiement || 'CREDIT_CLIENT',
+    montant_traitement: avoirData.montant_traitement || null,
+    facture_compensation_id: avoirData.facture_compensation_id || null,
+    facture_compensation_ind: avoirData.facture_compensation_ind || null,
+    mode_reglement_id: avoirData.mode_reglement_id || avoirData.reference_remboursement || null,
+    reference_remboursement: avoirData.reference_remboursement || null,
+    caisse_remboursement_id: avoirData.caisse_remboursement_id || null,
+    note_traitement: avoirData.note_traitement || null,
+    user_id: avoirData.user_id || null
   }, sequelizeConnection);
 
 
@@ -72,7 +81,16 @@ const createAvoirMarchandise = async (avoirData, sequelizeConnection = null) => 
     retour_id: avoirData.retour_id || null,
     part_id: avoirData.part_id || null,
     date: avoirData.date || new Date(),
-    adresse_id: avoirData.adresse_id || null
+    adresse_id: avoirData.adresse_id || null,
+    traitement_paiement: avoirData.traitement_paiement || 'CREDIT_CLIENT',
+    montant_traitement: avoirData.montant_traitement || null,
+    facture_compensation_id: avoirData.facture_compensation_id || null,
+    facture_compensation_ind: avoirData.facture_compensation_ind || null,
+    mode_reglement_id: avoirData.mode_reglement_id || avoirData.reference_remboursement || null,
+    reference_remboursement: avoirData.reference_remboursement || null,
+    caisse_remboursement_id: avoirData.caisse_remboursement_id || null,
+    note_traitement: avoirData.note_traitement || null,
+    user_id: avoirData.user_id || null
   }, sequelizeConnection);
 
 
@@ -99,6 +117,3 @@ module.exports = {
   updateAvoir,
   deleteAvoir
 };
-
-
-

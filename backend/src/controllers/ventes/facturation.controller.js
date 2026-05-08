@@ -66,6 +66,70 @@ const getFacture = async (req, res) => {
   }
 };
 
+const getFactureParcours = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const factureId = parseInt(req.params.id, 10);
+
+    if (!Number.isInteger(factureId) || factureId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'facture_id invalide'
+      });
+    }
+
+    const parcours = await facturationService.getFactureParcours(factureId, sequelize);
+    res.json({
+      success: true,
+      data: parcours
+    });
+  } catch (err) {
+    console.error('[getFactureParcours Controller] Erreur:', err);
+    if (err?.message && err.message.toLowerCase().includes('non trouv')) {
+      return res.status(404).json({
+        success: false,
+        message: err.message
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la récupération du parcours de facture'
+    });
+  }
+};
+
+const getFactureLivraisonDetails = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const factureId = parseInt(req.params.id, 10);
+
+    if (!Number.isInteger(factureId) || factureId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'facture_id invalide'
+      });
+    }
+
+    const details = await facturationService.getFactureLivraisonDetails(factureId, sequelize);
+    res.json({
+      success: true,
+      data: details
+    });
+  } catch (err) {
+    console.error('[getFactureLivraisonDetails Controller] Erreur:', err);
+    if (err?.message && err.message.toLowerCase().includes('non trouv')) {
+      return res.status(404).json({
+        success: false,
+        message: err.message
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la récupération du détail des bons de livraison'
+    });
+  }
+};
+
 const getFacturationReport = async (req, res) => {
   try {
     const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
@@ -119,6 +183,8 @@ const getFactureMontant = async (req, res) => {
 module.exports = {
   getFactures,
   getFacture,
+  getFactureParcours,
+  getFactureLivraisonDetails,
   getFacturationReport,
   getFactureMontant
 };

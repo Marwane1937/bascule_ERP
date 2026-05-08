@@ -10,6 +10,10 @@ const getContrats = async (options = {}, sequelizeConnection = null) => {
 /**
  * Récupérer un contrat par ID
  */
+const getContratLocation = async (id, options = {}, sequelizeConnection = null) => {
+  return await contratModel.getContratLocation(id, options, sequelizeConnection);
+};
+
 const getContratById = async (id, sequelizeConnection = null) => {
   return await contratModel.getContratById(id, sequelizeConnection);
 };
@@ -26,6 +30,20 @@ const createContrat = async (contratData, sequelizeConnection = null) => {
  */
 const updateContrat = async (id, contratData, sequelizeConnection = null) => {
   return await contratModel.updateContrat(id, contratData, sequelizeConnection);
+};
+
+/**
+ * Marquer un contrat pour renouvellement
+ */
+const markContratForRenewal = async (id, enabled = true, sequelizeConnection = null) => {
+  return await contratModel.markContratForRenewal(id, enabled, sequelizeConnection);
+};
+
+/**
+ * Renouveler un contrat
+ */
+const renewContrat = async (id, sequelizeConnection = null) => {
+  return await contratModel.renewContrat(id, sequelizeConnection);
 };
 
 /**
@@ -66,13 +84,15 @@ const deleteLignes = async (ligneIds, sequelizeConnection = null) => {
 
 module.exports = {
   getContrats,
+  getContratLocation,
   getContratById,
   createContrat,
   updateContrat,
+  markContratForRenewal,
+  renewContrat,
   deleteContrat,
   getConditionsPaiement,
   transfererContratVersFacturation,
   saveDetail,
   deleteLignes
 };
-

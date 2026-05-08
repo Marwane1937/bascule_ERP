@@ -1,8 +1,9 @@
-import { AfterViewInit, ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import { AfterViewInit, ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { BaseService } from 'src/app/service/base.service';
 import { VentesService } from 'src/app/service/ventes.service';
+import { CaisseService } from 'src/app/service/caisse.service';
 import { EmailService } from 'src/app/service/email.service';
 import { PdfPermissionsService } from 'src/app/service/pdf-permissions.service';
 import Swal from 'sweetalert2';
@@ -27,6 +28,9 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
   isError: boolean = false;
   nextAvoirNumero: string = 'AV25-0001';
   typeAvoir: 'FINANCIER' | 'MARCHANDISE' = 'FINANCIER';
+  isEditMode: boolean = false;
+  editingAvoirId: number | null = null;
+  editingAvoirInd: number | null = null;
 
   // Pagination pour les avoirs
   currentPageAvoirs: number = 1;
@@ -58,7 +62,8 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
     type: '',
     facture_ht: '',
     facture_tva: '',
-    facture_ttc: ''
+    facture_ttc: '',
+    traitement_paiement: ''
   };
 
   allAvoirs: any[] = []; // Stocker tous les avoirs pour le filtrage
@@ -71,18 +76,40 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
     type: true,
     facture_ht: true,
     facture_tva: true,
-    facture_ttc: true
+    facture_ttc: true,
+    traitement_paiement: true
   };
 
   pinnedColumns: string[] = [];
-  columnWidths: any = {};
+  readonly defaultColumnWidths: Record<string, string> = {
+    facture_num: '124px',
+    facture_dat: '120px',
+    nom: '220px',
+    type: '120px',
+    facture_ht: '112px',
+    facture_tva: '112px',
+    facture_ttc: '112px',
+    traitement_paiement: '170px'
+  };
+  columnWidths: any = { ...this.defaultColumnWidths };
   showColumnMenu: boolean = false;
   activeColumnMenu: string = '';
   menuPosition: any = { x: 0, y: 0 };
+  resizingColumn: string | null = null;
+  resizeStartX = 0;
+  resizeStartWidth = 0;
+  detailMode: boolean = false;
+  private sidebarStateBeforeDetailMode: boolean | null = null;
+  private sidebarObserver?: MutationObserver;
 
   // Pour avoir financier
   facturesDisponibles: any[] = [];
   selectedFacture: any = null;
+  facturesCompensation: any[] = [];
+  modesReglement: any[] = [];
+  caissesOuvertes: any[] = [];
+  paymentTreatmentEnabled: boolean = false;
+  selectedFacturePaymentInfo: any = null;
 
   // Pour avoir marchandise
   retoursDisponibles: any[] = [];
@@ -98,6 +125,7 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
     private ventesService: VentesService,
     private router: Router,
     private baseService: BaseService,
+    private caisseService: CaisseService,
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef,
     private emailService: EmailService,
@@ -110,6 +138,11 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
     this.initForm();
     this.resetFormState();
     this.loadNextAvoirNumero();
+    this.loadModeReglements();
+    this.loadCaissesOuvertes();
+    if (this.typeAvoir === 'FINANCIER') {
+      this.loadFacturesDisponibles();
+    }
   }
 
   initForm(): void {
@@ -122,7 +155,14 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
       retour_id: [null], // Pour avoir marchandise
       montant_ht: [0],
       montant_tva: [0],
-      description: ['']
+      description: [''],
+      traitement_paiement: ['CREDIT_CLIENT', Validators.required],
+      montant_traitement: [0],
+      facture_compensation_id: [null],
+      facture_compensation_ind: [null],
+      reference_remboursement: [''],
+      caisse_remboursement_id: [null],
+      note_traitement: ['']
     });
 
     this.setupFormListeners();
@@ -156,11 +196,17 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
       }
     });
 
+    this.startSidebarObserver();
     this.cdr.detectChanges();
   }
 
   ngOnDestroy(): void {
     this.clientSearchSub?.unsubscribe();
+    this.onDocumentMouseUp();
+    this.sidebarObserver?.disconnect();
+    if (this.detailMode && this.sidebarStateBeforeDetailMode === false) {
+      this.setSidebarHidden(false);
+    }
   }
 
   resetFormState(): void {
@@ -169,8 +215,38 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
     this.selectedClient = null;
     this.selectedFacture = null;
     this.selectedRetour = null;
+    this.facturesCompensation = [];
+    this.selectedFacturePaymentInfo = null;
+    this.paymentTreatmentEnabled = false;
     this.selectedClientName = '';
     this.selectedClientId = null;
+  }
+
+  prepareAddAvoir(): void {
+    this.isEditMode = false;
+    this.editingAvoirId = null;
+    this.editingAvoirInd = null;
+    this.resetFormState();
+    if (this.AvoirForm) {
+      this.AvoirForm.reset({
+        date: new Date().toISOString().substring(0, 10),
+        part_id: 0,
+        clientSearch: '',
+        clientDisplay: '',
+        facture_id: null,
+        retour_id: null,
+        montant_ht: 0,
+        montant_tva: 0,
+        description: '',
+        traitement_paiement: 'CREDIT_CLIENT',
+        montant_traitement: 0,
+        facture_compensation_id: null,
+        facture_compensation_ind: null,
+        reference_remboursement: '',
+        caisse_remboursement_id: null,
+        note_traitement: ''
+      });
+    }
   }
 
   loadAvoirs(page: number = 1, search: string = '') {
@@ -234,6 +310,39 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
     })
   }
 
+  loadModeReglements(): void {
+    this.ventesService.getModeReglements().subscribe({
+      next: (response: any) => {
+        this.modesReglement = response?.data || (Array.isArray(response) ? response : []);
+      },
+      error: () => {
+        this.modesReglement = [];
+      }
+    });
+  }
+
+  loadCaissesOuvertes(): void {
+    this.caisseService.getCaisseDocuments({
+      page: 1,
+      pageSize: 200,
+      orderBy: 'date',
+      orderDirection: 'DESC'
+    }).subscribe({
+      next: (response: any) => {
+        const rows = response?.data || (Array.isArray(response) ? response : []);
+        this.caissesOuvertes = (Array.isArray(rows) ? rows : []).filter((caisse: any) => this.isCaisseOuverte(caisse));
+      },
+      error: () => {
+        this.caissesOuvertes = [];
+      }
+    });
+  }
+
+  isCaisseOuverte(caisse: any): boolean {
+    const etat = caisse?.etat;
+    return etat === null || etat === undefined || String(etat).trim() === '';
+  }
+
   onSearchChange(term: string | null | undefined) {
     if (!term || this.normalizeValue(term).length === 0) {
       this.filteredClients = [];
@@ -291,6 +400,9 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
     this.typeAvoir = type;
     this.selectedFacture = null;
     this.selectedRetour = null;
+    this.facturesCompensation = [];
+    this.selectedFacturePaymentInfo = null;
+    this.paymentTreatmentEnabled = false;
     this.selectedClientName = '';
     this.selectedClientId = null;
     this.AvoirForm.patchValue({
@@ -299,7 +411,14 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
       clientDisplay: '',
       part_id: 0,
       montant_ht: 0,
-      montant_tva: 0
+      montant_tva: 0,
+      traitement_paiement: 'CREDIT_CLIENT',
+      montant_traitement: 0,
+      facture_compensation_id: null,
+      facture_compensation_ind: null,
+      reference_remboursement: '',
+      caisse_remboursement_id: null,
+      note_traitement: ''
     });
 
     if (type === 'FINANCIER') {
@@ -313,7 +432,11 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
     // Charger les factures disponibles pour créer un avoir financier
     this.ventesService.getFactures({ page: 1, pageSize: 100 }).subscribe({
       next: (response: any) => {
-        this.facturesDisponibles = response.data || (Array.isArray(response) ? response : []);
+        const factures = response.data || (Array.isArray(response) ? response : []);
+        this.facturesDisponibles = (Array.isArray(factures) ? factures : []).map((facture: any) => ({
+          ...facture,
+          nom: facture.client || facture.nom || ''
+        }));
       },
       error: (err) => {
         this.facturesDisponibles = [];
@@ -339,7 +462,7 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
       this.selectedFacture = facture;
 
       // Le nom du client est déjà dans les données de la facture
-      const clientName = facture.nom || '';
+      const clientName = facture.client || facture.nom || '';
       this.selectedClientName = clientName;
 
       // Récupérer le part_id et les montants depuis l'API
@@ -365,6 +488,7 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
                 clientDisplay: clientName,
                 part_id: clientId || 0
               });
+              this.afterDocumentSelected(clientId);
 
             },
             error: (err) => {
@@ -376,6 +500,7 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
                 clientDisplay: clientName,
                 part_id: clientId || 0
               });
+              this.afterDocumentSelected(clientId);
 
               if (!clientId) {
               }
@@ -399,6 +524,7 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
                 clientDisplay: clientName,
                 part_id: clientIdFromList || 0
               });
+              this.afterDocumentSelected(clientIdFromList);
 
               if (clientIdFromList) {
                 this.selectedClientId = clientIdFromList;
@@ -414,6 +540,7 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
                 clientDisplay: clientName,
                 part_id: clientIdFromList || 0
               });
+              this.afterDocumentSelected(clientIdFromList);
 
               if (clientIdFromList) {
                 this.selectedClientId = clientIdFromList;
@@ -449,14 +576,195 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
         montant_ht: montantHt,
         montant_tva: montantTva
       });
+      this.afterDocumentSelected(clientId);
+    }
+  }
+
+  private afterDocumentSelected(clientId: number | null | undefined): void {
+    this.syncPaymentAmountWithAvoir(true);
+    this.setPaymentTreatmentEnabled(false);
+    if (clientId) {
+      this.loadFacturesCompensation(clientId);
+    } else {
+      this.facturesCompensation = [];
+    }
+  }
+
+  private setPaymentTreatmentEnabled(enabled: boolean): void {
+    this.paymentTreatmentEnabled = enabled;
+
+    if (!enabled && this.AvoirForm) {
+      this.AvoirForm.patchValue({
+        traitement_paiement: 'CREDIT_CLIENT',
+        facture_compensation_id: null,
+        facture_compensation_ind: null,
+        reference_remboursement: '',
+        caisse_remboursement_id: null
+      }, { emitEvent: false });
+    }
+  }
+
+  private isFactureEncaissee(facture: any): boolean {
+    if (!facture) {
+      return false;
+    }
+
+    const reglement = Number(facture?.reglement || facture?.montant_regle || facture?.total_reglement || 0);
+    const solde = Number(facture?.solde || 0);
+    const montantFacture = Number(facture?.facture || facture?.total_ttc || facture?.facture_ttc || 0);
+
+    return reglement > 0 || (montantFacture > 0 && solde <= 0);
+  }
+
+  loadFacturesCompensation(partId: number): void {
+    this.ventesService.getFacturesForLettrage(partId).subscribe({
+      next: (response: any) => {
+        const rows = response?.data || (Array.isArray(response) ? response : []);
+        const factureOrigineId = Number(this.AvoirForm.get('facture_id')?.value || 0);
+        this.selectedFacturePaymentInfo = (Array.isArray(rows) ? rows : [])
+          .find((facture: any) => Number(facture?.document_id || 0) === factureOrigineId) || null;
+        this.setPaymentTreatmentEnabled(this.isFactureEncaissee(this.selectedFacturePaymentInfo));
+
+        this.facturesCompensation = (Array.isArray(rows) ? rows : [])
+          .filter((facture: any) => Number(facture?.solde || 0) > 0)
+          .filter((facture: any) => Number(facture?.document_id || 0) !== factureOrigineId)
+          .map((facture: any) => ({
+            ...facture,
+            facture_ind: facture.facture_ind || 1
+          }));
+
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.facturesCompensation = [];
+        this.selectedFacturePaymentInfo = null;
+        this.setPaymentTreatmentEnabled(false);
+      }
+    });
+  }
+
+  getAvoirTtc(): number {
+    const ht = Number(this.AvoirForm.get('montant_ht')?.value || 0);
+    const tva = Number(this.AvoirForm.get('montant_tva')?.value || 0);
+    return ht + tva;
+  }
+
+  syncPaymentAmountWithAvoir(force: boolean = false): void {
+    const currentAmount = Number(this.AvoirForm.get('montant_traitement')?.value || 0);
+    if (force || currentAmount <= 0) {
+      this.AvoirForm.patchValue({
+        montant_traitement: this.getAvoirTtc()
+      }, { emitEvent: false });
+    }
+  }
+
+  onTraitementPaiementChange(action: 'CREDIT_CLIENT' | 'REMBOURSEMENT' | 'COMPENSATION'): void {
+    if (!this.paymentTreatmentEnabled && action !== 'CREDIT_CLIENT') {
+      this.AvoirForm.patchValue({
+        traitement_paiement: 'CREDIT_CLIENT'
+      }, { emitEvent: false });
+      return;
+    }
+
+    this.AvoirForm.patchValue({
+      traitement_paiement: action
+    }, { emitEvent: false });
+    this.syncPaymentAmountWithAvoir();
+
+    if (action !== 'COMPENSATION') {
+      this.AvoirForm.patchValue({
+        facture_compensation_id: null,
+        facture_compensation_ind: null
+      }, { emitEvent: false });
+    }
+
+    if (action !== 'REMBOURSEMENT') {
+      this.AvoirForm.patchValue({
+        reference_remboursement: '',
+        caisse_remboursement_id: null
+      }, { emitEvent: false });
+    }
+
+    if (action === 'REMBOURSEMENT') {
+      if (this.modesReglement.length === 0) {
+        this.loadModeReglements();
+      }
+      if (this.caissesOuvertes.length === 0) {
+        this.loadCaissesOuvertes();
+      }
+    }
+  }
+
+  onFactureCompensationChange(factureId: any): void {
+    const selectedFacture = this.facturesCompensation.find((facture: any) => facture.document_id == factureId);
+    this.AvoirForm.patchValue({
+      facture_compensation_ind: selectedFacture?.facture_ind || 1
+    }, { emitEvent: false });
+  }
+
+  getPaymentTreatmentLabel(action: string): string {
+    switch (action) {
+      case 'REMBOURSEMENT':
+        return 'Remboursement';
+      case 'COMPENSATION':
+        return 'Compensation';
+      case 'CREDIT_CLIENT':
+      default:
+        return 'Credit client';
+    }
+  }
+
+  getPaymentStatusLabel(status: string): string {
+    switch (status) {
+      case 'A_REMBOURSER':
+        return 'A rembourser';
+      case 'A_COMPENSER':
+        return 'A compenser';
+      case 'CREDIT_OUVERT':
+      default:
+        return 'Credit ouvert';
+    }
+  }
+
+  getPaymentBadgeClass(action: string): string {
+    switch (action) {
+      case 'REMBOURSEMENT':
+        return 'bg-danger';
+      case 'COMPENSATION':
+        return 'bg-warning text-dark';
+      case 'CREDIT_CLIENT':
+      default:
+        return 'bg-info';
     }
   }
 
   onSubmit(): void {
+    if (this.shouldUseAvoirTreatmentSubmit()) {
+      this.onSubmitAvoirWithTreatment();
+      return;
+    }
+
     if (this.AvoirForm.valid) {
       const formValue = {
         ...this.AvoirForm.value
       };
+      const traitementPaiement = formValue.traitement_paiement || 'CREDIT_CLIENT';
+      const montantTraitement = Number(formValue.montant_traitement || this.getAvoirTtc() || 0);
+
+      if ((traitementPaiement === 'REMBOURSEMENT' || traitementPaiement === 'COMPENSATION') && montantTraitement <= 0) {
+        this.showError('Le montant du traitement du paiement doit etre superieur a zero.');
+        return;
+      }
+
+      if (traitementPaiement === 'COMPENSATION' && !formValue.facture_compensation_id) {
+        this.showError('Veuillez selectionner la facture sur laquelle imputer l avoir.');
+        return;
+      }
+
+      const selectedCompensation = this.facturesCompensation.find((facture: any) => facture.document_id == formValue.facture_compensation_id);
+      formValue.traitement_paiement = traitementPaiement;
+      formValue.montant_traitement = montantTraitement;
+      formValue.facture_compensation_ind = selectedCompensation?.facture_ind || formValue.facture_compensation_ind || null;
 
       // S'assurer que le part_id est bien défini pour un avoir financier
       if (this.typeAvoir === 'FINANCIER') {
@@ -498,6 +806,232 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
     } else {
       this.showError("❗ Le formulaire est invalide. Veuillez remplir tous les champs requis.");
     }
+  }
+
+  private shouldUseAvoirTreatmentSubmit(): boolean {
+    return true;
+  }
+
+  private onSubmitAvoirWithTreatment(): void {
+    if (!this.AvoirForm.valid) {
+      this.showError("Le formulaire est invalide. Veuillez remplir tous les champs requis.");
+      return;
+    }
+
+    if (this.isEditMode && this.editingAvoirId) {
+      this.submitAvoirUpdate();
+      return;
+    }
+
+    const formValue = this.buildAvoirPayload();
+    if (!formValue) {
+      return;
+    }
+
+    if (formValue.traitement_paiement === 'REMBOURSEMENT' || formValue.traitement_paiement === 'COMPENSATION') {
+      this.confirmAndSubmitAvoir(formValue);
+      return;
+    }
+
+    this.submitAvoirPayload(formValue);
+  }
+
+  private buildAvoirPayload(): any | null {
+    const formValue = {
+      ...this.AvoirForm.value
+    };
+
+    let traitementPaiement = formValue.traitement_paiement || 'CREDIT_CLIENT';
+    if (!this.paymentTreatmentEnabled) {
+      traitementPaiement = 'CREDIT_CLIENT';
+    }
+
+    const montantTraitement = Number(formValue.montant_traitement || this.getAvoirTtc() || 0);
+
+    if ((traitementPaiement === 'REMBOURSEMENT' || traitementPaiement === 'COMPENSATION') && montantTraitement <= 0) {
+      this.showError('Le montant du traitement du paiement doit etre superieur a zero.');
+      return null;
+    }
+
+    if (traitementPaiement === 'REMBOURSEMENT') {
+      if (!formValue.reference_remboursement) {
+        this.showError('Veuillez selectionner le mode de remboursement.');
+        return null;
+      }
+
+      if (!formValue.caisse_remboursement_id) {
+        this.showError('Veuillez selectionner la caisse de remboursement.');
+        return null;
+      }
+
+      formValue.mode_reglement_id = Number(formValue.reference_remboursement);
+    }
+
+    if (traitementPaiement === 'COMPENSATION' && !formValue.facture_compensation_id) {
+      this.showError('Veuillez selectionner la facture sur laquelle imputer l avoir.');
+      return null;
+    }
+
+    const selectedCompensation = this.facturesCompensation.find((facture: any) => facture.document_id == formValue.facture_compensation_id);
+    formValue.traitement_paiement = traitementPaiement;
+    formValue.montant_traitement = montantTraitement;
+    formValue.facture_compensation_ind = selectedCompensation?.facture_ind || formValue.facture_compensation_ind || null;
+
+    if (this.typeAvoir === 'FINANCIER') {
+      const partId = formValue.part_id || this.selectedClientId || this.selectedFacture?.part_id || null;
+
+      if (!partId || partId === 0) {
+        this.showError('Le client (part_id) est requis pour creer un avoir financier. Veuillez selectionner une facture valide.');
+        return null;
+      }
+
+      formValue.part_id = partId;
+    }
+
+    return formValue;
+  }
+
+  private confirmAndSubmitAvoir(formValue: any): void {
+    const isRefund = formValue.traitement_paiement === 'REMBOURSEMENT';
+    Swal.fire({
+      title: isRefund ? 'Confirmer le remboursement' : 'Confirmer la compensation',
+      html: isRefund
+        ? 'Confirmer la creation de l avoir et de la ligne de depense dans la caisse selectionnee ?'
+        : 'Confirmer la creation de l avoir et la compensation de la facture selectionnee ?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Oui, confirmer',
+      cancelButtonText: 'Annuler',
+      confirmButtonColor: isRefund ? '#dc3545' : '#f0ad4e',
+      cancelButtonColor: '#6c757d',
+      reverseButtons: true
+    }).then((result) => {
+      if (result.isConfirmed) {
+        this.submitAvoirPayload(formValue);
+      }
+    });
+  }
+
+  private submitAvoirPayload(formValue: any): void {
+    const serviceCall = this.typeAvoir === 'FINANCIER'
+      ? this.ventesService.addAvoirFinancier(formValue)
+      : this.ventesService.addAvoirMarchandise(formValue);
+
+    serviceCall.subscribe({
+      next: (response: any) => {
+        this.showSuccess(`Avoir ${response.facture_num || ''} cree avec succes !`);
+        const modal = document.getElementById('addAvoirModal');
+        if (modal) {
+          const bsModal = (window as any).bootstrap?.Modal?.getInstance(modal);
+          if (bsModal) {
+            bsModal.hide();
+          }
+        }
+        this.AvoirForm.reset();
+        this.resetFormState();
+        this.initForm();
+        this.loadAvoirs(this.currentPageAvoirs, this.searchTerm);
+        this.loadNextAvoirNumero();
+        this.loadCaissesOuvertes();
+      },
+      error: (err) => {
+        this.showError(`Une erreur s'est produite lors de la creation de l'avoir: ${err.error?.message || err.message || 'Erreur inconnue'}`);
+      }
+    });
+  }
+
+  onEditAvoir(avoir: any): void {
+    const avoirId = Number(avoir?.facture_id || 0);
+    if (!avoirId) {
+      this.showError("Impossible de modifier l'avoir : ID manquant.");
+      return;
+    }
+
+    this.ventesService.getAvoirById(avoirId).subscribe({
+      next: (response: any) => {
+        const data = response?.data || response || avoir;
+        this.isEditMode = true;
+        this.editingAvoirId = avoirId;
+        this.editingAvoirInd = Number(data?.facture_ind || avoir?.facture_ind || 0) || null;
+        this.typeAvoir = data?.type_avoir === 'MARCHANDISE' ? 'MARCHANDISE' : 'FINANCIER';
+        this.selectedClientName = data?.client || data?.client_nom || data?.nom || avoir?.nom || '';
+        this.selectedClientId = data?.part_id || null;
+        this.selectedFacture = this.typeAvoir === 'FINANCIER' ? data : null;
+        this.selectedRetour = this.typeAvoir === 'MARCHANDISE' ? data : null;
+        this.paymentTreatmentEnabled = true;
+
+        this.AvoirForm.patchValue({
+          date: this.toDateInput(data?.facture_dat || data?.date || avoir?.facture_dat),
+          part_id: data?.part_id || 0,
+          clientDisplay: this.selectedClientName,
+          facture_id: this.typeAvoir === 'FINANCIER' ? avoirId : null,
+          retour_id: data?.retour_id || null,
+          montant_ht: Number(data?.facture_ht ?? avoir?.facture_ht ?? 0),
+          montant_tva: Number(data?.facture_tva ?? avoir?.facture_tva ?? 0),
+          description: data?.description || '',
+          traitement_paiement: data?.traitement_paiement || avoir?.traitement_paiement || 'CREDIT_CLIENT',
+          montant_traitement: Number(data?.montant_traitement ?? avoir?.montant_traitement ?? 0),
+          facture_compensation_id: data?.facture_compensation_id || null,
+          facture_compensation_ind: data?.facture_compensation_ind || null,
+          reference_remboursement: data?.mode_reglement_id || data?.reference_remboursement || '',
+          caisse_remboursement_id: data?.caisse_document_id || null,
+          note_traitement: data?.note_traitement || ''
+        }, { emitEvent: false });
+
+        const modal = document.getElementById('addAvoirModal');
+        if (modal) {
+          const bsModal = (window as any).bootstrap?.Modal?.getOrCreateInstance(modal);
+          bsModal?.show();
+        }
+      },
+      error: (err) => {
+        this.showError(`Impossible de charger l'avoir: ${err.error?.message || err.message || 'Erreur inconnue'}`);
+      }
+    });
+  }
+
+  private submitAvoirUpdate(): void {
+    if (!this.editingAvoirId) {
+      return;
+    }
+
+    const rawValue = this.AvoirForm.getRawValue();
+    const payload = {
+      date: rawValue.date,
+      facture_ind: this.editingAvoirInd,
+      montant_ht: Number(rawValue.montant_ht || 0),
+      montant_tva: Number(rawValue.montant_tva || 0),
+      description: rawValue.description || null
+    };
+
+    this.ventesService.updateAvoir(this.editingAvoirId, payload).subscribe({
+      next: () => {
+        this.showSuccess('Avoir modifie avec succes !');
+        const modal = document.getElementById('addAvoirModal');
+        if (modal) {
+          const bsModal = (window as any).bootstrap?.Modal?.getInstance(modal);
+          bsModal?.hide();
+        }
+        this.prepareAddAvoir();
+        this.loadAvoirs(this.currentPageAvoirs, this.searchTerm);
+      },
+      error: (err) => {
+        this.showError(`Une erreur s'est produite lors de la modification: ${err.error?.message || err.message || 'Erreur inconnue'}`);
+      }
+    });
+  }
+
+  private toDateInput(value: any): string {
+    if (!value) {
+      return new Date().toISOString().substring(0, 10);
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return new Date().toISOString().substring(0, 10);
+    }
+
+    return date.toISOString().substring(0, 10);
   }
 
   removeAvoir(avoir: any, index: number) {
@@ -725,7 +1259,8 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
       type: '',
       facture_ht: '',
       facture_tva: '',
-      facture_ttc: ''
+      facture_ttc: '',
+      traitement_paiement: ''
     };
     this.applyColumnFilters();
   }
@@ -788,11 +1323,16 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
       type: true,
       facture_ht: true,
       facture_tva: true,
-      facture_ttc: true
+      facture_ttc: true,
+      traitement_paiement: true
     };
     this.pinnedColumns = [];
-    this.columnWidths = {};
+    this.columnWidths = { ...this.defaultColumnWidths };
     this.hideColumnContextMenu();
+  }
+
+  getColumnWidth(column: string): string {
+    return this.columnWidths[column] || this.defaultColumnWidths[column] || 'auto';
   }
 
   getColumnIndex(column: string): number {
@@ -808,7 +1348,8 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
       type: 'Type',
       facture_ht: 'Total HT',
       facture_tva: 'Total TVA',
-      facture_ttc: 'Total TTC'
+      facture_ttc: 'Total TTC',
+      traitement_paiement: 'Traitement'
     };
     return names[column] || column;
   }
@@ -833,6 +1374,103 @@ export class AvoirComponent implements OnInit, AfterViewInit, OnDestroy {
   openColumnMenu(event: MouseEvent, column: string): void {
     event.stopPropagation();
     this.showColumnContextMenu(event, column);
+  }
+
+  startColumnResize(event: MouseEvent, column: string, headerEl: HTMLElement): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.resizingColumn = column;
+    this.resizeStartX = event.clientX;
+    this.resizeStartWidth = headerEl?.offsetWidth || parseInt(String(this.getColumnWidth(column) || ''), 10) || 220;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  @HostListener('document:mousemove', ['$event'])
+  onDocumentMouseMove(event: MouseEvent): void {
+    if (!this.resizingColumn) {
+      return;
+    }
+
+    const delta = event.clientX - this.resizeStartX;
+    const minByColumn: any = {
+      nom: 150
+    };
+    const maxByColumn: any = {
+      nom: 560
+    };
+    const minWidth = minByColumn[this.resizingColumn] ?? 90;
+    const maxWidth = maxByColumn[this.resizingColumn] ?? 600;
+    const nextWidth = Math.max(minWidth, Math.min(maxWidth, this.resizeStartWidth + delta));
+    this.columnWidths[this.resizingColumn] = `${nextWidth}px`;
+  }
+
+  @HostListener('document:mouseup')
+  onDocumentMouseUp(): void {
+    if (!this.resizingColumn) {
+      return;
+    }
+
+    this.resizingColumn = null;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+
+  toggleDetailMode(): void {
+    if (!this.detailMode) {
+      this.sidebarStateBeforeDetailMode = this.isSidebarHidden();
+    }
+
+    this.detailMode = !this.detailMode;
+    this.applyDetailMode();
+  }
+
+  private applyDetailMode(): void {
+    if (this.detailMode) {
+      this.setSidebarHidden(true);
+      return;
+    }
+
+    if (this.sidebarStateBeforeDetailMode === false) {
+      this.setSidebarHidden(false);
+    }
+    this.sidebarStateBeforeDetailMode = null;
+  }
+
+  private isSidebarHidden(): boolean {
+    return !!document.querySelector('.wrapper.sidebar-hidden-desktop');
+  }
+
+  private setSidebarHidden(hidden: boolean): void {
+    const currentlyHidden = this.isSidebarHidden();
+    if (currentlyHidden === hidden) {
+      return;
+    }
+
+    const selector = hidden ? '.toggle-sidebar' : '.btn-sidebar-toggle-float, .toggle-sidebar';
+    const toggleButton = document.querySelector(selector) as HTMLElement | null;
+    toggleButton?.click();
+  }
+
+  private startSidebarObserver(): void {
+    const wrapper = document.querySelector('.wrapper');
+    if (!wrapper) {
+      return;
+    }
+
+    this.sidebarObserver?.disconnect();
+    this.sidebarObserver = new MutationObserver(() => {
+      if (this.detailMode && !this.isSidebarHidden()) {
+        this.detailMode = false;
+        this.applyDetailMode();
+        this.cdr.detectChanges();
+      }
+    });
+
+    this.sidebarObserver.observe(wrapper, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
   }
 }
 

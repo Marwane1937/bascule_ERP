@@ -12,6 +12,15 @@ const getEmployes = async (sequelizeConnection = null) => {
   }
 };
 
+const getEmployesAutocomplete = async (sequelizeConnection = null) => {
+  try {
+    return await employeModel.getEmployesAutocomplete(sequelizeConnection);
+  } catch (error) {
+    console.error('[employe.service.js] Erreur autocomplete employes:', error);
+    throw error;
+  }
+};
+
 // Obtenir un employé par ID
 const getEmploye = async (id) => {
   const employe = await employeModel.getEmployeById(id);
@@ -81,6 +90,7 @@ const getEmployeTelephone = async (id) => {
 
 module.exports = {
   getEmployes,
+  getEmployesAutocomplete,
   getEmploye,
   createEmploye,
   editEmploye,

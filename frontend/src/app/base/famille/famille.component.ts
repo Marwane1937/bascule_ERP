@@ -53,7 +53,21 @@ export class FamilleComponent implements OnInit, AfterViewInit {
             searching: true,
             lengthChange: true,
             language: {
-              url: '//cdn.datatables.net/plug-ins/1.13.7/i18n/fr-FR.json'
+              emptyTable: 'Aucune donnée disponible dans le tableau',
+              info: 'Affichage de _START_ à _END_ sur _TOTAL_ entrées',
+              infoEmpty: 'Affichage de 0 à 0 sur 0 entrée',
+              infoFiltered: '(filtré à partir de _MAX_ entrées au total)',
+              lengthMenu: 'Afficher _MENU_ entrées',
+              loadingRecords: 'Chargement...',
+              processing: 'Traitement en cours...',
+              search: 'Rechercher:',
+              zeroRecords: 'Aucun enregistrement correspondant trouvé',
+              paginate: {
+                first: 'Premier',
+                last: 'Dernier',
+                next: 'Suivant',
+                previous: 'Précédent'
+              }
             }
           });
         }, 0);
@@ -202,4 +216,3 @@ export class FamilleComponent implements OnInit, AfterViewInit {
     }
   }
 }
-

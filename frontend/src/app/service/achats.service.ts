@@ -14,6 +14,43 @@ export class AchatsService {
 
   constructor(public http: HttpClient) { }
 
+  // ================= REPORTING ACHATS =================
+
+  private achatReportingUrl = `${this.apiUrl}/achat/reporting`;
+
+  private buildReportingQuery(options: any = {}): string {
+    const params = new URLSearchParams();
+    if (options.page) params.append('page', options.page.toString());
+    if (options.pageSize) params.append('pageSize', options.pageSize.toString());
+    if (options.orderBy) params.append('orderBy', options.orderBy);
+    if (options.orderDirection) params.append('orderDirection', options.orderDirection);
+    if (options.search !== undefined) params.append('search', options.search || '');
+    if (options.dateFrom) params.append('dateFrom', options.dateFrom);
+    if (options.dateTo) params.append('dateTo', options.dateTo);
+    if (options.limit) params.append('limit', options.limit.toString());
+    return params.toString() ? `?${params.toString()}` : '';
+  }
+
+  getAchatFournisseurSuggestions(options: any = {}): Observable<any> {
+    return this.http.get(`${this.achatReportingUrl}/fournisseur-suggestions${this.buildReportingQuery(options)}`);
+  }
+
+  getAchatArticleSuggestions(options: any = {}): Observable<any> {
+    return this.http.get(`${this.achatReportingUrl}/article-suggestions${this.buildReportingQuery(options)}`);
+  }
+
+  getReportingFacturesFournisseur(options: any = {}): Observable<any> {
+    return this.http.get(`${this.achatReportingUrl}/factures-fournisseur${this.buildReportingQuery(options)}`);
+  }
+
+  getReportingAchatsFournisseurs(options: any = {}): Observable<any> {
+    return this.http.get(`${this.achatReportingUrl}/achats-fournisseurs${this.buildReportingQuery(options)}`);
+  }
+
+  getReportingAchatsArticles(options: any = {}): Observable<any> {
+    return this.http.get(`${this.achatReportingUrl}/achats-articles${this.buildReportingQuery(options)}`);
+  }
+
   // Sauvegarder un détail (accepte un objet ou un tableau)
   saveDetail(data: any): Observable<any> {
     return this.http.post(`${this.achatsBaseUrl}/save`, data);
@@ -100,6 +137,18 @@ export class AchatsService {
     return this.http.get(`${this.facturesFournisseurUrl}/${id}`);
   }
 
+  updateFactureFournisseur(id: number, data: any): Observable<any> {
+    return this.http.put(`${this.facturesFournisseurUrl}/${id}`, data);
+  }
+
+  saveFactureFournisseurDetails(lignes: any[]): Observable<any> {
+    return this.http.post(`${this.facturesFournisseurUrl}/save-details`, { lignes });
+  }
+
+  deleteFactureFournisseurLignes(ids: number[]): Observable<any> {
+    return this.http.post(`${this.facturesFournisseurUrl}/delete-lignes`, { ids });
+  }
+
   // Récupérer les commandes non facturées
   getCommandesNonFacturees(): Observable<any> {
     return this.http.get(`${this.facturesFournisseurUrl}/commandes-non-facturees`);
@@ -108,6 +157,10 @@ export class AchatsService {
   // Créer une facture depuis une commande
   createFactureFournisseurFromCommande(commandeId: number): Observable<any> {
     return this.http.post(`${this.facturesFournisseurUrl}/from-commande`, { commandeId });
+  }
+
+  createFactureFournisseurManual(data: any): Observable<any> {
+    return this.http.post(`${this.facturesFournisseurUrl}/manual`, data);
   }
 
   // Supprimer une facture fournisseur
@@ -121,6 +174,16 @@ export class AchatsService {
   }
 
   // ================= RÉCEPTION =================
+
+  analyzeFactureFournisseurScan(scanFile: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('scan', scanFile);
+    return this.http.post(`${this.facturesFournisseurUrl}/analyze-scan`, formData);
+  }
+
+  createFactureFournisseurFromScan(scanData: any): Observable<any> {
+    return this.http.post(`${this.facturesFournisseurUrl}/from-scan`, scanData);
+  }
 
   private receptionsUrl = `${this.apiUrl}/receptions`;
 
@@ -144,6 +207,10 @@ export class AchatsService {
   // Créer une réception depuis une commande
   createReceptionFromCommande(commandeId: number, details?: any[]): Observable<any> {
     return this.http.post(`${this.receptionsUrl}/from-commande`, { commandeId, details: details || null });
+  }
+
+  createReceptionFromStockEntree(entreeStockId: number): Observable<any> {
+    return this.http.post(`${this.receptionsUrl}/from-stock-entree`, { entreeStockId });
   }
 
   // Récupérer une réception par ID
@@ -262,4 +329,3 @@ export class AchatsService {
     });
   }
 }
-

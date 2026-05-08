@@ -1,6 +1,37 @@
 const { getConnection } = require('../../config/database');
 
-// Récupérer tous les bons de commande avec pagination (type = 2)
+const buildReceivedByArticleMap = (rows) => new Map(
+  (Array.isArray(rows) ? rows : []).map((row) => [
+    Number(row?.article_id || 0),
+    Number(row?.quantite_receptionnee || 0)
+  ])
+);
+
+const allocateReceptionStateByArticle = (details, receivedByArticleMap) => {
+  const remainingByArticle = new Map(receivedByArticleMap || []);
+
+  return (Array.isArray(details) ? details : []).map((detail) => {
+    const articleKey = Number(detail?.article_id || 0);
+    const orderedQty = Number(detail?.quantite || 0);
+    const articleReceived = Number(remainingByArticle.get(articleKey) || 0);
+    const receivedOnLine = Math.max(0, Math.min(orderedQty, articleReceived));
+    const remainingQty = Math.max(0, orderedQty - receivedOnLine);
+
+    if (articleKey > 0) {
+      remainingByArticle.set(articleKey, Math.max(0, articleReceived - receivedOnLine));
+    }
+
+    return {
+      ...detail,
+      quantite_commandee: orderedQty,
+      quantite_receptionnee: receivedOnLine,
+      quantite_restante: remainingQty,
+      etat: remainingQty <= 0 ? 1 : 0
+    };
+  });
+};
+
+// RÃ©cupÃ©rer tous les bons de commande avec pagination (type = 2)
 const getAllBonCommande = async (options = {}, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
   try {
@@ -17,13 +48,20 @@ const getAllBonCommande = async (options = {}, sequelizeConnection = null) => {
     const safePageSize = parseInt(pageSize) || 25;
     const offset = (safePage - 1) * safePageSize;
 
-    // Vérifier que orderBy est une colonne valide
-    const validColumns = ['numero', 'date', 'fournisseur', 'description'];
+    // VÃ©rifier que orderBy est une colonne valide
+    const validColumns = ['numero', 'date', 'fournisseur', 'description', 'progression'];
     const safeOrderBy = validColumns.includes(orderBy) ? orderBy : 'date';
     const safeOrderDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
     
-    // Mapper les colonnes pour l'ORDER BY dans la requête SQL
-    const orderByColumn = safeOrderBy === 'fournisseur' ? 'p.nom' : `a.${safeOrderBy}`;
+    // Mapper les colonnes pour l'ORDER BY dans la requÃªte SQL
+    const orderByColumn = safeOrderBy === 'fournisseur'
+      ? 'p.nom'
+      : safeOrderBy === 'progression'
+        ? `CASE
+             WHEN ISNULL(cmd.total_commande, 0) <= 0 THEN 0
+             ELSE (ISNULL(rec.total_receptionnee, 0) * 100.0) / NULLIF(cmd.total_commande, 0)
+           END`
+        : `a.${safeOrderBy}`;
 
     // Construire la clause WHERE pour la recherche - type = 2 pour bon de commande
     let whereClause = 'WHERE a.type = 2';
@@ -38,7 +76,7 @@ const getAllBonCommande = async (options = {}, sequelizeConnection = null) => {
       replacements.search = `%${search.trim()}%`;
     }
 
-    // Requête avec pagination basée sur la requête spécifiée
+    // RequÃªte avec pagination basÃ©e sur la requÃªte spÃ©cifiÃ©e
     // On ajoute document_id pour les actions (modifier/supprimer)
     const query = `
       SELECT 
@@ -46,7 +84,10 @@ const getAllBonCommande = async (options = {}, sequelizeConnection = null) => {
         numero,
         date,
         fournisseur,
-        description
+        description,
+        total_commande,
+        total_receptionnee,
+        progression_percent
       FROM (
         SELECT 
           a.document_id,
@@ -54,16 +95,37 @@ const getAllBonCommande = async (options = {}, sequelizeConnection = null) => {
           a.date,
           p.nom AS fournisseur,
           a.description,
+          ISNULL(cmd.total_commande, 0) AS total_commande,
+          ISNULL(rec.total_receptionnee, 0) AS total_receptionnee,
+          CAST(ROUND(
+            CASE
+              WHEN ISNULL(cmd.total_commande, 0) <= 0 THEN 0
+              ELSE (ISNULL(rec.total_receptionnee, 0) * 100.0) / NULLIF(cmd.total_commande, 0)
+            END,
+            2
+          ) AS DECIMAL(10,2)) AS progression_percent,
           ROW_NUMBER() OVER (ORDER BY ${orderByColumn} ${safeOrderDirection}) AS RowNum
         FROM achat_document a
         INNER JOIN partenaire p ON p.part_id = a.part_id AND p.type = 2
+        LEFT JOIN (
+          SELECT document_id, SUM(ISNULL(quantite, 0)) AS total_commande
+          FROM achat_document_detail
+          GROUP BY document_id
+        ) cmd ON cmd.document_id = a.document_id
+        LEFT JOIN (
+          SELECT s.parent AS commande_id, SUM(ISNULL(sd.quantite, 0)) AS total_receptionnee
+          FROM stock s
+          INNER JOIN stock_detail sd ON sd.stock_id = s.id
+          WHERE s.type = 1 AND (s.etat = 1 OR s.etat IS NULL)
+          GROUP BY s.parent
+        ) rec ON rec.commande_id = a.document_id
         ${whereClause}
       ) AS PaginatedResults
       WHERE RowNum > ${offset} AND RowNum <= ${offset + safePageSize}
       ORDER BY RowNum
     `;
     
-    // Requête pour compter le total
+    // RequÃªte pour compter le total
     const countReplacements = search && search.trim() ? { search: `%${search.trim()}%` } : {};
     const countQuery = `
       SELECT COUNT(*) as total
@@ -72,7 +134,7 @@ const getAllBonCommande = async (options = {}, sequelizeConnection = null) => {
       ${whereClause}
     `;
 
-    // Exécuter les requêtes
+    // ExÃ©cuter les requÃªtes
     let results, countResult;
     
     try {
@@ -98,8 +160,8 @@ const getAllBonCommande = async (options = {}, sequelizeConnection = null) => {
         results = queryResult ? [queryResult] : [];
       }
     } catch (queryError) {
-      console.error('[getAllBonCommande] Erreur lors de la requête:', queryError);
-      throw new Error(`Erreur lors de la récupération des bons de commande: ${queryError.message || 'Erreur inconnue'}`);
+      console.error('[getAllBonCommande] Erreur lors de la requÃªte:', queryError);
+      throw new Error(`Erreur lors de la rÃ©cupÃ©ration des bons de commande: ${queryError.message || 'Erreur inconnue'}`);
     }
 
     const total = countResult[0]?.total || 0;
@@ -120,12 +182,12 @@ const getAllBonCommande = async (options = {}, sequelizeConnection = null) => {
   }
 };
 
-// Récupérer un bon de commande par ID
+// RÃ©cupÃ©rer un bon de commande par ID
 const getBonCommandeById = async (id) => {
   const sequelize = getConnection();
   
   try {
-    // Récupérer les infos principales du bon de commande
+    // RÃ©cupÃ©rer les infos principales du bon de commande
     const bonCommandeResult = await sequelize.query(
       'SELECT document_id, numero, date, description, part_id, contact_id, type FROM achat_document WHERE document_id = :id',
       {
@@ -140,7 +202,7 @@ const getBonCommandeById = async (id) => {
 
     const partId = bonCommande.part_id;
 
-    // Récupérer les détails du bon de commande (+ infos article pour afficher l'article même sans quill)
+    // RÃ©cupÃ©rer les dÃ©tails du bon de commande (+ infos article pour afficher l'article mÃªme sans quill)
     let details = [];
     try {
       details = await sequelize.query(
@@ -158,14 +220,14 @@ const getBonCommandeById = async (id) => {
          FROM achat_document_detail d
          LEFT JOIN article a ON a.article_id = d.article_id
          WHERE d.document_id = :id
-         ORDER BY d.id DESC`,
+         ORDER BY d.id ASC`,
         {
           replacements: { id },
           type: sequelize.QueryTypes.SELECT,
         }
       );
       
-      // Essayer de récupérer les désignations quill séparément
+      // Essayer de rÃ©cupÃ©rer les dÃ©signations quill sÃ©parÃ©ment
       try {
         const quillData = await sequelize.query(
           `SELECT quill_id, designation FROM achat_document_quill WHERE quill_id IN (
@@ -177,7 +239,7 @@ const getBonCommandeById = async (id) => {
           }
         );
         
-        // Fusionner les désignations quill avec les détails
+        // Fusionner les dÃ©signations quill avec les dÃ©tails
         if (Array.isArray(quillData) && quillData.length > 0) {
           const quillMap = new Map(quillData.map(q => [q.quill_id, q.designation]));
           details = details.map(d => ({
@@ -187,18 +249,38 @@ const getBonCommandeById = async (id) => {
         }
       } catch (quillError) {
         console.warn('[getBonCommandeById] Table achat_document_quill non accessible:', quillError.message);
-        // Continuer sans les données quill
+        // Continuer sans les donnÃ©es quill
         details = details.map(d => ({
           ...d,
           designation: d.description || d.article_nom || ''
         }));
       }
+
+      const receivedRows = await sequelize.query(
+        `
+          SELECT
+            sd.article_id,
+            SUM(ISNULL(sd.quantite, 0)) AS quantite_receptionnee
+          FROM stock s
+          INNER JOIN stock_detail sd ON sd.stock_id = s.id
+          WHERE s.type = 1
+            AND s.parent = :id
+            AND (s.etat = 1 OR s.etat IS NULL)
+          GROUP BY sd.article_id
+        `,
+        {
+          replacements: { id },
+          type: sequelize.QueryTypes.SELECT,
+        }
+      );
+
+      details = allocateReceptionStateByArticle(details, buildReceivedByArticleMap(receivedRows));
     } catch (detailError) {
-      console.error('[getBonCommandeById] Erreur récupération détails:', detailError.message);
+      console.error('[getBonCommandeById] Erreur rÃ©cupÃ©ration dÃ©tails:', detailError.message);
       details = [];
     }
 
-    // Récupérer les infos du partenaire (fournisseur)
+    // RÃ©cupÃ©rer les infos du partenaire (fournisseur)
     let Infos = [];
     try {
       Infos = await sequelize.query(
@@ -212,7 +294,7 @@ const getBonCommandeById = async (id) => {
       );
     } catch (infoError) {
       console.warn('[getBonCommandeById] Vue v_partenaire_infos non accessible, utilisation de partenaire:', infoError.message);
-      // Fallback: requête directe sur la table partenaire
+      // Fallback: requÃªte directe sur la table partenaire
       try {
         Infos = await sequelize.query(
           `SELECT nom, telephone, email, adresse, ice, cin, rc, IF_, PATENTE, cnss 
@@ -224,12 +306,12 @@ const getBonCommandeById = async (id) => {
           }
         );
       } catch (partenaireError) {
-        console.error('[getBonCommandeById] Erreur récupération partenaire:', partenaireError.message);
+        console.error('[getBonCommandeById] Erreur rÃ©cupÃ©ration partenaire:', partenaireError.message);
         Infos = [];
       }
     }
 
-    // Récupérer les infos de condition
+    // RÃ©cupÃ©rer les infos de condition
     let condition = [];
     try {
       condition = await sequelize.query(
@@ -256,7 +338,7 @@ const getBonCommandeById = async (id) => {
       condition: condition || []
     };
   } catch (error) {
-    console.error('[getBonCommandeById] Erreur générale:', error);
+    console.error('[getBonCommandeById] Erreur gÃ©nÃ©rale:', error);
     throw error;
   }
 };  
@@ -277,7 +359,7 @@ const formatToSqlDateTime = (value) => {
   
   // Si la valeur contient 'T' (format ISO), la convertir
   if (dateStr.includes('T')) {
-    // Enlever le 'Z' à la fin si présent (UTC)
+    // Enlever le 'Z' Ã  la fin si prÃ©sent (UTC)
     dateStr = dateStr.replace('Z', '');
     // Remplacer 'T' par un espace
     dateStr = dateStr.replace('T', ' ');
@@ -289,8 +371,8 @@ const formatToSqlDateTime = (value) => {
     return dateStr;
   }
   
-  // Si la valeur est déjà au format SQL (YYYY-MM-DD HH:mm:ss), la retourner telle quelle
-  // Vérifier si c'est un format de date valide
+  // Si la valeur est dÃ©jÃ  au format SQL (YYYY-MM-DD HH:mm:ss), la retourner telle quelle
+  // VÃ©rifier si c'est un format de date valide
   if (dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
     return dateStr;
   }
@@ -317,17 +399,17 @@ const formatToSqlDateTime = (value) => {
 
 // Ajouter un bon de commande (type = 2)
 const addBonCommande = async ({ numero, date, description, part_id, contact_id, etat, type, parent }, sequelizeConnection = null) => {
-  // Toujours obtenir l'instance Sequelize pour QueryTypes, même si une transaction est passée
+  // Toujours obtenir l'instance Sequelize pour QueryTypes, mÃªme si une transaction est passÃ©e
   const sequelize = getConnection();
   const { getCompteurCurrent } = require('../../services/compteur.service');
   
-  // Si une transaction est fournie, l'utiliser, sinon en créer une nouvelle
+  // Si une transaction est fournie, l'utiliser, sinon en crÃ©er une nouvelle
   const executeInTransaction = async (callback) => {
     if (sequelizeConnection) {
       // Si une connexion/transaction est fournie, l'utiliser directement
       return await callback(sequelizeConnection);
     } else {
-      // Sinon, créer une nouvelle transaction
+      // Sinon, crÃ©er une nouvelle transaction
       return await sequelize.transaction(async (t) => {
         return await callback(t);
       });
@@ -346,7 +428,7 @@ const addBonCommande = async ({ numero, date, description, part_id, contact_id, 
         if (compteurCode) {
           const compteurActuel = await getCompteurCurrent(compteurCode);
           if (compteurActuel === null || compteurActuel === undefined) {
-            throw new Error(`Impossible de récupérer le compteur ${compteurCode}`);
+            throw new Error(`Impossible de rÃ©cupÃ©rer le compteur ${compteurCode}`);
           }
           
           const anneeCourte = new Date().getFullYear().toString().slice(2);
@@ -425,18 +507,18 @@ const addBonCommande = async ({ numero, date, description, part_id, contact_id, 
       if (documentId) {
         return { document_id: documentId, numero: numeroFinal };
       } else {
-        throw new Error('Erreur lors de la création du bon de commande : aucun ID retourné');
+        throw new Error('Erreur lors de la crÃ©ation du bon de commande : aucun ID retournÃ©');
       }
     } catch (error) {
-      console.error('❌ Erreur lors de l\'insertion du bon de commande:', error);
+      console.error('âŒ Erreur lors de l\'insertion du bon de commande:', error);
       throw new Error(`Erreur lors de l'ajout du bon de commande: ${error.message || 'Erreur inconnue'}`);
     }
   });
 };
 
-// Sauvegarder un détail de bon de commande (Insert ou Update)
+// Sauvegarder un dÃ©tail de bon de commande (Insert ou Update)
 const saveDetail = async (detailData, sequelizeConnection = null) => {
-  // Toujours obtenir l'instance Sequelize pour QueryTypes, même si une transaction est passée
+  // Toujours obtenir l'instance Sequelize pour QueryTypes, mÃªme si une transaction est passÃ©e
   const sequelize = getConnection();
   const { 
     id, 
@@ -518,7 +600,7 @@ const saveDetail = async (detailData, sequelizeConnection = null) => {
 
 // Sauvegarder les infos de bon de commande
 const saveInfo = async (infoData, sequelizeConnection = null) => {
-  // Toujours obtenir l'instance Sequelize pour QueryTypes, même si une transaction est passée
+  // Toujours obtenir l'instance Sequelize pour QueryTypes, mÃªme si une transaction est passÃ©e
   const sequelize = getConnection();
   const { document_id, date, condition, expedition, transporteur, type, etat } = infoData;
   
@@ -549,7 +631,7 @@ const saveInfo = async (infoData, sequelizeConnection = null) => {
   return { success: true };
 };
 
-// Mettre à jour un bon de commande
+// Mettre Ã  jour un bon de commande
 const updateBonCommande = async (id, bonCommandeData) => {
   const sequelize = getConnection();
   const { date, description, part_id, contact_id } = bonCommandeData;
@@ -573,13 +655,13 @@ const deleteBonCommande = async (id) => {
   const sequelize = getConnection();
   
   return await sequelize.transaction(async (t) => {
-    // Récupérer les IDs des détails pour supprimer les quill associés
+    // RÃ©cupÃ©rer les IDs des dÃ©tails pour supprimer les quill associÃ©s
     const details = await sequelize.query(
       'SELECT id FROM achat_document_detail WHERE document_id = :id',
       { replacements: { id }, type: sequelize.QueryTypes.SELECT, transaction: t }
     );
     
-    // Supprimer les quill associés aux détails
+    // Supprimer les quill associÃ©s aux dÃ©tails
     if (details && details.length > 0) {
       const detailIds = details.map(d => d.id);
       const placeholders = detailIds.map((_, index) => `:id${index}`).join(',');
@@ -590,7 +672,7 @@ const deleteBonCommande = async (id) => {
       
     }
     
-    // Supprimer les détails
+    // Supprimer les dÃ©tails
     await sequelize.query(
       'DELETE FROM achat_document_detail WHERE document_id = :id',
       { replacements: { id }, transaction: t }
@@ -630,7 +712,7 @@ const deleteLignesParIds = async (ids) => {
   return { success: true, deletedCount: ids.length };
 };
 
-// Récupérer les données du bon de commande pour génération PDF
+// RÃ©cupÃ©rer les donnÃ©es du bon de commande pour gÃ©nÃ©ration PDF
 const getBonCommandeForPDF = async (id) => {
   const sequelize = getConnection();
   
@@ -641,7 +723,7 @@ const getBonCommandeForPDF = async (id) => {
   }
   
   try {
-    // Requête principale pour récupérer les infos du bon de commande
+    // RequÃªte principale pour rÃ©cupÃ©rer les infos du bon de commande
     const mainQuery = `
       SELECT  
         a.document_id, 
@@ -665,13 +747,13 @@ const getBonCommandeForPDF = async (id) => {
     });
     
     if (!mainResult || mainResult.length === 0) {
-      console.log(`[getBonCommandeForPDF] Aucun bon de commande trouvé pour ID: ${numericId}`);
+      console.log(`[getBonCommandeForPDF] Aucun bon de commande trouvÃ© pour ID: ${numericId}`);
       return [];
     }
     
     const bonCommande = mainResult[0];
     
-    // Récupérer les détails des articles
+    // RÃ©cupÃ©rer les dÃ©tails des articles
     const detailsQuery = `
       SELECT 
         d.id,
@@ -693,9 +775,9 @@ const getBonCommandeForPDF = async (id) => {
       type: sequelize.QueryTypes.SELECT
     });
     
-    // Combiner les données
+    // Combiner les donnÃ©es
     if (details.length === 0) {
-      console.log(`[getBonCommandeForPDF] Bon de commande ${numericId} sans détails`);
+      console.log(`[getBonCommandeForPDF] Bon de commande ${numericId} sans dÃ©tails`);
       return [{
         ...bonCommande,
         article_cod: '',
@@ -708,13 +790,13 @@ const getBonCommandeForPDF = async (id) => {
       }];
     }
     
-    // Fusionner les infos du bon de commande avec chaque ligne de détail
+    // Fusionner les infos du bon de commande avec chaque ligne de dÃ©tail
     const results = details.map(detail => ({
       ...bonCommande,
       ...detail
     }));
     
-    console.log(`[getBonCommandeForPDF] ${results.length} ligne(s) trouvée(s) pour document_id: ${numericId}`);
+    console.log(`[getBonCommandeForPDF] ${results.length} ligne(s) trouvÃ©e(s) pour document_id: ${numericId}`);
     
     return results;
   } catch (error) {

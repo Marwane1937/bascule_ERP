@@ -66,9 +66,7 @@
 /* En-têtes de colonnes */
 .column-header {
   position: relative;
-}
-
-.column-header:hover .column-menu-btn {
+}.column-header:hover .column-menu-btn {
   opacity: 1 !important;
 }
 
@@ -158,4 +156,3 @@
 .sortable:hover i {
   opacity: 1;
 }
-

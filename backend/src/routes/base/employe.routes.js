@@ -17,6 +17,9 @@ router.use(databaseInjector.injectConnection.bind(databaseInjector));
 router.get('/actifs', (req, res, next) => {
   employeController.getEmployesActifs(req, res).catch(next);
 });
+router.get('/autocomplete', (req, res, next) => {
+  employeController.getEmployesAutocomplete(req, res).catch(next);
+});
 router.get('/', (req, res, next) => {
   employeController.getEmployes(req, res).catch(next);
 });

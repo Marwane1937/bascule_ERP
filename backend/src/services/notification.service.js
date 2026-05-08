@@ -2,6 +2,18 @@ const Notification = require('../models/notification.model');
 const sequelize = require('../config/database');
 
 class NotificationService {
+  normalizeNotificationId(notificationId) {
+    if (typeof notificationId === 'number' && Number.isFinite(notificationId)) {
+      return notificationId;
+    }
+
+    if (typeof notificationId === 'string' && notificationId.trim() !== '') {
+      const parsed = Number(notificationId);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    return null;
+  }
   /**
    * Récupérer toutes les notifications
    * @param {object} filters - Filtres (type, etat, dateFrom, dateTo)
@@ -161,9 +173,8 @@ class NotificationService {
    */
   async getNotificationById(notificationId, userId, sequelizeConnection = null) {
     try {
-      // Vérifier si l'ID est un nombre (les notifications calculées ont des IDs string)
-      if (typeof notificationId === 'string' || isNaN(parseInt(notificationId))) {
-        // C'est une notification calculée, elle n'existe pas dans la base de données
+      const normalizedId = this.normalizeNotificationId(notificationId);
+      if (normalizedId === null) {
         return null;
       }
 
@@ -178,7 +189,7 @@ class NotificationService {
       `;
 
       const result = await finalSequelize.query(query, {
-        replacements: { notificationId: parseInt(notificationId) },
+        replacements: { notificationId: normalizedId },
         type: finalSequelize.QueryTypes.SELECT
       });
 
@@ -194,9 +205,8 @@ class NotificationService {
    */
   async markAsRead(notificationId, userId, sequelizeConnection = null) {
     try {
-      // Vérifier si l'ID est un nombre (les notifications calculées ont des IDs string)
-      if (typeof notificationId === 'string' || isNaN(parseInt(notificationId))) {
-        // Les notifications calculées ne peuvent pas être marquées comme lues
+      const normalizedId = this.normalizeNotificationId(notificationId);
+      if (normalizedId === null) {
         throw new Error('Les notifications calculées ne peuvent pas être marquées comme lues');
       }
 
@@ -205,7 +215,7 @@ class NotificationService {
       const finalSequelize = sequelizeConnection || (getConnection ? getConnection() : Notification.sequelize || require('../config/database'));
       
       // Vérifier que la notification existe
-      const notification = await this.getNotificationById(notificationId, userId, sequelizeConnection);
+      const notification = await this.getNotificationById(normalizedId, userId, sequelizeConnection);
       if (!notification) {
         throw new Error('Notification non trouvée');
       }
@@ -218,7 +228,7 @@ class NotificationService {
       `;
 
       await finalSequelize.query(query, {
-        replacements: { notificationId: parseInt(notificationId) },
+        replacements: { notificationId: normalizedId },
         type: finalSequelize.QueryTypes.UPDATE
       });
 
@@ -279,9 +289,8 @@ class NotificationService {
    */
   async archive(notificationId, userId, sequelizeConnection = null) {
     try {
-      // Vérifier si l'ID est un nombre (les notifications calculées ont des IDs string)
-      if (typeof notificationId === 'string' || isNaN(parseInt(notificationId))) {
-        // Les notifications calculées ne peuvent pas être archivées
+      const normalizedId = this.normalizeNotificationId(notificationId);
+      if (normalizedId === null) {
         throw new Error('Les notifications calculées ne peuvent pas être archivées');
       }
 
@@ -289,7 +298,7 @@ class NotificationService {
       const getConnection = require('../config/database').getConnection;
       const finalSequelize = sequelizeConnection || (getConnection ? getConnection() : Notification.sequelize || require('../config/database'));
       
-      const notification = await this.getNotificationById(notificationId, userId, sequelizeConnection);
+      const notification = await this.getNotificationById(normalizedId, userId, sequelizeConnection);
       if (!notification) {
         throw new Error('Notification non trouvée');
       }
@@ -301,7 +310,7 @@ class NotificationService {
       `;
 
       await finalSequelize.query(query, {
-        replacements: { notificationId: parseInt(notificationId) },
+        replacements: { notificationId: normalizedId },
         type: finalSequelize.QueryTypes.UPDATE
       });
 
@@ -317,9 +326,8 @@ class NotificationService {
    */
   async restore(notificationId, userId, sequelizeConnection = null) {
     try {
-      // Vérifier si l'ID est un nombre (les notifications calculées ont des IDs string)
-      if (typeof notificationId === 'string' || isNaN(parseInt(notificationId))) {
-        // Les notifications calculées ne peuvent pas être restaurées
+      const normalizedId = this.normalizeNotificationId(notificationId);
+      if (normalizedId === null) {
         throw new Error('Les notifications calculées ne peuvent pas être restaurées');
       }
 
@@ -327,7 +335,7 @@ class NotificationService {
       const getConnection = require('../config/database').getConnection;
       const finalSequelize = sequelizeConnection || (getConnection ? getConnection() : Notification.sequelize || require('../config/database'));
       
-      const notification = await this.getNotificationById(notificationId, userId, sequelizeConnection);
+      const notification = await this.getNotificationById(normalizedId, userId, sequelizeConnection);
       if (!notification) {
         throw new Error('Notification non trouvée');
       }
@@ -339,7 +347,7 @@ class NotificationService {
       `;
 
       await finalSequelize.query(query, {
-        replacements: { notificationId: parseInt(notificationId) },
+        replacements: { notificationId: normalizedId },
         type: finalSequelize.QueryTypes.UPDATE
       });
 
@@ -355,9 +363,8 @@ class NotificationService {
    */
   async updateType(notificationId, type, sequelizeConnection = null) {
     try {
-      // Vérifier si l'ID est un nombre (les notifications calculées ont des IDs string)
-      if (typeof notificationId === 'string' || isNaN(parseInt(notificationId))) {
-        // Les notifications calculées ne peuvent pas avoir leur type modifié
+      const normalizedId = this.normalizeNotificationId(notificationId);
+      if (normalizedId === null) {
         throw new Error('Les notifications calculées ne peuvent pas avoir leur type modifié');
       }
 
@@ -372,7 +379,7 @@ class NotificationService {
       `;
 
       await finalSequelize.query(query, {
-        replacements: { notificationId: parseInt(notificationId), type },
+        replacements: { notificationId: normalizedId, type },
         type: finalSequelize.QueryTypes.UPDATE
       });
 
@@ -388,9 +395,8 @@ class NotificationService {
    */
   async delete(notificationId, userId, sequelizeConnection = null) {
     try {
-      // Vérifier si l'ID est un nombre (les notifications calculées ont des IDs string)
-      if (typeof notificationId === 'string' || isNaN(parseInt(notificationId))) {
-        // Les notifications calculées ne peuvent pas être supprimées
+      const normalizedId = this.normalizeNotificationId(notificationId);
+      if (normalizedId === null) {
         throw new Error('Les notifications calculées ne peuvent pas être supprimées');
       }
 
@@ -398,7 +404,7 @@ class NotificationService {
       const getConnection = require('../config/database').getConnection;
       const finalSequelize = sequelizeConnection || (getConnection ? getConnection() : Notification.sequelize || require('../config/database'));
       
-      const notification = await this.getNotificationById(notificationId, userId, sequelizeConnection);
+      const notification = await this.getNotificationById(normalizedId, userId, sequelizeConnection);
       if (!notification) {
         throw new Error('Notification non trouvée');
       }
@@ -406,7 +412,7 @@ class NotificationService {
       const query = `DELETE FROM document WHERE id = :notificationId`;
 
       await finalSequelize.query(query, {
-        replacements: { notificationId: parseInt(notificationId) },
+        replacements: { notificationId: normalizedId },
         type: finalSequelize.QueryTypes.DELETE
       });
 
@@ -537,5 +543,103 @@ class NotificationService {
   }
 }
 
-module.exports = new NotificationService();
+NotificationService.prototype.getExpiringContractsNotifications = async function getExpiringContractsNotifications(sequelizeConnection = null) {
+  try {
+    const getConnection = require('../config/database').getConnection;
+    const finalSequelize = sequelizeConnection || (getConnection ? getConnection() : Notification.sequelize || require('../config/database'));
 
+    const results = await finalSequelize.query('SELECT * FROM v_contrat_notification', {
+      type: finalSequelize.QueryTypes.SELECT
+    });
+
+    if (!Array.isArray(results) || results.length === 0) {
+      return [];
+    }
+
+    const numeros = Array.from(
+      new Set(
+        results
+          .map((item) => String(item?.numero || '').trim())
+          .filter((numero) => numero)
+      )
+    );
+
+    const contractMetaByNumero = new Map();
+
+    if (numeros.length > 0) {
+      const replacements = {};
+      const placeholders = numeros.map((numero, index) => {
+        const key = `numero${index}`;
+        replacements[key] = numero;
+        return `:${key}`;
+      });
+
+      const relatedContracts = await finalSequelize.query(
+        `
+          SELECT
+            s.id AS stock_id,
+            s.numero,
+            s.part_id,
+            s.parent,
+            s.date_expire,
+            CASE
+              WHEN s.date_expire IS NULL THEN NULL
+              ELSE DATEDIFF(DAY, CAST(GETDATE() AS DATE), CAST(s.date_expire AS DATE))
+            END AS jours_restants
+          FROM stock s
+          WHERE s.type = 50
+            AND s.numero IN (${placeholders.join(', ')})
+        `,
+        {
+          replacements,
+          type: finalSequelize.QueryTypes.SELECT
+        }
+      );
+
+      (Array.isArray(relatedContracts) ? relatedContracts : []).forEach((contract) => {
+        const key = String(contract?.numero || '').trim();
+        if (key) {
+          contractMetaByNumero.set(key, contract);
+        }
+      });
+    }
+
+    return results
+      .map((item) => {
+        const numero = String(item?.numero || '').trim();
+        const relatedContract = contractMetaByNumero.get(numero);
+        const totalHt = Number(item?.total_ht ?? 0);
+
+        if (!relatedContract || Number(relatedContract?.parent) !== 1) {
+          return null;
+        }
+
+        return {
+          id: `contract_expiring_${relatedContract?.stock_id || numero}`,
+          description: `Le contrat du client ${item?.client || ''} d'un montant de ${totalHt} dh va expirer bientot.`,
+          type: 3,
+          etat: 0,
+          lire: null,
+          date_alarme: relatedContract?.date_expire || new Date(),
+          emetteur: 'SYSTEM',
+          numero,
+          client: item?.client || '',
+          total_ht: totalHt,
+          jours_restants: relatedContract?.jours_restants,
+          part_id: relatedContract?.part_id,
+          parent: relatedContract?.parent ?? null,
+          stock_id: relatedContract?.stock_id,
+          redirectRoute: '/Contrat',
+          isCalculated: true,
+          notificationType: 'contract_expiring'
+        };
+      })
+      .filter((item) => item !== null)
+      .filter((item) => item.jours_restants === undefined || (item.jours_restants >= 0 && item.jours_restants <= 5));
+  } catch (error) {
+    console.error('[NotificationService] Erreur récupération notifications contrats expirants:', error);
+    return [];
+  }
+};
+
+module.exports = new NotificationService();

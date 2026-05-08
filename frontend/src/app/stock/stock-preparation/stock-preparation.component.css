@@ -1,0 +1,145 @@
+﻿.btn-gradient {
+  background: linear-gradient(135deg, #00b4db, #0083b0);
+  color: #fff;
+  border: none;
+  border-radius: 25px;
+  font-weight: 500;
+}
+
+.btn1-gradient {
+  background: linear-gradient(135deg, #4f46e5, #2563eb);
+  color: #fff;
+  border: none;
+  border-radius: 25px;
+  font-weight: 500;
+}
+
+.btn-gradient:hover,
+.btn1-gradient:hover {
+  filter: brightness(0.95);
+  color: #fff;
+}
+
+.modal-elegant {
+  border-radius: 15px;
+  overflow: hidden;
+}
+
+.modal-header-custom {
+  background: linear-gradient(135deg, #00b4db, #0083b0);
+  color: white;
+  border-bottom: none;
+}
+
+.table-wrap {
+  position: relative;
+  min-height: 280px;
+}
+
+.loader-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 16px 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.table-hover tbody tr:hover {
+  background-color: #f6f8fc;
+}
+
+.dropdown-item:disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sortable-header:hover {
+  background-color: #eef4ff;
+}
+
+.filter-row th {
+  padding: 0.35rem;
+  background: #f8f9fa;
+}
+
+.filter-row .form-control {
+  font-size: 0.85rem;
+}
+
+.preparation-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.progress-summary {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.progress-summary-text {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 0.35rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress-preparation {
+  height: 10px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-preparation .progress-bar {
+  background: linear-gradient(90deg, #2563eb, #10b981);
+  border-radius: 999px;
+}
+
+.progress-col {
+  width: 180px;
+  max-width: 180px;
+}
+
+.progress-cell {
+  width: 180px;
+  max-width: 180px;
+}
+
+.command-source-col {
+  width: 130px;
+  max-width: 130px;
+}
+
+.command-source-cell {
+  max-width: 130px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.client-col {
+  width: 170px;
+  max-width: 170px;
+}
+
+.client-cell {
+  max-width: 170px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

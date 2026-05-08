@@ -231,6 +231,29 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
     this.getBonCommandes();
   }
 
+  getCommandeQuantity(row: any): number {
+    return Number(row?.total_commande || 0);
+  }
+
+  getReceivedQuantity(row: any): number {
+    return Number(row?.total_receptionnee || 0);
+  }
+
+  getReceptionProgressPercent(row: any): number {
+    const total = this.getCommandeQuantity(row);
+    if (total <= 0) return 0;
+    return Math.max(0, Math.min(100, Number((((this.getReceivedQuantity(row) * 100) / total)).toFixed(2))));
+  }
+
+  getReceptionProgressText(row: any): string {
+    return `${this.getReceivedQuantity(row)} / ${this.getCommandeQuantity(row)} (${this.getReceptionProgressPercent(row).toFixed(0)}%)`;
+  }
+
+  getReceptionProgressTooltip(row: any): string {
+    const remaining = Math.max(0, this.getCommandeQuantity(row) - this.getReceivedQuantity(row));
+    return `Commande: ${this.getCommandeQuantity(row)} | Receptionne: ${this.getReceivedQuantity(row)} | Reste: ${remaining}`;
+  }
+
   toggleAdvancedFilters(): void {
     this.showAdvancedFilters = !this.showAdvancedFilters;
   }
@@ -557,4 +580,3 @@ export class BonCommandeComponent implements OnInit, AfterViewInit {
     this.cancelSelection();
   }
 }
-

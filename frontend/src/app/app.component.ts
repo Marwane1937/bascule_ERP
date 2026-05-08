@@ -15,6 +15,9 @@ import { filter } from 'rxjs/operators';
 export class AppComponent implements OnInit, OnDestroy {
   title = 'frontend';
   sidebarHidden = false;
+  mobileNavOpen = false;
+  private sidebarHiddenByFinanceReportingRoute = false;
+  private sidebarHiddenBeforeFinanceReporting = false;
   menuCategories: MenuCategory[] = [];
   filteredMenuCategories: MenuCategory[] = [];
   logoUrl: string = './assets/img/LOGO white.png'; // Logo par défaut
@@ -94,9 +97,13 @@ export class AppComponent implements OnInit, OnDestroy {
     // Nettoyer les overlays et backdrops à chaque changement de route
     this.router.events
       .pipe(filter(event => event instanceof NavigationEnd))
-      .subscribe(() => {
+      .subscribe((event) => {
         this.cleanupOverlays();
+        this.closeMobileMenuOnSmallScreen();
+        this.applyRouteSidebarVisibility(event as NavigationEnd);
       });
+
+    this.applyRouteSidebarVisibility(this.router.url);
 
     // Nettoyer les overlays au démarrage
     this.cleanupOverlays();
@@ -180,6 +187,25 @@ export class AppComponent implements OnInit, OnDestroy {
         })
       }))
       .filter((cat) => (cat.items || []).length > 0);
+
+    const profileItem = { name: 'Profil', route: '/Profile' };
+    const securityCategoryIndex = this.filteredMenuCategories.findIndex((cat) =>
+      String(cat.category || '').toLowerCase().includes('secur')
+    );
+
+    if (securityCategoryIndex >= 0) {
+      const securityCategory = this.filteredMenuCategories[securityCategoryIndex];
+      const alreadyExists = (securityCategory.items || []).some((item) => item.route === '/Profile');
+      if (!alreadyExists) {
+        securityCategory.items = [...(securityCategory.items || []), profileItem];
+      }
+    } else {
+      this.filteredMenuCategories.push({
+        category: 'Securite',
+        icon: 'fas fa-user-shield',
+        items: [profileItem]
+      });
+    }
   }
 
   hasAccessToRoute(route: string): boolean {
@@ -228,8 +254,68 @@ export class AppComponent implements OnInit, OnDestroy {
     });
   }
 
+  private applyRouteSidebarVisibility(eventOrUrl: NavigationEnd | string): void {
+    const url = typeof eventOrUrl === 'string'
+      ? eventOrUrl
+      : (eventOrUrl.urlAfterRedirects || eventOrUrl.url);
+
+    if (this.isFinanceReportingRoute(url)) {
+      if (!this.sidebarHiddenByFinanceReportingRoute) {
+        this.sidebarHiddenBeforeFinanceReporting = this.sidebarHidden;
+      }
+      this.sidebarHidden = true;
+      this.sidebarHiddenByFinanceReportingRoute = true;
+      return;
+    }
+
+    if (this.sidebarHiddenByFinanceReportingRoute) {
+      this.sidebarHidden = this.sidebarHiddenBeforeFinanceReporting;
+      this.sidebarHiddenByFinanceReportingRoute = false;
+    }
+  }
+
+  private isFinanceReportingRoute(url: string): boolean {
+    const normalizedUrl = String(url || '').split('?')[0].split('#')[0].toLowerCase();
+    return normalizedUrl === '/finance/reporting'
+      || normalizedUrl.startsWith('/finance/reporting/')
+      || normalizedUrl === '/vente/reporting'
+      || normalizedUrl.startsWith('/vente/reporting/')
+      || normalizedUrl === '/achat/reporting'
+      || normalizedUrl.startsWith('/achat/reporting/')
+      || normalizedUrl === '/stock/reporting'
+      || normalizedUrl.startsWith('/stock/reporting/');
+  }
+
   toggleSidebar() {
+    this.sidebarHiddenByFinanceReportingRoute = false;
+    this.sidebarHiddenBeforeFinanceReporting = false;
     this.sidebarHidden = !this.sidebarHidden;
+  }
+
+  toggleMobileMenu(event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+
+    if (!this.isMobileView()) {
+      return;
+    }
+
+    this.mobileNavOpen = !this.mobileNavOpen;
+  }
+
+  closeMobileMenu(): void {
+    this.mobileNavOpen = false;
+  }
+
+  closeMobileMenuOnSmallScreen(): void {
+    if (this.isMobileView()) {
+      this.mobileNavOpen = false;
+    }
+  }
+
+  isMobileView(): boolean {
+    return window.innerWidth <= 991.5;
   }
 
   toggleCaisseBlackMode(): void {

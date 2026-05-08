@@ -51,6 +51,11 @@ export class CaisseService {
     return this.http.put(url, { document, details });
   }
 
+  updateCaisseDocumentBySens(id: number, sens: number, document: any, details: any[]): Observable<any> {
+    const url = `${this.apiUrl}/caisse/${id}/details/${sens}`;
+    return this.http.put(url, { document, details });
+  }
+
   // Clôturer un document
   cloturerCaisseDocument(id: number): Observable<any> {
     const url = `${this.apiUrl}/caisse/${id}/cloturer`;
@@ -111,21 +116,21 @@ export class CaisseService {
   }
 
   // Générer le PDF de la caisse filtré par employé
-  generateCaissePDFByEmploye(caisseId: number, employeId: number): Observable<any> {
+  generateCaissePDFByEmploye(caisseId: number, employeId: number, sens?: number): Observable<any> {
     const url = `${this.apiUrl}/caisse-pdf/generate-by-employe`;
-    return this.http.post(url, { caisse_id: caisseId, employe_id: employeId });
+    return this.http.post(url, { caisse_id: caisseId, employe_id: employeId, sens });
   }
 
   // Envoyer le PDF de la caisse par employé via Telegram
-  sendCaissePDFByEmployeTelegram(caisseId: number, employeId: number, chatId: string, message?: string): Observable<any> {
+  sendCaissePDFByEmployeTelegram(caisseId: number, employeId: number, chatId: string, message?: string, sens?: number): Observable<any> {
     const url = `${this.apiUrl}/caisse-pdf/send-telegram-by-employe`;
-    return this.http.post(url, { caisse_id: caisseId, employe_id: employeId, chat_id: chatId, message });
+    return this.http.post(url, { caisse_id: caisseId, employe_id: employeId, chat_id: chatId, message, sens });
   }
 
   // Envoyer le PDF de la caisse par employé via WhatsApp (méthode conservée pour compatibilité)
-  sendCaissePDFByEmployeWhatsApp(caisseId: number, employeId: number, message?: string): Observable<any> {
+  sendCaissePDFByEmployeWhatsApp(caisseId: number, employeId: number, message?: string, sens?: number): Observable<any> {
     const url = `${this.apiUrl}/caisse-pdf/send-whatsapp-by-employe`;
-    return this.http.post(url, { caisse_id: caisseId, employe_id: employeId, message });
+    return this.http.post(url, { caisse_id: caisseId, employe_id: employeId, message, sens });
   }
   // Générer un rapport PDF pour les rubriques 2000/3000
   generateRapportGroup2000_3000(dateFrom: string, dateTo: string, caisseType?: string, rubriqueIds?: any[]): Observable<any> {
@@ -133,4 +138,3 @@ export class CaisseService {
     return this.http.post(url, { dateFrom, dateTo, caisseType, rubriqueIds });
   }
 }
-

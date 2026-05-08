@@ -52,6 +52,37 @@ console.error = (...args: any[]): void => {
   originalConsoleError.apply(console, args);
 };
 
+// ✅ NOUVEAU: Intercepter les warnings de console.warn pour les filtrer
+const originalConsoleWarn = console.warn;
+console.warn = (...args: any[]): void => {
+  const warnString = args.join(' ');
+  
+  // Liste des warnings à masquer
+  const warningsToHide = [
+    'quill Overwriting modules/mention', // Warnings Quill
+    'quill Overwriting', // Autres warnings Quill
+    'jQuery.Deferred exception', // Exceptions jQuery non critiques
+    'e.scrollbar is not a function', // Erreur scrollbar (si plugin non chargé)
+    '[AuthInterceptor] Token manquant pour la requête: /api/auth/login', // Warning normal pour login
+    'Token manquant pour la requête', // Autres warnings de token manquant pour login
+    'useblackbox.io', // Extensions de navigateur
+    'CORS policy', // CORS
+    'Access-Control-Allow-Origin', // CORS
+    'index.iife.js' // Extensions
+  ];
+  
+  // Vérifier si le warning doit être masqué
+  const shouldHide = warningsToHide.some(pattern => warnString.includes(pattern));
+  
+  if (shouldHide) {
+    // Ignorer silencieusement ces warnings
+    return;
+  }
+  
+  // Appeler la fonction originale pour les autres warnings
+  originalConsoleWarn.apply(console, args);
+};
+
 platformBrowserDynamic().bootstrapModule(AppModule)
   .catch(err => {
     // Erreur critique de bootstrap - doit être visible

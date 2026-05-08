@@ -230,3 +230,79 @@
   background-color: #218838;
   border-color: #1e7e34;
 }
+
+.dropdown-item[disabled],
+.dropdown-item.dropdown-item-disabled {
+  color: #8a9098 !important;
+  background-color: #f3f4f6 !important;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.dropdown-item[disabled]:hover,
+.dropdown-item.dropdown-item-disabled:hover {
+  color: #8a9098 !important;
+  background-color: #f3f4f6 !important;
+}
+
+.stock-table-wrap {
+  overflow-x: visible !important;
+}
+
+.stock-list-table {
+  table-layout: fixed;
+  width: 100%;
+  font-size: 0.82rem;
+}
+
+.stock-list-table th,
+.stock-list-table td {
+  vertical-align: middle;
+  padding: 0.26rem 0.3rem;
+}
+
+.stock-numero-cell,
+.stock-date-cell,
+.stock-status-cell,
+.stock-action-cell {
+  white-space: nowrap;
+}
+
+.stock-partner-cell,
+.stock-description-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.stock-list-table .dropdown-toggle,
+.stock-list-table .badge {
+  white-space: nowrap;
+}
+
+.stock-list-table .badge {
+  font-size: 0.72rem;
+  padding: 0.24rem 0.36rem;
+}
+
+.badge-success {
+  background-color: #28a745;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.badge-warning {
+  background-color: #ffc107;
+  color: #212529;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.stock-detail-table td,
+.stock-detail-table th {
+  vertical-align: middle;
+}

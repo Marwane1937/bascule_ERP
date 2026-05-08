@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import Swal from 'sweetalert2';
+import { environment } from 'src/environments/environment';
 
 declare var $: any;
 
@@ -10,6 +11,7 @@ declare var $: any;
   styleUrls: ['./ville.component.css']
 })
 export class VilleComponent implements OnInit {
+  private readonly apiUrl = environment.apiUrl;
   villes: any[] = [];
   loading: boolean = true;
 
@@ -52,7 +54,7 @@ export class VilleComponent implements OnInit {
       orderDirection: this.sortDirection
     };
 
-    this.http.get('http://localhost:3500/api/villes', { params }).subscribe({
+    this.http.get(`${this.apiUrl}/villes`, { params }).subscribe({
       next: (response: any) => {
         this.villes = response?.data || [];
         this.totalRecords = response?.pagination?.total || 0;
@@ -155,8 +157,8 @@ export class VilleComponent implements OnInit {
     }
 
     const url = this.isEditMode
-      ? `http://localhost:3500/api/villes/${this.currentVille.id}`
-      : 'http://localhost:3500/api/villes';
+      ? `${this.apiUrl}/villes/${this.currentVille.id}`
+      : `${this.apiUrl}/villes`;
 
     const method = this.isEditMode ? 'put' : 'post';
 
@@ -189,7 +191,7 @@ export class VilleComponent implements OnInit {
       cancelButtonText: 'Annuler'
     }).then((result) => {
       if (result.isConfirmed) {
-        this.http.delete(`http://localhost:3500/api/villes/${ville.id}`).subscribe({
+        this.http.delete(`${this.apiUrl}/villes/${ville.id}`).subscribe({
           next: () => {
             Swal.fire('Succès', 'Ville supprimée avec succès', 'success');
             this.getVilles();

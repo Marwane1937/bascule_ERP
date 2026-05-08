@@ -13,6 +13,10 @@ declare var bootstrap: any;
   styleUrls: ['./edit-demande-achat.component.css']
 })
 export class EditDemandeAchatComponent implements OnInit {
+  readonly destinationOptions = [
+    { value: 'client', label: 'Client' },
+    { value: 'stock', label: 'Stock' }
+  ];
   produits1: any[] = [];
   editInfos = false;
   DemandeAchatForm!: FormGroup;
@@ -31,6 +35,7 @@ export class EditDemandeAchatComponent implements OnInit {
     fournisseur: 'Nom du fournisseur',
     adresse: 'Adresse du fournisseur',
     date: new Date().toISOString().substring(0, 10),
+    date_fin: '',
     description: 'Description de la demande d\'achat',
   };
 
@@ -39,10 +44,12 @@ export class EditDemandeAchatComponent implements OnInit {
     designation: '',
     article_id: 0,
     qte: 1,
+    destination: 'stock',
     articleSearch: ''
   }];
 
   filteredArticles: { [key: number]: any[] } = {};
+  highlightedArticleIndex: { [key: number]: number } = {};
 
   selectedInfo = {
     document_id: this.route.snapshot.paramMap.get('document_id')!,
@@ -147,11 +154,13 @@ export class EditDemandeAchatComponent implements OnInit {
       fournisseur: fournisseurTrouve ? fournisseurTrouve.nom : 'Fournisseur inconnu',
       adresse: fournisseurTrouve ? fournisseurTrouve.adresse : '',
       date: data.date,
+      date_fin: data.date_fin || '',
       description: data.description || ''
     };
 
     this.DemandeAchatForm.patchValue({
       date: data.date,
+      date_fin: data.date_fin ? String(data.date_fin).substring(0, 10) : '',
       description: data.description,
       part_id: data.part_id,
       fournisseurSearch: fournisseurTrouve ? fournisseurTrouve.nom : ''
@@ -169,6 +178,7 @@ export class EditDemandeAchatComponent implements OnInit {
           article_id: detail.article_id,
           designation: detail.designation,
           qte: +detail.quantite,
+          destination: this.normalizeDestination(detail.destination || detail.description),
           articleSearch: produitTrouve ? produitTrouve.article_nom : ''
         };
       });
@@ -274,6 +284,7 @@ export class EditDemandeAchatComponent implements OnInit {
       article_id: 0,
       designation: '',
       qte: 1,
+      destination: 'stock',
       articleSearch: ''
     });
   }
@@ -288,6 +299,7 @@ export class EditDemandeAchatComponent implements OnInit {
   onArticleSearchChange(index: number, term: string) {
     if (!term) {
       this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
       return;
     }
 
@@ -295,6 +307,7 @@ export class EditDemandeAchatComponent implements OnInit {
 
     if (term.length === 0) {
       this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
       return;
     }
 
@@ -303,6 +316,7 @@ export class EditDemandeAchatComponent implements OnInit {
         this.filteredArticles[index] = this.produits1.filter((article: any) =>
           article.article_nom && article.article_nom.toLowerCase().includes(term)
         );
+        this.highlightedArticleIndex[index] = this.filteredArticles[index].length ? 0 : -1;
       });
       return;
     }
@@ -310,15 +324,57 @@ export class EditDemandeAchatComponent implements OnInit {
     this.filteredArticles[index] = this.produits1.filter((article: any) =>
       article.article_nom && article.article_nom.toLowerCase().includes(term)
     );
+    this.highlightedArticleIndex[index] = this.filteredArticles[index].length ? 0 : -1;
+  }
+
+  onArticleSearchKeydown(index: number, event: KeyboardEvent) {
+    const articles = this.filteredArticles[index] || [];
+    if (!articles.length) {
+      return;
+    }
+
+    const currentIndex = this.highlightedArticleIndex[index] ?? -1;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.highlightedArticleIndex[index] = currentIndex < articles.length - 1 ? currentIndex + 1 : 0;
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.highlightedArticleIndex[index] = currentIndex > 0 ? currentIndex - 1 : articles.length - 1;
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const selectedArticle = articles[currentIndex >= 0 ? currentIndex : 0];
+      if (selectedArticle) {
+        this.selectArticle(index, selectedArticle);
+      }
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
+    }
   }
 
   selectArticle(index: number, article: any) {
     this.produits[index].article_id = article.article_id;
     this.produits[index].articleSearch = article.article_nom;
     this.filteredArticles[index] = [];
+    this.highlightedArticleIndex[index] = -1;
 
     this.produits[index].designation = article.article_nom;
     this.produits[index].qte = 1;
+  }
+
+  normalizeDestination(value: any): 'client' | 'stock' {
+    const normalized = String(value || '').trim().toLowerCase();
+    return normalized === 'client' ? 'client' : 'stock';
   }
 
   AllFournisseurs() {
@@ -392,6 +448,7 @@ export class EditDemandeAchatComponent implements OnInit {
           article_id: p.article_id,
           designation: p.designation,
           qte: p.qte,
+          description: this.normalizeDestination(p.destination),
           document_id,
           update_mode: 'I'
         };
@@ -400,10 +457,11 @@ export class EditDemandeAchatComponent implements OnInit {
         continue;
       }
 
-      const modifie = (
+        const modifie = (
         p.designation !== pOriginal.designation ||
         p.article_id !== pOriginal.article_id ||
-        p.qte !== pOriginal.qte
+        p.qte !== pOriginal.qte ||
+        this.normalizeDestination(p.destination) !== this.normalizeDestination(pOriginal.destination)
       );
 
       if (modifie) {
@@ -412,6 +470,7 @@ export class EditDemandeAchatComponent implements OnInit {
           article_id: p.article_id,
           designation: p.designation,
           qte: p.qte,
+          description: this.normalizeDestination(p.destination),
           document_id,
           update_mode: 'U',
         };

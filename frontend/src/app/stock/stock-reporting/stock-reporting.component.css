@@ -84,6 +84,98 @@
   background-color: #fff3cd !important;
 }
 
+.stock-kpi {
+  min-height: 76px;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid #e5e7eb;
+  border-left: 4px solid #6c757d;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.stock-kpi-label {
+  color: #6c757d;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.stock-kpi strong {
+  color: #111827;
+  font-size: 1.1rem;
+}
+
+.stock-kpi-success {
+  border-left-color: #198754;
+}
+
+.stock-kpi-danger {
+  border-left-color: #dc3545;
+}
+
+.stock-kpi-primary {
+  border-left-color: #0d6efd;
+}
+
+.stock-analysis-section {
+  padding: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.stock-analysis-header h5 {
+  margin: 0 0 0.9rem;
+  color: #111827;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.stock-analysis-panel {
+  min-height: 100%;
+  padding: 0.85rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+}
+
+.stock-analysis-title {
+  margin-bottom: 0.65rem;
+  color: #1f2937;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.stock-analysis-metric,
+.stock-analysis-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.38rem 0;
+  border-top: 1px solid #f1f5f9;
+  color: #475569;
+  font-size: 0.82rem;
+}
+
+.stock-analysis-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stock-analysis-empty {
+  padding: 0.7rem 0;
+  color: #94a3b8;
+  font-size: 0.82rem;
+}
+
 /* Animation pour le chargement */
 .spinner-border {
   width: 2rem;

@@ -1,5 +1,5 @@
-<div class="container py-4">
-  <div class="page-inner">
+﻿<div class="container-fluid py-4 avoir-page" [class.avoir-page--detail]="detailMode">
+  <div class="page-inner" [class.page-inner--detail]="detailMode">
 
     <!-- En-tête -->
     <div class="page-header mb-4">
@@ -22,12 +22,20 @@
 
     <!-- Boutons d'action -->
     <div class="row mb-4">
-      <div class="col-12 d-flex justify-content-end gap-2 align-items-center"
+      <div class="col-12 d-flex justify-content-between gap-2 align-items-center"
         style="flex-wrap: nowrap !important; overflow-x: visible;">
-        <button type="button" class="btn btn-gradient px-4 py-2 shadow-sm" data-bs-toggle="modal"
-          data-bs-target="#addAvoirModal">
-          <i class="fas fa-plus me-2"></i> Ajouter un Avoir Client
+        <button type="button" class="btn" [ngClass]="detailMode ? 'btn-primary' : 'btn-outline-primary'"
+          (click)="toggleDetailMode()">
+          <i class="fas" [ngClass]="detailMode ? 'fa-compress-alt' : 'fa-expand-alt'"></i>
+          {{ detailMode ? 'Affichage compact' : 'Afficher detail' }}
         </button>
+        <div class="d-flex justify-content-end gap-2 align-items-center">
+          <button type="button" class="btn btn-gradient px-4 py-2 shadow-sm" data-bs-toggle="modal"
+            (click)="prepareAddAvoir()"
+            data-bs-target="#addAvoirModal">
+            <i class="fas fa-plus me-2"></i> Ajouter un Avoir Client
+          </button>
+        </div>
       </div>
     </div>
 
@@ -36,7 +44,9 @@
       <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content modal-elegant shadow">
           <div class="modal-header modal-header-custom">
-            <h5 class="modal-title text-white" id="addAvoirModalLabel">➕ Nouveau Avoir Client</h5>
+            <h5 class="modal-title text-white" id="addAvoirModalLabel">
+              {{ isEditMode ? 'Modifier Avoir Client' : 'Nouveau Avoir Client' }}
+            </h5>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
@@ -47,13 +57,13 @@
                   <label class="form-label">Type d'avoir</label>
                   <div class="btn-group w-100" role="group">
                     <input type="radio" class="btn-check" name="typeAvoir" id="typeFinancier"
-                      [checked]="typeAvoir === 'FINANCIER'" (change)="onChangeTypeAvoir('FINANCIER')">
+                      [checked]="typeAvoir === 'FINANCIER'" [disabled]="isEditMode" (change)="onChangeTypeAvoir('FINANCIER')">
                     <label class="btn btn-outline-primary" for="typeFinancier">
                       <i class="fas fa-money-bill-wave me-2"></i> Avoir Financier
                     </label>
 
                     <input type="radio" class="btn-check" name="typeAvoir" id="typeMarchandise"
-                      [checked]="typeAvoir === 'MARCHANDISE'" (change)="onChangeTypeAvoir('MARCHANDISE')">
+                      [checked]="typeAvoir === 'MARCHANDISE'" [disabled]="isEditMode" (change)="onChangeTypeAvoir('MARCHANDISE')">
                     <label class="btn btn-outline-success" for="typeMarchandise">
                       <i class="fas fa-box me-2"></i> Avoir Marchandise
                     </label>
@@ -76,21 +86,23 @@
                   <div class="col-md-12 mb-3">
                     <label for="FactureOrigine" class="form-label">Facture d'origine</label>
                     <select class="form-select" formControlName="facture_id"
+                      [disabled]="isEditMode"
                       (change)="selectFacture($any($event.target).value)">
                       <option value="">Sélectionner une facture</option>
                       <option *ngFor="let facture of facturesDisponibles" [value]="facture.facture_id">
-                        {{ facture.facture_num }} - {{ facture.nom }} ({{ facture.facture_ttc | number:'1.2-2' }} dh)
+                        {{ facture.facture_num }} - {{ facture.client || facture.nom }} ({{ facture.facture_ttc | number:'1.2-2' }})
                       </option>
                     </select>
                   </div>
                   <div class="col-md-6 mb-3">
                     <label for="MontantHT" class="form-label">Montant HT</label>
-                    <input type="number" class="form-control" id="MontantHT" formControlName="montant_ht" step="0.01" />
+                    <input type="number" class="form-control" id="MontantHT" formControlName="montant_ht" step="0.01"
+                      (input)="syncPaymentAmountWithAvoir(true)" />
                   </div>
                   <div class="col-md-6 mb-3">
                     <label for="MontantTVA" class="form-label">Montant TVA</label>
                     <input type="number" class="form-control" id="MontantTVA" formControlName="montant_tva"
-                      step="0.01" />
+                      step="0.01" (input)="syncPaymentAmountWithAvoir(true)" />
                   </div>
                 </ng-container>
 
@@ -99,10 +111,11 @@
                   <div class="col-md-12 mb-3">
                     <label for="RetourOrigine" class="form-label">Retour d'origine</label>
                     <select class="form-select" formControlName="retour_id"
+                      [disabled]="isEditMode"
                       (change)="selectRetour($any($event.target).value)">
                       <option value="">Sélectionner un retour</option>
                       <option *ngFor="let retour of retoursDisponibles" [value]="retour.document_id">
-                        {{ retour.numero }} - {{ retour.client }} ({{ retour.total_ttc | number:'1.2-2' }} dh)
+                        {{ retour.numero }} - {{ retour.client }} ({{ retour.total_ttc | number:'1.2-2' }})
                       </option>
                     </select>
                   </div>
@@ -121,7 +134,7 @@
                 <div class="col-md-6 mb-3">
                   <label for="ClientDisplay" class="form-label">Client</label>
                   <input id="ClientDisplay" type="text" class="form-control" formControlName="clientDisplay"
-                    [readonly]="true" [disabled]="true"
+                    [readonly]="true"
                     placeholder="Le client sera affiché automatiquement après sélection de la facture ou du retour"
                     style="background-color: #e9ecef; cursor: not-allowed;" />
                   <input type="hidden" formControlName="part_id" />
@@ -131,10 +144,83 @@
                   <input type="text" class="form-control" id="Description" placeholder="Ex: Description"
                     formControlName="description" />
                 </div>
+                <div class="col-12 mb-3 payment-treatment-section" [class.payment-treatment-section--disabled]="!paymentTreatmentEnabled">
+                  <label class="form-label">Traitement du paiement deja recu</label>
+                  <div class="btn-group w-100 payment-choice-group" role="group">
+                    <input type="radio" class="btn-check" id="paiementCredit" name="traitement_paiement"
+                      formControlName="traitement_paiement" value="CREDIT_CLIENT"
+                      [disabled]="!paymentTreatmentEnabled"
+                      (change)="onTraitementPaiementChange('CREDIT_CLIENT')">
+                    <label class="btn btn-outline-info" for="paiementCredit">
+                      <i class="fas fa-wallet me-2"></i> Garder en credit client
+                    </label>
+
+                    <input type="radio" class="btn-check" id="paiementRemboursement" name="traitement_paiement"
+                      formControlName="traitement_paiement" value="REMBOURSEMENT"
+                      [disabled]="!paymentTreatmentEnabled"
+                      (change)="onTraitementPaiementChange('REMBOURSEMENT')">
+                    <label class="btn btn-outline-danger" for="paiementRemboursement">
+                      <i class="fas fa-undo-alt me-2"></i> Rembourser
+                    </label>
+
+                    <input type="radio" class="btn-check" id="paiementCompensation" name="traitement_paiement"
+                      formControlName="traitement_paiement" value="COMPENSATION"
+                      [disabled]="!paymentTreatmentEnabled"
+                      (change)="onTraitementPaiementChange('COMPENSATION')">
+                    <label class="btn btn-outline-warning" for="paiementCompensation">
+                      <i class="fas fa-exchange-alt me-2"></i> Compenser une facture
+                    </label>
+                  </div>
+                  <small class="text-muted d-block mt-2" *ngIf="!paymentTreatmentEnabled">
+                    Cette section est active seulement apres selection d'une facture deja encaissee.
+                  </small>
+                </div>
+
+                <div class="col-md-6 mb-3" *ngIf="AvoirForm.get('traitement_paiement')?.value !== 'CREDIT_CLIENT'">
+                  <label for="MontantTraitement" class="form-label">Montant a traiter</label>
+                  <input type="number" class="form-control" id="MontantTraitement" formControlName="montant_traitement"
+                    step="0.01" min="0" />
+                </div>
+
+                <div class="col-md-6 mb-3" *ngIf="AvoirForm.get('traitement_paiement')?.value === 'REMBOURSEMENT'">
+                  <label for="ReferenceRemboursement" class="form-label">Reference remboursement</label>
+                  <select class="form-select" id="ReferenceRemboursement" formControlName="reference_remboursement">
+                    <option value="">Selectionner un mode de reglement</option>
+                    <option *ngFor="let mode of modesReglement" [value]="mode.id">{{ mode.nom }}</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6 mb-3" *ngIf="AvoirForm.get('traitement_paiement')?.value === 'REMBOURSEMENT'">
+                  <label for="CaisseRemboursement" class="form-label">Caisse de remboursement</label>
+                  <select class="form-select" id="CaisseRemboursement" formControlName="caisse_remboursement_id">
+                    <option value="">Selectionner une caisse ouverte</option>
+                    <option *ngFor="let caisse of caissesOuvertes" [value]="caisse.id">
+                      {{ caisse.numero }} - {{ caisse.date | date:'dd/MM/yyyy' }} - {{ caisse.description || caisse.affectation || 'Caisse ouverte' }}
+                    </option>
+                  </select>
+                </div>
+
+                <div class="col-md-6 mb-3" *ngIf="AvoirForm.get('traitement_paiement')?.value === 'COMPENSATION'">
+                  <label for="FactureCompensation" class="form-label">Facture a compenser</label>
+                  <select class="form-select" id="FactureCompensation" formControlName="facture_compensation_id"
+                    (change)="onFactureCompensationChange($any($event.target).value)">
+                    <option value="">Selectionner une facture</option>
+                    <option *ngFor="let facture of facturesCompensation" [value]="facture.document_id">
+                      {{ facture.numero }} - Solde {{ facture.solde | number:'1.2-2' }}
+                    </option>
+                  </select>
+                </div>
+
+                <div class="col-md-6 mb-3">
+                  <label for="NoteTraitement" class="form-label">Note traitement</label>
+                  <input type="text" class="form-control" id="NoteTraitement" formControlName="note_traitement"
+                    [readonly]="!paymentTreatmentEnabled" [class.bg-light]="!paymentTreatmentEnabled"
+                    placeholder="Commentaire interne" />
+                </div>
               </div>
               <div class="modal-footer bg-light border-top">
-                <button type="submit" class="btn btn-info" [disabled]="!AvoirForm.valid">✅
-                  Enregistrer</button>
+                <button type="submit" class="btn btn-info" [disabled]="!AvoirForm.valid">
+                  {{ isEditMode ? 'Modifier' : 'Enregistrer' }}</button>
               </div>
             </form>
           </div>
@@ -202,7 +288,7 @@
       <div class="col-md-12">
         <div class="card border-0 shadow-sm rounded-3">
           <div class="card-body">
-            <div class="table-responsive" style="position: relative; min-height: 400px;">
+            <div class="table-responsive avoir-table-wrap" style="position: relative; min-height: 400px;">
               <!-- Loader -->
               <div *ngIf="loadingAvoirs" class="text-center my-4"
                 style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
@@ -212,14 +298,25 @@
                 <p class="mt-3 mb-0 text-muted fw-semibold">Chargement des avoirs...</p>
               </div>
 
-              <table class="table table-bordered table-striped table-hover" width="100%"
+              <table class="table table-bordered table-striped table-hover avoir-list-table" width="100%"
                 [style.opacity]="loadingAvoirs ? '0.5' : '1'">
+                <colgroup>
+                  <col *ngIf="columnVisibility.facture_num" [style.width]="getColumnWidth('facture_num')">
+                  <col *ngIf="columnVisibility.facture_dat" [style.width]="getColumnWidth('facture_dat')">
+                  <col *ngIf="columnVisibility.nom" [style.width]="getColumnWidth('nom')">
+                  <col *ngIf="columnVisibility.type" [style.width]="getColumnWidth('type')">
+                  <col *ngIf="columnVisibility.facture_ht" [style.width]="getColumnWidth('facture_ht')">
+                  <col *ngIf="columnVisibility.facture_tva" [style.width]="getColumnWidth('facture_tva')">
+                  <col *ngIf="columnVisibility.facture_ttc" [style.width]="getColumnWidth('facture_ttc')">
+                  <col *ngIf="columnVisibility.traitement_paiement" [style.width]="getColumnWidth('traitement_paiement')">
+                  <col style="width: 128px;">
+                </colgroup>
                 <thead class="table-light">
                   <!-- Bouton pour afficher/masquer les filtres -->
                   <tr *ngIf="!showFilterRow" style="background-color: #f8f9fa; border-bottom: 2px solid #dee2e6;">
                     <td [attr.colspan]="getVisibleColumnsCount() + 1" class="text-center py-2" style="padding: 8px;">
-                      <button 
-                        class="btn btn-sm btn-outline-primary" 
+                      <button
+                        class="btn btn-sm btn-outline-primary"
                         (click)="showFilterRow = true"
                         style="border-radius: 4px;">
                         <i class="fas fa-filter me-1"></i>
@@ -229,20 +326,39 @@
                     </td>
                   </tr>
                   <tr>
-                    <th *ngIf="columnVisibility.facture_num" (click)="sortAvoirs('facture_num')" class="sortable" style="cursor: pointer; width: 120px;">
+                    <th *ngIf="columnVisibility.facture_num" (click)="sortAvoirs('facture_num')" class="sortable avoir-numero-col" style="cursor: pointer; width: 120px;">
                       Numéro
                       <i class="fas ms-1"
                         [ngClass]="sortColumnAvoirs === 'facture_num' ? (sortDirectionAvoirs === 'ASC' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
                     </th>
-                    <th *ngIf="columnVisibility.facture_dat" (click)="sortAvoirs('facture_dat')" class="sortable" style="cursor: pointer; width: 110px;">
+                    <th *ngIf="columnVisibility.facture_dat" (click)="sortAvoirs('facture_dat')" class="sortable avoir-date-col" style="cursor: pointer; width: 110px;">
                       Date
                       <i class="fas ms-1"
                         [ngClass]="sortColumnAvoirs === 'facture_dat' ? (sortDirectionAvoirs === 'ASC' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
                     </th>
-                    <th *ngIf="columnVisibility.nom" (click)="sortAvoirs('nom')" class="sortable" style="cursor: pointer; min-width: 150px;">
-                      Client
-                      <i class="fas ms-1"
-                        [ngClass]="sortColumnAvoirs === 'nom' ? (sortDirectionAvoirs === 'ASC' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
+                    <th *ngIf="columnVisibility.nom"
+                      #avoirClientHeader
+                      (click)="sortAvoirs('nom')"
+                      (contextmenu)="showColumnContextMenu($event, 'nom')"
+                      class="sortable column-header avoir-client-col"
+                      style="cursor: pointer; min-width: 150px;"
+                      [style.width]="getColumnWidth('nom')"
+                      [class.pinned-column]="isColumnPinned('nom')">
+                      <div class="d-flex align-items-center justify-content-between">
+                        <span>Client</span>
+                        <div class="d-flex align-items-center gap-1">
+                          <i *ngIf="isColumnPinned('nom')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
+                          <i class="fas ms-1"
+                            [ngClass]="sortColumnAvoirs === 'nom' ? (sortDirectionAvoirs === 'ASC' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
+                          <button class="btn btn-sm p-0 ms-1 column-menu-btn"
+                            (click)="openColumnMenu($event, 'nom')"
+                            style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
+                            <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <span class="column-resize-handle" title="Redimensionner"
+                        (mousedown)="startColumnResize($event, 'nom', avoirClientHeader)"></span>
                     </th>
                     <th *ngIf="columnVisibility.type" class="text-center" style="width: 120px;">Type</th>
                     <th *ngIf="columnVisibility.facture_ht" (click)="sortAvoirs('facture_ht')" class="sortable text-end"
@@ -263,15 +379,18 @@
                       <i class="fas ms-1"
                         [ngClass]="sortColumnAvoirs === 'facture_ttc' ? (sortDirectionAvoirs === 'ASC' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
                     </th>
-                    <th style="width: 160px;" class="text-center">Actions</th>
+                    <th *ngIf="columnVisibility.traitement_paiement" class="text-center" style="width: 170px;">
+                      Traitement paiement
+                    </th>
+                    <th style="width: 128px;" class="text-center">Actions</th>
                   </tr>
                   <!-- Ligne des filtres (style Excel) -->
                   <tr *ngIf="showFilterRow" class="filter-row" style="background-color: #f8f9fa; border-top: 2px solid #dee2e6;">
                     <th *ngIf="columnVisibility.facture_num" style="padding: 4px; position: relative;">
                       <div class="d-flex align-items-center">
-                        <input 
-                          type="text" 
-                          class="form-control form-control-sm filter-input" 
+                        <input
+                          type="text"
+                          class="form-control form-control-sm filter-input"
                           placeholder="Rechercher..."
                           [(ngModel)]="columnFilters.facture_num"
                           (input)="onColumnFilterChange('facture_num', $any($event.target).value)"
@@ -281,20 +400,20 @@
                     </th>
                     <th *ngIf="columnVisibility.facture_dat" style="padding: 4px; position: relative;">
                       <div class="d-flex align-items-center">
-                        <input 
-                          type="date" 
-                          class="form-control form-control-sm filter-input" 
+                        <input
+                          type="date"
+                          class="form-control form-control-sm filter-input"
                           [(ngModel)]="columnFilters.facture_dat"
                           (change)="onColumnFilterChange('facture_dat', $any($event.target).value)"
                           style="font-size: 0.85rem; padding-right: 24px;">
                         <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
                       </div>
                     </th>
-                    <th *ngIf="columnVisibility.nom" style="padding: 4px; position: relative;">
+                    <th *ngIf="columnVisibility.nom" style="padding: 4px; position: relative;" [style.width]="getColumnWidth('nom')">
                       <div class="d-flex align-items-center">
-                        <input 
-                          type="text" 
-                          class="form-control form-control-sm filter-input" 
+                        <input
+                          type="text"
+                          class="form-control form-control-sm filter-input"
                           placeholder="Rechercher..."
                           [(ngModel)]="columnFilters.nom"
                           (input)="onColumnFilterChange('nom', $any($event.target).value)"
@@ -304,9 +423,9 @@
                     </th>
                     <th *ngIf="columnVisibility.type" style="padding: 4px; position: relative;">
                       <div class="d-flex align-items-center">
-                        <input 
-                          type="text" 
-                          class="form-control form-control-sm filter-input" 
+                        <input
+                          type="text"
+                          class="form-control form-control-sm filter-input"
                           placeholder="Rechercher..."
                           [(ngModel)]="columnFilters.type"
                           (input)="onColumnFilterChange('type', $any($event.target).value)"
@@ -316,9 +435,9 @@
                     </th>
                     <th *ngIf="columnVisibility.facture_ht" style="padding: 4px; position: relative;">
                       <div class="d-flex align-items-center">
-                        <input 
-                          type="number" 
-                          class="form-control form-control-sm filter-input" 
+                        <input
+                          type="number"
+                          class="form-control form-control-sm filter-input"
                           placeholder="Min..."
                           [(ngModel)]="columnFilters.facture_ht"
                           (input)="onColumnFilterChange('facture_ht', $any($event.target).value)"
@@ -328,9 +447,9 @@
                     </th>
                     <th *ngIf="columnVisibility.facture_tva" style="padding: 4px; position: relative;">
                       <div class="d-flex align-items-center">
-                        <input 
-                          type="number" 
-                          class="form-control form-control-sm filter-input" 
+                        <input
+                          type="number"
+                          class="form-control form-control-sm filter-input"
                           placeholder="Min..."
                           [(ngModel)]="columnFilters.facture_tva"
                           (input)="onColumnFilterChange('facture_tva', $any($event.target).value)"
@@ -340,9 +459,9 @@
                     </th>
                     <th *ngIf="columnVisibility.facture_ttc" style="padding: 4px; position: relative;">
                       <div class="d-flex align-items-center">
-                        <input 
-                          type="number" 
-                          class="form-control form-control-sm filter-input" 
+                        <input
+                          type="number"
+                          class="form-control form-control-sm filter-input"
                           placeholder="Min..."
                           [(ngModel)]="columnFilters.facture_ttc"
                           (input)="onColumnFilterChange('facture_ttc', $any($event.target).value)"
@@ -350,7 +469,19 @@
                         <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
                       </div>
                     </th>
-                    <th style="width: 160px;" class="text-center">
+                    <th *ngIf="columnVisibility.traitement_paiement" style="padding: 4px; position: relative;">
+                      <div class="d-flex align-items-center">
+                        <input
+                          type="text"
+                          class="form-control form-control-sm filter-input"
+                          placeholder="Rechercher..."
+                          [(ngModel)]="columnFilters.traitement_paiement"
+                          (input)="onColumnFilterChange('traitement_paiement', $any($event.target).value)"
+                          style="font-size: 0.85rem; padding-right: 24px;">
+                        <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
+                      </div>
+                    </th>
+                    <th style="width: 128px;" class="text-center">
                       <div class="d-flex align-items-center justify-content-center gap-2">
                         <button class="btn btn-sm btn-outline-secondary" (click)="clearColumnFilters()" title="Réinitialiser les filtres">
                           <i class="fas fa-times"></i>
@@ -369,9 +500,9 @@
                     </td>
                   </tr>
                   <tr *ngFor="let a of avoirs; let i = index">
-                    <td *ngIf="columnVisibility.facture_num">{{ a.facture_num }}</td>
-                    <td *ngIf="columnVisibility.facture_dat">{{ a.facture_dat ? (a.facture_dat | date:'dd/MM/yyyy') : '-' }}</td>
-                    <td *ngIf="columnVisibility.nom">{{ a.nom || '-' }}</td>
+                    <td *ngIf="columnVisibility.facture_num" class="avoir-numero-cell text-nowrap">{{ a.facture_num }}</td>
+                    <td *ngIf="columnVisibility.facture_dat" class="avoir-date-cell text-nowrap">{{ a.facture_dat ? (a.facture_dat | date:'dd/MM/yyyy') : '-' }}</td>
+                    <td *ngIf="columnVisibility.nom" class="avoir-client-cell" [style.width]="getColumnWidth('nom')" [title]="a.nom || '-'">{{ a.nom || '-' }}</td>
                     <td *ngIf="columnVisibility.type" class="text-center">
                       <span *ngIf="a.type_avoir === 'FINANCIER'" class="badge bg-primary">
                         <i class="fas fa-money-bill-wave me-1"></i> Financier
@@ -380,16 +511,38 @@
                         <i class="fas fa-box me-1"></i> Marchandise
                       </span>
                     </td>
-                    <td *ngIf="columnVisibility.facture_ht" class="text-end">{{ a.facture_ht | number:'1.2-2' }} dh</td>
-                    <td *ngIf="columnVisibility.facture_tva" class="text-end">{{ a.facture_tva | number:'1.2-2' }} dh</td>
-                    <td *ngIf="columnVisibility.facture_ttc" class="text-end fw-bold">{{ a.facture_ttc | number:'1.2-2' }} dh</td>
+                    <td *ngIf="columnVisibility.facture_ht" class="text-end avoir-amount-cell">{{ a.facture_ht | number:'1.2-2' }}</td>
+                    <td *ngIf="columnVisibility.facture_tva" class="text-end avoir-amount-cell">{{ a.facture_tva | number:'1.2-2' }}</td>
+                    <td *ngIf="columnVisibility.facture_ttc" class="text-end fw-bold avoir-amount-cell">{{ a.facture_ttc | number:'1.2-2' }}</td>
+                    <td *ngIf="columnVisibility.traitement_paiement" class="text-center">
+                      <span class="badge" [ngClass]="getPaymentBadgeClass(a.traitement_paiement)">
+                        {{ getPaymentTreatmentLabel(a.traitement_paiement) }}
+                      </span>
+                    </td>
                     <td class="text-center">
-                      <button *ngIf="pdfPermissionsService.hasAnyPdfAccess('avoir')" class="btn btn-sm btn-outline-primary me-1" (click)="onPrintAvoir(a)" title="Imprimer PDF">
-                        <i class="fas fa-file-pdf"></i>
-                      </button>
-                      <button class="btn btn-sm btn-outline-danger me-1" (click)="removeAvoir(a, i)" title="Supprimer">
-                        <i class="fas fa-trash-alt"></i>
-                      </button>
+                      <div class="btn-group">
+                        <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Actions">
+                          <i class="fas fa-cog me-1"></i> Actions
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                          <li>
+                            <button class="dropdown-item" type="button" (click)="onEditAvoir(a)">
+                              <i class="fas fa-edit me-2"></i> Modifier
+                            </button>
+                          </li>
+                          <li *ngIf="pdfPermissionsService.hasAnyPdfAccess('avoir')">
+                            <button class="dropdown-item" type="button" (click)="onPrintAvoir(a)">
+                              <i class="fas fa-file-pdf me-2"></i> Imprimer PDF
+                            </button>
+                          </li>
+                          <li><hr class="dropdown-divider"></li>
+                          <li>
+                            <button class="dropdown-item text-danger" type="button" (click)="removeAvoir(a, i)">
+                              <i class="fas fa-trash-alt me-2"></i> Supprimer
+                            </button>
+                          </li>
+                        </ul>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
@@ -446,9 +599,9 @@
 
 <!-- Menu contextuel pour la gestion des colonnes -->
 <div *ngIf="showColumnMenu" class="menu-overlay" (click)="hideColumnContextMenu()"></div>
-<div *ngIf="showColumnMenu" 
-     class="column-context-menu" 
-     [style.left.px]="menuPosition.x" 
+<div *ngIf="showColumnMenu"
+     class="column-context-menu"
+     [style.left.px]="menuPosition.x"
      [style.top.px]="menuPosition.y">
   <div class="menu-header">
     <i class="fas fa-columns"></i>

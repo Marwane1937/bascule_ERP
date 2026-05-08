@@ -42,6 +42,7 @@ export class DemandeAchatComponent implements OnInit, AfterViewInit {
   columnFilters: any = {
     numero: '',
     date: '',
+    date_fin: '',
     fournisseur: '',
     description: ''
   };
@@ -52,6 +53,7 @@ export class DemandeAchatComponent implements OnInit, AfterViewInit {
   columnVisibility: any = {
     numero: true,
     date: true,
+    date_fin: true,
     fournisseur: true,
     description: true
   };
@@ -115,6 +117,7 @@ export class DemandeAchatComponent implements OnInit, AfterViewInit {
    
     this.DemandeAchatForm = this.fb.group({
       date: [datetimeLocal, Validators.required],
+      date_fin: [''],
       description: [''],
       part_id: [0],
       fournisseurSearch: [''],   // le texte visible pour fournisseur
@@ -317,6 +320,7 @@ export class DemandeAchatComponent implements OnInit, AfterViewInit {
       
       const demandeAchatData = {
         date: formValue.date,
+        date_fin: formValue.date_fin || null,
         description: formValue.description || '',
         part_id: formValue.part_id,
         type: 0  // type = 0 pour demande d'achat
@@ -476,7 +480,7 @@ export class DemandeAchatComponent implements OnInit, AfterViewInit {
         if (itemValue === null || itemValue === undefined) return false;
         
         // Gestion spéciale pour les dates
-        if (key === 'date' && filterValue) {
+        if ((key === 'date' || key === 'date_fin') && filterValue) {
           const filterDate = new Date(filterValue).toISOString().split('T')[0];
           const itemDate = itemValue ? new Date(itemValue).toISOString().split('T')[0] : '';
           return itemDate === filterDate;
@@ -501,6 +505,7 @@ export class DemandeAchatComponent implements OnInit, AfterViewInit {
     this.columnFilters = {
       numero: '',
       date: '',
+      date_fin: '',
       fournisseur: '',
       description: ''
     };
@@ -561,6 +566,7 @@ export class DemandeAchatComponent implements OnInit, AfterViewInit {
     this.columnVisibility = {
       numero: true,
       date: true,
+      date_fin: true,
       fournisseur: true,
       description: true
     };
@@ -573,6 +579,7 @@ export class DemandeAchatComponent implements OnInit, AfterViewInit {
     const names: any = {
       numero: 'Numéro',
       date: 'Date',
+      date_fin: 'Date livraison',
       fournisseur: 'Fournisseur',
       description: 'Description'
     };
@@ -605,10 +612,11 @@ export class DemandeAchatComponent implements OnInit, AfterViewInit {
   }
 
   exportToCSV(): void {
-    const headers = ['Numéro', 'Date', 'Fournisseur', 'Description'];
+    const headers = ['Numéro', 'Date', 'Date livraison', 'Fournisseur', 'Description'];
     const rows = this.demandesAchat.map(da => [
       da.numero || '',
       da.date ? new Date(da.date).toLocaleDateString('fr-FR') : '',
+      da.date_fin ? new Date(da.date_fin).toLocaleDateString('fr-FR') : '',
       da.fournisseur || '',
       da.description || ''
     ]);
@@ -631,4 +639,3 @@ export class DemandeAchatComponent implements OnInit, AfterViewInit {
     this.showSuccess('✅ Export CSV réussi !');
   }
 }
-

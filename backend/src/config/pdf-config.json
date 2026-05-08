@@ -4,8 +4,9 @@
       "id_db": "LeoErp_Maties",
       "logo": {
         "path": "src/public/maties.png",
-        "width": 150,
+        "width": 170,
         "height": null,
+        "top": 14,
         "description": "Logo pour la société 1"
       },
       "entete": {
@@ -20,9 +21,10 @@
   ],
   "default": {
     "logo": {
-      "path": "src/public/maties.png",
+      "path": "src/public/logo-bascule.jpg",
       "width": 150,
       "height": null,
+      "top": -10,
       "description": "Configuration par défaut - Logo de l'entreprise"
     },
     "entete": {

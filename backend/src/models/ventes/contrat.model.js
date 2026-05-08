@@ -1,5 +1,243 @@
 const { getConnection } = require('../../config/database');
 
+const getInsertableColumns = async (sequelize, tableName, excludedColumns = [], transaction = null) => {
+  const rows = await sequelize.query(
+    `
+      SELECT c.name AS COLUMN_NAME
+      FROM sys.columns c
+      INNER JOIN sys.objects o ON o.object_id = c.object_id
+      WHERE o.name = :tableName
+        AND o.type = 'U'
+        AND c.is_identity = 0
+        AND c.is_computed = 0
+      ORDER BY c.column_id
+    `,
+    {
+      replacements: { tableName },
+      type: sequelize.QueryTypes.SELECT,
+      transaction
+    }
+  );
+
+  const excluded = new Set((Array.isArray(excludedColumns) ? excludedColumns : []).map((column) => String(column || '').toLowerCase()));
+
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => String(row.COLUMN_NAME || ''))
+    .filter((columnName) => columnName && !excluded.has(columnName.toLowerCase()));
+};
+
+const getRowValue = (row, columnName) => {
+  if (!row || typeof row !== 'object' || !columnName) {
+    return null;
+  }
+
+  const normalizedColumn = String(columnName).toLowerCase();
+  const matchingKey = Object.keys(row).find((key) => String(key || '').toLowerCase() === normalizedColumn);
+
+  return matchingKey ? row[matchingKey] : null;
+};
+
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+const parseDateOnly = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return new Date(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()));
+};
+
+const formatDateOnlyForSql = (value) => {
+  const parsed = parseDateOnly(value);
+  if (!parsed) {
+    return null;
+  }
+
+  return parsed.toISOString().slice(0, 10);
+};
+
+const formatDateTimeForSql = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return `${trimmed} 00:00:00.000`;
+    }
+
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{1,3})?$/.test(trimmed)) {
+      if (!trimmed.includes('.')) {
+        return `${trimmed}.000`;
+      }
+
+      const [base, ms] = trimmed.split('.');
+      return `${base}.${String(ms).slice(0, 3).padEnd(3, '0')}`;
+    }
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  const p2 = (n) => String(n).padStart(2, '0');
+  const p3 = (n) => String(n).padStart(3, '0');
+
+  return `${parsed.getFullYear()}-${p2(parsed.getMonth() + 1)}-${p2(parsed.getDate())} ${p2(parsed.getHours())}:${p2(parsed.getMinutes())}:${p2(parsed.getSeconds())}.${p3(parsed.getMilliseconds())}`;
+};
+
+const getContractListColumnConfig = (orderBy, orderDirection) => {
+  const columnMapping = {
+    'numero': 's.numero',
+    'date': 's.date',
+    'description': 's.description',
+    'client': 'p.nom',
+    'date_planif': 's.date_planif',
+    'date_expire': 's.date_expire',
+    'jours_restants': 'CASE WHEN s.date_expire IS NULL THEN NULL ELSE DATEDIFF(DAY, CAST(GETDATE() AS DATE), CAST(s.date_expire AS DATE)) END'
+  };
+
+  const validColumns = ['numero', 'date', 'description', 'client', 'date_planif', 'date_expire', 'jours_restants'];
+  const mappedColumn = validColumns.includes(orderBy) ? (columnMapping[orderBy] || 's.date') : 's.date';
+  const safeOrderDirection = String(orderDirection || '').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+  return {
+    mappedColumn,
+    safeOrderDirection
+  };
+};
+
+const buildContractWhereClause = ({ search = '', dateFrom = null, dateTo = null } = {}) => {
+  const whereConditions = ['s.type = 50'];
+  const replacements = {};
+
+  if (search && search.trim()) {
+    whereConditions.push(`(
+      s.numero LIKE :search
+      OR p.nom LIKE :search
+      OR s.description LIKE :search
+    )`);
+    replacements.search = `%${search.trim()}%`;
+  }
+
+  if (dateFrom) {
+    whereConditions.push('s.date >= :dateFrom');
+    replacements.dateFrom = dateFrom;
+  }
+
+  if (dateTo) {
+    whereConditions.push('s.date <= :dateTo');
+    replacements.dateTo = dateTo;
+  }
+
+  return {
+    whereClause: whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '',
+    replacements
+  };
+};
+
+const startOfMonthUtc = (value) => {
+  const parsed = parseDateOnly(value);
+  if (!parsed) {
+    return null;
+  }
+
+  return new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), 1));
+};
+
+const endOfMonthUtc = (value) => {
+  const parsed = parseDateOnly(value);
+  if (!parsed) {
+    return null;
+  }
+
+  return new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth() + 1, 0));
+};
+
+const addUtcMonths = (value, monthsToAdd = 0) => {
+  const parsed = parseDateOnly(value);
+  if (!parsed) {
+    return null;
+  }
+
+  return new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth() + Number(monthsToAdd || 0), 1));
+};
+
+const getContractDurationDays = (sourceContrat) => {
+  const currentPlanif = parseDateOnly(getRowValue(sourceContrat, 'date_planif'));
+  const currentExpire = parseDateOnly(getRowValue(sourceContrat, 'date_expire'));
+
+  if (!currentPlanif || !currentExpire) {
+    return null;
+  }
+
+  const diffDays = Math.round((currentExpire.getTime() - currentPlanif.getTime()) / MS_PER_DAY);
+  return Math.max(0, diffDays);
+};
+
+const formatContractCounterNumber = (counterValue, baseDate = new Date()) => {
+  const parsedDate = new Date(baseDate);
+  const fullYear = Number.isNaN(parsedDate.getTime()) ? new Date().getFullYear() : parsedDate.getFullYear();
+  const shortYear = String(fullYear).slice(2);
+  const safeCounter = Math.max(0, parseInt(counterValue, 10) || 0);
+
+  return `CT${shortYear}-${String(safeCounter).padStart(4, '0')}`;
+};
+
+const addOneMonthClamped = (value) => {
+  const parsed = parseDateOnly(value);
+  if (!parsed) {
+    return null;
+  }
+
+  const sourceDay = parsed.getUTCDate();
+  const target = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth() + 2, 0));
+  const lastDayOfTargetMonth = target.getUTCDate();
+
+  target.setUTCDate(Math.min(sourceDay, lastDayOfTargetMonth));
+
+  return target;
+};
+
+const addUtcDays = (value, daysToAdd = 0) => {
+  const parsed = parseDateOnly(value);
+  if (!parsed) {
+    return null;
+  }
+
+  const nextDate = new Date(parsed.getTime());
+  nextDate.setUTCDate(nextDate.getUTCDate() + Number(daysToAdd || 0));
+
+  return nextDate;
+};
+
+const getRenewedContractDates = (sourceContrat) => {
+  const currentExpire = parseDateOnly(getRowValue(sourceContrat, 'date_expire'));
+  const currentPlanif = parseDateOnly(getRowValue(sourceContrat, 'date_planif'));
+  const durationDays = getContractDurationDays(sourceContrat);
+  const renewedPlanif = currentPlanif ? addOneMonthClamped(currentPlanif) : null;
+  const renewedExpire = durationDays !== null && renewedPlanif
+    ? addUtcDays(renewedPlanif, durationDays)
+    : (currentExpire ? addOneMonthClamped(currentExpire) : null);
+
+  return {
+    date_planif: formatDateOnlyForSql(renewedPlanif),
+    date_expire: formatDateOnlyForSql(renewedExpire),
+    duration_days: durationDays
+  };
+};
+
 /**
  * Récupérer tous les contrats avec pagination
  */
@@ -20,42 +258,8 @@ const getAllContrats = async (options = {}, sequelizeConnection = null) => {
     const safePageSize = parseInt(pageSize) || 25;
     const offset = (safePage - 1) * safePageSize;
 
-    const columnMapping = {
-      'numero': 's.numero',
-      'date': 's.date',
-      'description': 's.description',
-      'client': 'p.nom',
-      'date_planif': 's.date_planif',
-      'date_expire': 's.date_expire'
-    };
-
-    const validColumns = ['numero', 'date', 'description', 'client', 'date_planif', 'date_expire'];
-    const mappedColumn = validColumns.includes(orderBy) ? (columnMapping[orderBy] || 's.date') : 's.date';
-    const safeOrderDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-
-    let whereConditions = ['s.type = 50'];
-    const replacements = {};
-
-    if (search && search.trim()) {
-      whereConditions.push(`(
-        s.numero LIKE :search
-        OR p.nom LIKE :search
-        OR s.description LIKE :search
-      )`);
-      replacements.search = `%${search.trim()}%`;
-    }
-
-    if (dateFrom) {
-      whereConditions.push('s.date >= :dateFrom');
-      replacements.dateFrom = dateFrom;
-    }
-
-    if (dateTo) {
-      whereConditions.push('s.date <= :dateTo');
-      replacements.dateTo = dateTo;
-    }
-
-    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    const { mappedColumn, safeOrderDirection } = getContractListColumnConfig(orderBy, orderDirection);
+    const { whereClause, replacements } = buildContractWhereClause({ search, dateFrom, dateTo });
 
     const query = `
       SELECT
@@ -66,8 +270,10 @@ const getAllContrats = async (options = {}, sequelizeConnection = null) => {
         client,
         date_planif,
         date_expire,
+        jours_restants,
         condition_id,
         facture_id,
+        parent,
         total_count
       FROM (
         SELECT
@@ -78,8 +284,13 @@ const getAllContrats = async (options = {}, sequelizeConnection = null) => {
           p.nom AS client,
           s.date_planif,
           s.date_expire,
+          CASE
+            WHEN s.date_expire IS NULL THEN NULL
+            ELSE DATEDIFF(DAY, CAST(GETDATE() AS DATE), CAST(s.date_expire AS DATE))
+          END AS jours_restants,
           s.condition_id,
           s.facture_id,
+          s.parent,
           COUNT(*) OVER() AS total_count,
           ROW_NUMBER() OVER (ORDER BY ${mappedColumn} ${safeOrderDirection}) AS RowNum
         FROM stock s
@@ -134,6 +345,69 @@ const getAllContrats = async (options = {}, sequelizeConnection = null) => {
 /**
  * Récupérer un contrat par ID avec ses détails
  */
+const getContratLocation = async (id, options = {}, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  const contratId = parseInt(id, 10);
+
+  if (!Number.isInteger(contratId) || contratId <= 0) {
+    throw new Error('Identifiant contrat invalide');
+  }
+
+  const {
+    pageSize = 25,
+    orderBy = 'date',
+    orderDirection = 'DESC',
+    search = '',
+    dateFrom = null,
+    dateTo = null
+  } = options;
+
+  const safePageSize = parseInt(pageSize, 10) || 25;
+  const { mappedColumn, safeOrderDirection } = getContractListColumnConfig(orderBy, orderDirection);
+  const { whereClause, replacements } = buildContractWhereClause({ search, dateFrom, dateTo });
+
+  const query = `
+    SELECT TOP 1
+      PaginatedResults.id,
+      PaginatedResults.numero,
+      PaginatedResults.RowNum,
+      CEILING(CAST(PaginatedResults.RowNum AS FLOAT) / :pageSize) AS page
+    FROM (
+      SELECT
+        s.id,
+        s.numero,
+        ROW_NUMBER() OVER (ORDER BY ${mappedColumn} ${safeOrderDirection}) AS RowNum
+      FROM stock s
+      INNER JOIN partenaire p ON p.part_id = s.part_id
+      ${whereClause}
+    ) AS PaginatedResults
+    WHERE PaginatedResults.id = :id
+  `;
+
+  const results = await sequelize.query(query, {
+    replacements: {
+      ...(Object.keys(replacements).length > 0 ? replacements : {}),
+      id: contratId,
+      pageSize: safePageSize
+    },
+    type: sequelize.QueryTypes.SELECT
+  });
+
+  if (!Array.isArray(results) || results.length === 0) {
+    return null;
+  }
+
+  const location = results[0];
+
+  return {
+    id: Number(location.id) || contratId,
+    numero: String(location.numero || '').trim(),
+    rowNumber: Math.max(1, Number(location.RowNum) || 1),
+    page: Math.max(1, Number(location.page) || 1),
+    pageSize: safePageSize
+  };
+};
+
 const getContratById = async (id, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
   try {
@@ -314,6 +588,271 @@ const updateContrat = async (id, contratData, sequelizeConnection = null) => {
     console.error('[updateContrat] Erreur:', error.message);
     throw error;
   }
+};
+
+/**
+ * Marquer un contrat pour renouvellement
+ */
+const markContratForRenewal = async (id, enabled = true, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  const contratId = parseInt(id, 10);
+
+  if (!Number.isInteger(contratId) || contratId <= 0) {
+    throw new Error('Identifiant contrat invalide');
+  }
+
+  const existingContrat = await sequelize.query(
+    `
+      SELECT id
+      FROM stock
+      WHERE id = :id AND type = 50
+    `,
+    {
+      replacements: { id: contratId },
+      type: sequelize.QueryTypes.SELECT
+    }
+  );
+
+  if (!Array.isArray(existingContrat) || existingContrat.length === 0) {
+    throw new Error('Contrat non trouvé');
+  }
+
+  await sequelize.query(
+    `
+      UPDATE stock
+      SET parent = :parent, cr_date = GETDATE()
+      WHERE id = :id AND type = 50
+    `,
+    {
+      replacements: {
+        id: contratId,
+        parent: enabled ? 1 : null
+      },
+      type: sequelize.QueryTypes.UPDATE
+    }
+  );
+
+  return { id: contratId, parent: enabled ? 1 : null };
+};
+
+/**
+ * Renouveler un contrat en le dupliquant avec un nouveau numéro
+ */
+const renewContrat = async (id, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  const contratId = parseInt(id, 10);
+
+  if (!Number.isInteger(contratId) || contratId <= 0) {
+    throw new Error('Identifiant contrat invalide');
+  }
+
+  const renewalResult = await sequelize.transaction(async (transaction) => {
+    const sourceRows = await sequelize.query(
+      `
+        SELECT *
+        FROM stock
+        WHERE id = :id AND type = 50
+      `,
+      {
+        replacements: { id: contratId },
+        type: sequelize.QueryTypes.SELECT,
+        transaction
+      }
+    );
+
+    if (!Array.isArray(sourceRows) || sourceRows.length === 0) {
+      throw new Error('Contrat non trouvé');
+    }
+
+    const sourceContrat = sourceRows[0];
+    const counterRows = await sequelize.query(
+      `
+        SELECT TOP 1 compteur
+        FROM compteur WITH (UPDLOCK, HOLDLOCK)
+        WHERE LTRIM(RTRIM(code)) = 'CT'
+      `,
+      {
+        type: sequelize.QueryTypes.SELECT,
+        transaction
+      }
+    );
+
+    if (!Array.isArray(counterRows) || counterRows.length === 0) {
+      throw new Error('Impossible de rÃ©cupÃ©rer le compteur CT');
+    }
+
+    const currentCounterValue = Number(counterRows[0].compteur);
+    if (!Number.isFinite(currentCounterValue)) {
+      throw new Error('Valeur du compteur CT invalide');
+    }
+
+    const renewalDate = new Date();
+    const renewalDateSql = formatDateTimeForSql(renewalDate);
+    const nextNumero = formatContractCounterNumber(currentCounterValue, renewalDate);
+    const renewedDates = getRenewedContractDates(sourceContrat);
+    const shouldKeepRenewalAlert = Number(getRowValue(sourceContrat, 'parent')) === 1;
+
+    const stockColumns = await getInsertableColumns(sequelize, 'stock', [], transaction);
+    const stockColumnSet = new Set(stockColumns.map((column) => String(column || '').toLowerCase()));
+    const copiedStockColumns = stockColumns.filter((column) => !['id', 'numero', 'facture_id', 'parent', 'cr_date'].includes(String(column || '').toLowerCase()));
+
+    const insertColumns = ['[numero]'];
+    const insertValues = [':numero'];
+    const replacements = { numero: nextNumero };
+
+    copiedStockColumns.forEach((columnName, index) => {
+      const normalizedColumnName = String(columnName).toLowerCase();
+      const replacementKey = `stockColumn${index}`;
+      insertColumns.push(`[${columnName}]`);
+      insertValues.push(`:${replacementKey}`);
+
+      if (normalizedColumnName === 'date_planif') {
+        replacements[replacementKey] = renewedDates.date_planif;
+        return;
+      }
+
+      if (normalizedColumnName === 'date_expire') {
+        replacements[replacementKey] = renewedDates.date_expire;
+        return;
+      }
+
+      const sourceValue = getRowValue(sourceContrat, columnName);
+
+      if (normalizedColumnName === 'date') {
+        replacements[replacementKey] = renewalDateSql;
+        return;
+      }
+
+      if (normalizedColumnName.startsWith('date_') || normalizedColumnName.endsWith('_date')) {
+        replacements[replacementKey] = formatDateOnlyForSql(sourceValue);
+        return;
+      }
+
+      replacements[replacementKey] = sourceValue;
+    });
+
+    if (stockColumnSet.has('facture_id')) {
+      insertColumns.push('[facture_id]');
+      insertValues.push(':facture_id');
+      replacements.facture_id = null;
+    }
+
+    if (stockColumnSet.has('parent')) {
+      insertColumns.push('[parent]');
+      insertValues.push(':parent');
+      replacements.parent = shouldKeepRenewalAlert ? 1 : null;
+    }
+
+    if (stockColumnSet.has('cr_date')) {
+      insertColumns.push('[cr_date]');
+      insertValues.push('GETDATE()');
+    }
+
+    const insertStockResult = await sequelize.query(
+      `
+        INSERT INTO stock (${insertColumns.join(', ')})
+        OUTPUT INSERTED.id
+        VALUES (${insertValues.join(', ')})
+      `,
+      {
+        replacements,
+        type: sequelize.QueryTypes.INSERT,
+        transaction
+      }
+    );
+
+    const insertedRow = Array.isArray(insertStockResult) ? insertStockResult[0] : null;
+    let newContratId = Array.isArray(insertedRow) ? insertedRow[0]?.id : insertedRow?.id;
+
+    if (!newContratId) {
+      const fallbackRows = await sequelize.query(
+        'SELECT TOP 1 id FROM stock ORDER BY id DESC',
+        {
+          type: sequelize.QueryTypes.SELECT,
+          transaction
+        }
+      );
+
+      newContratId = Array.isArray(fallbackRows) ? fallbackRows[0]?.id : fallbackRows?.id;
+    }
+
+    if (!newContratId) {
+      throw new Error('Erreur lors de la création du nouveau contrat');
+    }
+
+    const allDetailColumns = await getInsertableColumns(sequelize, 'stock_detail', [], transaction);
+    const detailColumnSet = new Set(allDetailColumns.map((column) => String(column || '').toLowerCase()));
+    const detailColumns = allDetailColumns.filter((column) => !['id', 'stock_id', 'cr_date'].includes(String(column || '').toLowerCase()));
+    const detailInsertColumns = ['[stock_id]'];
+    const detailSelectColumns = [':newStockId'];
+
+    detailColumns.forEach((columnName) => {
+      detailInsertColumns.push(`[${columnName}]`);
+      detailSelectColumns.push(`source.[${columnName}]`);
+    });
+
+    if (detailColumnSet.has('cr_date')) {
+      detailInsertColumns.push('[cr_date]');
+      detailSelectColumns.push('GETDATE()');
+    }
+
+    await sequelize.query(
+      `
+        INSERT INTO stock_detail (${detailInsertColumns.join(', ')})
+        SELECT ${detailSelectColumns.join(', ')}
+        FROM stock_detail source
+        WHERE source.stock_id = :sourceStockId
+      `,
+      {
+        replacements: {
+          newStockId: newContratId,
+          sourceStockId: contratId
+        },
+        transaction
+      }
+    );
+
+    await sequelize.query(
+      `
+        UPDATE stock
+        SET parent = NULL, cr_date = GETDATE()
+        WHERE id = :id AND type = 50
+      `,
+      {
+        replacements: { id: contratId },
+        type: sequelize.QueryTypes.UPDATE,
+        transaction
+      }
+    );
+
+    await sequelize.query(
+      `
+        UPDATE compteur
+        SET compteur = :nextCounterValue
+        WHERE LTRIM(RTRIM(code)) = 'CT'
+      `,
+      {
+        replacements: {
+          nextCounterValue: currentCounterValue + 1
+        },
+        type: sequelize.QueryTypes.UPDATE,
+        transaction
+      }
+    );
+
+    return {
+      original_id: contratId,
+      new_id: newContratId,
+      numero: nextNumero
+    };
+  });
+
+  const renewedContrat = await getContratById(renewalResult.new_id, sequelize);
+
+  return {
+    ...renewalResult,
+    contrat: renewedContrat
+  };
 };
 
 /**
@@ -725,13 +1264,15 @@ const saveDetailLines = async (lignes, sequelizeConnection = null) => {
 
 module.exports = {
   getAllContrats,
+  getContratLocation,
   getContratById,
   createContrat,
   updateContrat,
+  markContratForRenewal,
+  renewContrat,
   deleteContrat,
   getConditionsPaiement,
   transfererContratVersFacturation,
   saveDetailLines,
   deleteLignesParIds
 };
-

@@ -44,6 +44,42 @@ const getContrats = async (req, res) => {
 /**
  * Récupérer un contrat par ID
  */
+const getContratLocation = async (req, res) => {
+  try {
+    const databaseSwitchService = require('../../services/database-switch.service');
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+
+    const options = {
+      pageSize: req.query.pageSize || 25,
+      orderBy: req.query.orderBy || 'date',
+      orderDirection: req.query.orderDirection || 'DESC',
+      search: req.query.search || '',
+      dateFrom: req.query.dateFrom || null,
+      dateTo: req.query.dateTo || null
+    };
+
+    const location = await contratService.getContratLocation(req.params.id, options, sequelize);
+
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        message: 'Contrat non trouvÃ© dans la liste'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: location
+    });
+  } catch (err) {
+    console.error('[ContratController] Erreur localisation contrat:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la localisation du contrat'
+    });
+  }
+};
+
 const getContrat = async (req, res) => {
   try {
     const databaseSwitchService = require('../../services/database-switch.service');
@@ -103,6 +139,55 @@ const updateContrat = async (req, res) => {
     res.status(500).json({ 
       success: false,
       message: err.message || 'Erreur lors de la modification du contrat'
+    });
+  }
+};
+
+/**
+ * Marquer un contrat pour renouvellement
+ */
+const markContratForRenewal = async (req, res) => {
+  try {
+    const databaseSwitchService = require('../../services/database-switch.service');
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const enabled = req.body?.enabled !== false;
+
+    const result = await contratService.markContratForRenewal(req.params.id, enabled, sequelize);
+
+    res.json({
+      success: true,
+      data: result,
+      message: 'Contrat marqué pour renouvellement'
+    });
+  } catch (err) {
+    console.error('[ContratController] Erreur marquage renouvellement contrat:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors du marquage du contrat pour renouvellement'
+    });
+  }
+};
+
+/**
+ * Renouveler un contrat
+ */
+const renewContrat = async (req, res) => {
+  try {
+    const databaseSwitchService = require('../../services/database-switch.service');
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+
+    const result = await contratService.renewContrat(req.params.id, sequelize);
+
+    res.status(201).json({
+      success: true,
+      data: result,
+      message: 'Contrat renouvelé avec succès'
+    });
+  } catch (err) {
+    console.error('[ContratController] Erreur renouvellement contrat:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors du renouvellement du contrat'
     });
   }
 };
@@ -229,13 +314,15 @@ const deleteLignes = async (req, res) => {
 
 module.exports = {
   getContrats,
+  getContratLocation,
   getContrat,
   createContrat,
   updateContrat,
+  markContratForRenewal,
+  renewContrat,
   deleteContrat,
   getConditionsPaiement,
   transfererContratVersFacturation,
   saveDetail,
   deleteLignes
 };
-

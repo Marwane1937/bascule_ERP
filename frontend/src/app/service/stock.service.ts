@@ -1,4 +1,4 @@
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
@@ -15,10 +15,10 @@ export class StockService {
 
   // Force recompilation - timestamp: 2026-01-02
 
-  // ============= ACHATS NON ENTRÉS EN STOCK =============
+  // ============= ACHATS NON ENTRÃ‰S EN STOCK =============
 
   /**
-   * Récupérer les achats non encore entrés en stock
+   * RÃ©cupÃ©rer les achats non encore entrÃ©s en stock
    */
   getAchatsNonEntresStock(options: any = {}): Observable<any> {
     const params = new URLSearchParams();
@@ -35,7 +35,7 @@ export class StockService {
   }
 
   /**
-   * Récupérer les détails d'un achat pour entrée en stock
+   * RÃ©cupÃ©rer les dÃ©tails d'un achat pour entrÃ©e en stock
    */
   getAchatDetailsForStock(achatDocumentId: number): Observable<any> {
     const url = `${this.stockBaseUrl}/achat-details/${achatDocumentId}`;
@@ -45,7 +45,7 @@ export class StockService {
   // ============= VENTES NON SORTIES DU STOCK =============
 
   /**
-   * Récupérer les ventes facturées non encore sorties du stock
+   * RÃ©cupÃ©rer les ventes facturÃ©es non encore sorties du stock
    */
   getVentesNonSortiesStock(options: any = {}): Observable<any> {
     const params = new URLSearchParams();
@@ -62,7 +62,7 @@ export class StockService {
   }
 
   /**
-   * Récupérer les détails d'une vente pour sortie de stock
+   * RÃ©cupÃ©rer les dÃ©tails d'une vente pour sortie de stock
    */
   getVenteDetailsForStock(venteDocumentId: number): Observable<any> {
     const url = `${this.stockBaseUrl}/vente-details/${venteDocumentId}`;
@@ -72,7 +72,7 @@ export class StockService {
   // ============= ARTICLES AVEC STOCK =============
 
   /**
-   * Récupérer les articles avec leur stock
+   * RÃ©cupÃ©rer les articles avec leur stock
    */
   getArticlesStock(options: any = {}): Observable<any> {
     const params = new URLSearchParams();
@@ -88,7 +88,7 @@ export class StockService {
   // ============= DOCUMENTS DE STOCK =============
 
   /**
-   * Récupérer tous les documents de stock
+   * RÃ©cupÃ©rer tous les documents de stock
    */
   getAllStockDocuments(options: any = {}): Observable<any> {
     const params = new URLSearchParams();
@@ -103,17 +103,17 @@ export class StockService {
   }
 
   /**
-   * Récupérer un document de stock par ID
+   * RÃ©cupÃ©rer un document de stock par ID
    */
   getStockDocumentById(id: number): Observable<any> {
     const url = `${this.stockBaseUrl}/documents/${id}`;
     return this.http.get(url);
   }
 
-  // ============= CRÉATION DE MOUVEMENTS DE STOCK =============
+  // ============= CRÃ‰ATION DE MOUVEMENTS DE STOCK =============
 
   /**
-   * Créer une entrée de stock depuis un achat
+   * CrÃ©er une entrÃ©e de stock depuis un achat
    */
   createEntreeStockFromAchat(achatDocumentId: number, details: any[]): Observable<any> {
     const data = { achatDocumentId, details };
@@ -121,14 +121,14 @@ export class StockService {
   }
 
   /**
-   * Obtenir le prochain numéro d'entrée de stock
+   * Obtenir le prochain numÃ©ro d'entrÃ©e de stock
    */
   getNextEntreeStockNumero(): Observable<any> {
     return this.http.get(`${this.stockBaseUrl}/next-entree-stock-numero`);
   }
 
   /**
-   * Récupérer toutes les entrées de stock avec pagination
+   * RÃ©cupÃ©rer toutes les entrÃ©es de stock avec pagination
    */
   getEntreesStock(options: any = {}): Observable<any> {
     const params = new URLSearchParams();
@@ -145,21 +145,21 @@ export class StockService {
   }
 
   /**
-   * Créer une nouvelle entrée de stock
+   * CrÃ©er une nouvelle entrÃ©e de stock
    */
   createEntreeStock(data: any): Observable<any> {
     return this.http.post(`${this.stockBaseUrl}/entree-stock`, data);
   }
 
   /**
-   * Récupérer une entrée de stock par ID
+   * RÃ©cupÃ©rer une entrÃ©e de stock par ID
    */
   getEntreeStockById(id: number): Observable<any> {
     return this.http.get(`${this.stockBaseUrl}/entree-stock/${id}`);
   }
 
   /**
-   * Créer une sortie de stock depuis une vente
+   * CrÃ©er une sortie de stock depuis une vente
    */
   createSortieStockFromVente(venteDocumentId: number, details: any[]): Observable<any> {
     const data = { venteDocumentId, details };
@@ -167,7 +167,7 @@ export class StockService {
   }
 
   /**
-   * Créer un inventaire
+   * CrÃ©er un inventaire
    */
   createInventaire(inventaireData: any[], description: string): Observable<any> {
     const data = { inventaireData, description };
@@ -175,7 +175,7 @@ export class StockService {
   }
 
   /**
-   * Créer un en-tête d'inventaire (type=10)
+   * CrÃ©er un en-tÃªte d'inventaire (type=10)
    */
   createInventaireHeader(description: string): Observable<any> {
     const data = { description, type: 10 };
@@ -183,14 +183,14 @@ export class StockService {
   }
 
   /**
-   * Récupérer un inventaire par ID
+   * RÃ©cupÃ©rer un inventaire par ID
    */
   getInventaireById(id: number): Observable<any> {
     return this.http.get(`${this.stockBaseUrl}/inventaire/${id}`);
   }
 
   /**
-   * Récupérer les données de v_stock_calcul pour export Excel
+   * RÃ©cupÃ©rer les donnÃ©es de v_stock_calcul pour export Excel
    */
   getStockCalculData(): Observable<any> {
     return this.http.get(`${this.stockBaseUrl}/stock-calcul`);
@@ -204,21 +204,21 @@ export class StockService {
   }
 
   /**
-   * Mettre à jour la date d'un inventaire
+   * Mettre Ã  jour la date d'un inventaire
    */
   updateInventaireDate(inventaireId: number, date: string): Observable<any> {
     return this.http.put(`${this.stockBaseUrl}/inventaire/${inventaireId}/date`, { date });
   }
  
   /**
-   * Valider l'inventaire et comparer avec le stock réel
+   * Valider l'inventaire et comparer avec le stock rÃ©el
    */
   validerInventaire(inventaireId: number): Observable<any> {
     return this.http.post(`${this.stockBaseUrl}/inventaire/${inventaireId}/valider`, {});
   }
 
   /**
-   * Exporter le résultat de comparaison en Excel
+   * Exporter le rÃ©sultat de comparaison en Excel
    */
   exportInventaireComparaison(inventaireId: number): Observable<Blob> {
     return this.http.get(`${this.stockBaseUrl}/inventaire/${inventaireId}/export-excel`, {
@@ -243,7 +243,7 @@ export class StockService {
   // ============= REPORTING STOCK =============
 
   /**
-   * Récupérer l'état détaillé du stock
+   * RÃ©cupÃ©rer l'Ã©tat dÃ©taillÃ© du stock
    */
   getEtatStock(options: any = {}): Observable<any> {
     const params = new URLSearchParams();
@@ -252,6 +252,11 @@ export class StockService {
     if (options.orderBy) params.append('orderBy', options.orderBy);
     if (options.orderDirection) params.append('orderDirection', options.orderDirection);
     if (options.search) params.append('search', options.search);
+    if (options.article) params.append('article', options.article);
+    if (options.articleId) params.append('articleId', options.articleId.toString());
+    if (options.articleCode) params.append('articleCode', options.articleCode);
+    if (options.dateFrom) params.append('dateFrom', options.dateFrom);
+    if (options.dateTo) params.append('dateTo', options.dateTo);
     if (options.depotId) params.append('depotId', options.depotId.toString());
     if (options.stockMinimum) params.append('stockMinimum', options.stockMinimum.toString());
     const url = `${this.stockBaseUrl}/etat-stock${params.toString() ? '?' + params.toString() : ''}`;
@@ -259,7 +264,7 @@ export class StockService {
   }
 
   /**
-   * Récupérer la fiche de stock pour un article
+   * RÃ©cupÃ©rer la fiche de stock pour un article
    */
   getFicheStock(articleId: number | null, options: any = {}): Observable<any> {
     const params = new URLSearchParams();
@@ -276,7 +281,7 @@ export class StockService {
   }
 
   /**
-   * Récupérer le chiffre d'affaires par article
+   * RÃ©cupÃ©rer le chiffre d'affaires par article
    */
   getChiffreAffairesArticles(options: any = {}): Observable<any> {
     const params = new URLSearchParams();
@@ -291,29 +296,100 @@ export class StockService {
     return this.http.get(url);
   }
 
+  getEntrepotResume(): Observable<any> {
+    return this.http.get(`${this.stockBaseUrl}/entrepots`);
+  }
+
+  getEntrepotDetails(depotId: number): Observable<any> {
+    return this.http.get(`${this.stockBaseUrl}/entrepots/${depotId}/details`);
+  }
+
+  getPreparations(options: any = {}): Observable<any> {
+    const params = new URLSearchParams();
+    if (options.page) params.append('page', options.page.toString());
+    if (options.pageSize) params.append('pageSize', options.pageSize.toString());
+    if (options.search) params.append('search', options.search);
+    const url = `${this.stockBaseUrl}/preparations${params.toString() ? '?' + params.toString() : ''}`;
+    return this.http.get(url);
+  }
+
+  getNextPreparationNumero(): Observable<any> {
+    return this.http.get(`${this.stockBaseUrl}/preparations/next-numero`);
+  }
+
+  getCommandesDisponiblesPourPreparation(): Observable<any> {
+    return this.http.get(`${this.stockBaseUrl}/preparations/commandes-disponibles`);
+  }
+
+  createPreparation(data: {
+    description?: string;
+    sourceCommandeId?: number | null;
+    date?: string | null;
+    part_id?: number | null;
+    contact_id?: number | null;
+    depot_id?: number | null;
+    date_fin?: string | null;
+  }): Observable<any> {
+    return this.http.post(`${this.stockBaseUrl}/preparations`, data);
+  }
+
+  getPreparationById(id: number): Observable<any> {
+    return this.http.get(`${this.stockBaseUrl}/preparations/${id}`);
+  }
+
+  searchPreparationArticles(term: string): Observable<any> {
+    const params = new URLSearchParams();
+    if (term != null) params.append('term', term);
+    const url = `${this.stockBaseUrl}/preparations/article-search${params.toString() ? '?' + params.toString() : ''}`;
+    return this.http.get(url);
+  }
+
+  updatePreparation(id: number, data: any): Observable<any> {
+    return this.http.put(`${this.stockBaseUrl}/preparations/${id}`, data);
+  }
+
+  savePreparationLines(id: number, lignes: any[]): Observable<any> {
+    return this.http.post(`${this.stockBaseUrl}/preparations/${id}/lignes`, { lignes });
+  }
+
+  transfererPreparationVersLivraison(id: number): Observable<any> {
+    return this.http.post(`${this.stockBaseUrl}/preparations/${id}/transfer-to-livraison`, {});
+  }
+
+  exportPreparationPdf(id: number): Observable<HttpResponse<Blob>> {
+    return this.http.get(`${this.stockBaseUrl}/preparations/${id}/pdf`, {
+      responseType: 'blob',
+      observe: 'response'
+    });
+  }
+
+  getPreparationPdfUrl(id: number): string {
+    return `${this.stockBaseUrl}/preparations/${id}/pdf`;
+  }
+
   /**
-   * Mettre à jour une entrée de stock
+   * Mettre Ã  jour une entrÃ©e de stock
    */
   updateEntreeStock(id: number, data: any): Observable<any> {
     return this.http.put(`${this.stockBaseUrl}/entree-stock/${id}`, data);
   }
 
   /**
-   * Sauvegarder les lignes de détail d'une entrée de stock
+   * Sauvegarder les lignes de dÃ©tail d'une entrÃ©e de stock
    */
   saveLignesDetailEntreeStock(lignes: any[]): Observable<any> {
     return this.http.post(`${this.stockBaseUrl}/entree-stock/save`, { lignes });
   }
 
   /**
-   * Sauvegarder les informations d'une entrée de stock
+   * Sauvegarder les informations d'une entrÃ©e de stock
    */
   saveLignesInfoEntreeStock(info: any): Observable<any> {
     return this.http.post(`${this.stockBaseUrl}/entree-stock/info`, info);
   }
 
   /**
-   * Supprimer des lignes de détail d'une entrée de stock
+   * Supprimer des lignes de dÃ©tail d'une entrÃ©e de stock
    */
   removeDetailLigneEntreeStock(ligneIds: number[]): Observable<any> {
     return this.http.post(`${this.stockBaseUrl}/entree-stock/delete-lignes`, { ligneIds });
@@ -322,14 +398,14 @@ export class StockService {
   // ============= SORTIES DE STOCK =============
 
   /**
-   * Obtenir le prochain numéro de sortie de stock
+   * Obtenir le prochain numÃ©ro de sortie de stock
    */
   getNextSortieStockNumero(): Observable<any> {
     return this.http.get(`${this.stockBaseUrl}/next-sortie-stock-numero`);
   }
 
   /**
-   * Récupérer toutes les sorties de stock avec pagination
+   * RÃ©cupÃ©rer toutes les sorties de stock avec pagination
    */
   getSortiesStock(options: any = {}): Observable<any> {
     const params = new URLSearchParams();
@@ -347,28 +423,35 @@ export class StockService {
   }
 
   /**
-   * Créer une nouvelle sortie de stock
+   * CrÃ©er une nouvelle sortie de stock
    */
   createSortieStock(data: any): Observable<any> {
     return this.http.post(`${this.stockBaseUrl}/sortie-stock`, data);
   }
 
   /**
-   * Récupérer une sortie de stock par ID
+   * RÃ©cupÃ©rer une sortie de stock par ID
    */
   getSortieStockById(id: number): Observable<any> {
     return this.http.get(`${this.stockBaseUrl}/sortie-stock/${id}`);
   }
 
   /**
-   * Mettre à jour une sortie de stock
+   * Mettre Ã  jour une sortie de stock
    */
   updateSortieStock(id: number, data: any): Observable<any> {
     return this.http.put(`${this.stockBaseUrl}/sortie-stock/${id}`, data);
   }
 
   /**
-   * Sauvegarder les lignes de détail d'une sortie de stock
+   * Transferer une sortie de stock vers un bon de livraison
+   */
+  transferSortieStockToLivraison(sortieStockId: number): Observable<any> {
+    return this.http.post(`${this.stockBaseUrl}/sortie-stock/transfer-to-livraison`, { sortieStockId });
+  }
+
+  /**
+   * Sauvegarder les lignes de dÃ©tail d'une sortie de stock
    */
   saveLignesDetailSortieStock(lignes: any[]): Observable<any> {
     return this.http.post(`${this.stockBaseUrl}/sortie-stock/save`, { lignes });
@@ -382,14 +465,14 @@ export class StockService {
   }
 
   /**
-   * Supprimer des lignes de détail d'une sortie de stock
+   * Supprimer des lignes de dÃ©tail d'une sortie de stock
    */
   removeDetailLigneSortieStock(ligneIds: number[]): Observable<any> {
     return this.http.post(`${this.stockBaseUrl}/sortie-stock/delete-lignes`, { ligneIds });
   }
 
   /**
-   * Récupérer l'historique depuis v_stock_final
+   * RÃ©cupÃ©rer l'historique depuis v_stock_final
    */
   getStockHistorique(options: any = {}): Observable<any> {
     const params = new URLSearchParams();
@@ -429,7 +512,7 @@ export class StockService {
   }
 
   /**
-   * Exporter l'état de stock en PDF
+   * Exporter l'Ã©tat de stock en PDF
    */
   exportEtatStockPDF(options: any = {}): Observable<Blob> {
     const params = new URLSearchParams();
@@ -438,12 +521,19 @@ export class StockService {
     if (options.orderBy) params.append('orderBy', options.orderBy);
     if (options.orderDirection) params.append('orderDirection', options.orderDirection);
     if (options.search) params.append('search', options.search);
+    if (options.article) params.append('article', options.article);
+    if (options.articleId) params.append('articleId', options.articleId.toString());
+    if (options.articleCode) params.append('articleCode', options.articleCode);
+    if (options.dateFrom) params.append('dateFrom', options.dateFrom);
+    if (options.dateTo) params.append('dateTo', options.dateTo);
+    if (options.depotId) params.append('depotId', options.depotId.toString());
+    if (options.stockMinimum) params.append('stockMinimum', options.stockMinimum.toString());
     const url = `${this.stockBaseUrl}/etat-stock/export/pdf${params.toString() ? '?' + params.toString() : ''}`;
     return this.http.get(url, { responseType: 'blob' });
   }
 
   /**
-   * Exporter l'état de stock en Excel
+   * Exporter l'Ã©tat de stock en Excel
    */
   exportEtatStockExcel(options: any = {}): Observable<Blob> {
     const params = new URLSearchParams();
@@ -452,6 +542,13 @@ export class StockService {
     if (options.orderBy) params.append('orderBy', options.orderBy);
     if (options.orderDirection) params.append('orderDirection', options.orderDirection);
     if (options.search) params.append('search', options.search);
+    if (options.article) params.append('article', options.article);
+    if (options.articleId) params.append('articleId', options.articleId.toString());
+    if (options.articleCode) params.append('articleCode', options.articleCode);
+    if (options.dateFrom) params.append('dateFrom', options.dateFrom);
+    if (options.dateTo) params.append('dateTo', options.dateTo);
+    if (options.depotId) params.append('depotId', options.depotId.toString());
+    if (options.stockMinimum) params.append('stockMinimum', options.stockMinimum.toString());
     const url = `${this.stockBaseUrl}/etat-stock/export/excel${params.toString() ? '?' + params.toString() : ''}`;
     return this.http.get(url, { responseType: 'blob' });
   }

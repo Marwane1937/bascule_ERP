@@ -163,6 +163,10 @@ const getContacts = async (sequelizeConnection = null) => {
   return await clientModel.getAllContacts(sequelizeConnection);
 };
 
+const getContactsAutocomplete = async (sequelizeConnection = null) => {
+  return await clientModel.getContactsAutocomplete(sequelizeConnection);
+};
+
 // Récupérer les contacts paginés
 const getContactsPaged = async (options = {}, sequelizeConnection = null) => {
   return await clientModel.getContactsPaged(options, sequelizeConnection);
@@ -179,6 +183,14 @@ const getContact = async (contact_id, sequelizeConnection = null) => {
 
 // Créer un nouveau contact
 const createContact = async (contactData, sequelizeConnection = null) => {
+  const uniqueness = await checkCommercialUniqueness(contactData, sequelizeConnection);
+  if (uniqueness.codeExists || uniqueness.nomExists) {
+    const duplicateError = new Error('Code ou nom commercial existe deja');
+    duplicateError.status = 409;
+    duplicateError.details = uniqueness;
+    throw duplicateError;
+  }
+
   const contact_id = await clientModel.addContactCommercial(contactData, sequelizeConnection);
   return { id: contact_id, ...contactData };
 };
@@ -189,9 +201,17 @@ const editContact = async (contact_id, contactData, sequelizeConnection = null) 
   if (!contact) {
     throw new Error('contact à modifier non trouvé');
   }
+
+  const uniqueness = await checkCommercialUniqueness({ ...contactData, excludeId: contact_id }, sequelizeConnection);
+  if (uniqueness.codeExists || uniqueness.nomExists) {
+    const duplicateError = new Error('Code ou nom commercial existe deja');
+    duplicateError.status = 409;
+    duplicateError.details = uniqueness;
+    throw duplicateError;
+  }
+
   return await clientModel.updateContactCommercial(contact_id, contactData, sequelizeConnection);
 };
-
 // Archiver un contact
 const archiveContact = async (contact_id, sequelizeConnection = null) => {
   const contact = await clientModel.getContactById(contact_id, sequelizeConnection);
@@ -239,13 +259,41 @@ const getClientDetails = async (part_id, sequelizeConnection = null) => {
   }
   return details;
 };
+
+const checkClientUniqueness = async ({ code, nom, excludeId = null }, sequelizeConnection = null) => {
+  return await clientModel.checkClientUniqueness({ code, nom, excludeId }, sequelizeConnection);
+};
+
+const checkFournisseurUniqueness = async ({ code, nom, excludeId = null }, sequelizeConnection = null) => {
+  return await clientModel.checkFournisseurUniqueness({ code, nom, excludeId }, sequelizeConnection);
+};
+
+const checkCommercialUniqueness = async ({ code, nom, excludeId = null }, sequelizeConnection = null) => {
+  return await clientModel.checkCommercialUniqueness({ code, nom, excludeId }, sequelizeConnection);
+};
 // Créer un nouveau client
 const createClient = async (clientData, sequelizeConnection = null) => {
+  const uniqueness = await checkClientUniqueness(clientData, sequelizeConnection);
+  if (uniqueness.codeExists || uniqueness.nomExists) {
+    const duplicateError = new Error('Code ou nom client existe deja');
+    duplicateError.status = 409;
+    duplicateError.details = uniqueness;
+    throw duplicateError;
+  }
+
   const id = await clientModel.addClient(clientData, sequelizeConnection);
   return { id, ...clientData };
 };
 
 const createFournisseur = async (fournisseurData, sequelizeConnection = null) => {
+  const uniqueness = await checkFournisseurUniqueness(fournisseurData, sequelizeConnection);
+  if (uniqueness.codeExists || uniqueness.nomExists) {
+    const duplicateError = new Error('Code ou nom fournisseur existe deja');
+    duplicateError.status = 409;
+    duplicateError.details = uniqueness;
+    throw duplicateError;
+  }
+
   const id = await clientModel.addFournisseur(fournisseurData, sequelizeConnection);
   return { id, ...fournisseurData };
 };
@@ -343,12 +391,143 @@ const deleteClient = async (id, sequelizeConnection = null) => {
 };
 
 
+const buildClientRecommendations = (stats = {}) => {
+  const recommendations = [];
+  const debitTotal = Number(stats?.situation?.debit_total || 0);
+  const creditTotal = Number(stats?.situation?.credit_total || 0);
+  const solde = Number(stats?.situation?.solde || 0);
+  const mouvementsCount = Number(stats?.situation?.mouvements_count || 0);
+  const monthlyActivity = Array.isArray(stats?.charts?.monthly_activity) ? stats.charts.monthly_activity : [];
+  const latestMonth = monthlyActivity.length > 0 ? monthlyActivity[monthlyActivity.length - 1] : null;
+  const previousMonth = monthlyActivity.length > 1 ? monthlyActivity[monthlyActivity.length - 2] : null;
+
+  if (solde > 0) {
+    recommendations.push({
+      tone: 'warning',
+      title: 'Relancer encaissement',
+      message: `Le client conserve un solde ouvert de ${solde.toFixed(2)} dh. Planifiez une relance ou un echeancier.`
+    });
+  }
+
+  if (debitTotal > 0 && creditTotal >= debitTotal) {
+    recommendations.push({
+      tone: 'positive',
+      title: 'Compte a jour',
+      message: 'Les credits couvrent le debit cumule. Ce client reste sain sur le plan de l encaissement.'
+    });
+  }
+
+  if (mouvementsCount === 0) {
+    recommendations.push({
+      tone: 'info',
+      title: 'Aucune activite',
+      message: 'Aucun mouvement comptable recent n est remonte pour ce client. Verifiez si la relation commerciale doit etre relancee.'
+    });
+  }
+
+  if (latestMonth && previousMonth && Number(latestMonth.debit_total || 0) < Number(previousMonth.debit_total || 0) * 0.7) {
+    recommendations.push({
+      tone: 'alert',
+      title: 'Activite en retrait',
+      message: 'Le debit du dernier mois baisse sensiblement. Controlez les livraisons, la concurrence et les relances commerciales.'
+    });
+  }
+
+  if (recommendations.length === 0) {
+    recommendations.push({
+      tone: 'positive',
+      title: 'Situation stable',
+      message: 'Le compte client est globalement equilibre. Continuez le suivi regulier des echeances et du volume d activite.'
+    });
+  }
+
+  return recommendations.slice(0, 4);
+};
+
+const buildFournisseurRecommendations = (stats = {}) => {
+  const recommendations = [];
+  const orderedHt = Number(stats?.situation?.ordered_ht || 0);
+  const receivedHt = Number(stats?.situation?.received_ht || 0);
+  const invoicedHt = Number(stats?.situation?.invoiced_ht || 0);
+  const openOrdersCount = Number(stats?.situation?.open_orders_count || 0);
+  const receptionRate = Number(stats?.situation?.reception_rate || 0);
+  const monthlyActivity = Array.isArray(stats?.charts?.monthly_activity) ? stats.charts.monthly_activity : [];
+  const latestMonth = monthlyActivity.length > 0 ? monthlyActivity[monthlyActivity.length - 1] : null;
+
+  if (openOrdersCount > 0 && receptionRate < 80) {
+    recommendations.push({
+      tone: 'warning',
+      title: 'Suivre les livraisons',
+      message: `${openOrdersCount} commande(s) restent ouvertes avec un taux de reception de ${receptionRate.toFixed(1)}%. Relancez le fournisseur sur les delais.`
+    });
+  }
+
+  if (orderedHt > 0 && invoicedHt < orderedHt * 0.5) {
+    recommendations.push({
+      tone: 'info',
+      title: 'Facturation a verifier',
+      message: 'Le volume facture reste faible face aux commandes. Verifiez les factures fournisseur en attente ou les receptions non regularisees.'
+    });
+  }
+
+  if (orderedHt > 0 && receivedHt > orderedHt * 1.1) {
+    recommendations.push({
+      tone: 'alert',
+      title: 'Reception atypique',
+      message: 'Le montant receptionne depasse sensiblement le volume commande. Controlez les prix, quantites ou receptions hors commande.'
+    });
+  }
+
+  if (!latestMonth || Number(latestMonth.ordered_ht || 0) <= 0) {
+    recommendations.push({
+      tone: 'warning',
+      title: 'Activite fournisseur faible',
+      message: 'Aucune commande recente detectee. Confirmez si ce fournisseur doit rester actif dans le panel d achat.'
+    });
+  }
+
+  if (recommendations.length === 0) {
+    recommendations.push({
+      tone: 'positive',
+      title: 'Relation fournisseur stable',
+      message: 'Les commandes, receptions et factures restent coherentes. Gardez le suivi des delais et de la qualite de service.'
+    });
+  }
+
+  return recommendations.slice(0, 4);
+};
+
+const getClientStatistics = async (part_id, sequelizeConnection = null) => {
+  const stats = await clientModel.getClientStatistics(part_id, sequelizeConnection);
+  if (!stats) {
+    throw new Error('Client non trouve');
+  }
+
+  return {
+    ...stats,
+    recommendations: buildClientRecommendations(stats)
+  };
+};
+
+const getFournisseurStatistics = async (part_id, sequelizeConnection = null) => {
+  const stats = await clientModel.getFournisseurStatistics(part_id, sequelizeConnection);
+  if (!stats) {
+    throw new Error('Fournisseur non trouve');
+  }
+
+  return {
+    ...stats,
+    recommendations: buildFournisseurRecommendations(stats)
+  };
+};
+
 module.exports = {
   getClients,
   getClientsPaged,
   getFournisseursPaged,
   getFournisseurs,
   getContacts,
+  getContactsAutocomplete,
   getContactsPaged,
   getContact,
   createContact,
@@ -356,6 +535,9 @@ module.exports = {
   archiveContact,
   deleteContact,
   getClient,
+  checkClientUniqueness,
+  checkFournisseurUniqueness,
+  checkCommercialUniqueness,
   createClient,
   createFournisseur,
   createClientDetails,
@@ -365,5 +547,11 @@ module.exports = {
   deleteClient,
   getClientDetails,
   getVilles,
-  getIdentifiants
+  getIdentifiants,
+  getClientStatistics,
+  getFournisseurStatistics
 };
+
+
+
+

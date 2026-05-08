@@ -1,9 +1,9 @@
-<div class="commande-container" style="margin-top: 0 !important; padding-top: 0 !important;">
+﻿<div class="commande-container" style="margin-top: 0 !important; padding-top: 0 !important;">
     <!-- En-tête de l'entrée de stock -->
     <div class="mb-2">
         <div class="d-flex align-items-center mb-1">
             <div class="flex-grow-1">
-                <h3 class="mb-0 fw-bold text-primary">📦 Entrée de Stock <span class="text-dark">#{{numeroEntreeStock}}</span></h3>
+                <h3 class="mb-0 fw-bold text-primary">Entrée de Stock <span class="text-dark">#{{numeroEntreeStock}}</span></h3>
                 <p class="mb-0 small text-muted mt-1">Entrée de Stock / Formulaire</p>
             </div>
         </div>
@@ -27,9 +27,9 @@
         <div class="col-md-6">
             <div class="p-3 bg-white rounded shadow-sm h-100" [formGroup]="EntreeStockForm">
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h6 class="mb-0">📝 Informations de l'Entrée de Stock</h6>
+                    <h6 class="mb-0">Informations de l'Entrée de Stock</h6>
                     <button class="btn btn-sm btn-outline-primary" (click)="toggleEdit()">
-                        {{ editInfos ? '✅ Terminé' : '✏️ Modifier' }}
+                        {{ editInfos ? 'Terminé' : 'Modifier' }}
                     </button>
                 </div>
 
@@ -76,7 +76,7 @@
        <div class="col-md-6" *ngIf="info">
         <div class="p-3 bg-white rounded shadow-sm h-100">
             <div class="d-flex justify-content-between align-items-center mb-2">
-            <h6 class="mb-0">👤 Infos du Fournisseur</h6>
+            <h6 class="mb-0">Infos du Fournisseur</h6>
             </div>
       
             <!-- Affichage infos fournisseur -->
@@ -96,10 +96,10 @@
 
 
     <!-- Produits -->
-    <div class="bg-white rounded shadow-sm p-4 mb-3">
+    <div class="bg-white rounded shadow-sm p-4 mb-3 products-panel">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h6 class="mb-0">📦 Liste des Produits</h6>
-            <button class="btn btn-success" (click)="addProduit()">➕ Ajouter produit</button>
+            <h6 class="mb-0">Liste des Produits</h6>
+            <button class="btn btn-success" (click)="addProduit()">Ajouter produit</button>
         </div>
 
         <!-- Mode de saisie -->
@@ -107,21 +107,20 @@
             <label class="me-2 fw-bold">Mode de saisie :</label>
             <div class="btn-group btn-group-sm">
                 <button class="btn btn-outline-primary" [class.active]="mode === 'editor'"
-                    (click)="activerModeEditor()">📝
-                    Éditeur</button>
-                <button class="btn btn-outline-secondary" [class.active]="mode === 'table'" (click)="mode = 'table'">📋
+                    (click)="activerModeEditor()">Éditeur</button>
+                <button class="btn btn-outline-secondary" [class.active]="mode === 'table'" (click)="mode = 'table'">
                     Liste produits</button>
             </div>
         </div>
 
         <!-- Tableau -->
-        <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+        <div class="table-responsive products-table-wrap">
             <table class="table table-striped align-middle text-center">
                 <thead class="table-light">
                     <tr>
                         <th style="min-width: 300px;">Détails</th>
                         <th class="text-end" style="min-width: 70px;">Qté</th>
-                        <th style="min-width: 200px;">Rubrique</th>
+                        <th style="min-width: 420px;">Rubrique / Dépôt</th>
                         <th style="width: 40px; padding: 2px;">Action</th>
                     </tr>
                 </thead>
@@ -136,24 +135,22 @@
                             </ng-container>
 
                             <ng-container *ngIf="mode === 'table'">
-                                <div class="position-relative">
+                                <div class="position-relative product-search-cell">
                                     <input 
                                         type="text" 
                                         class="form-control form-control-sm" 
                                         style="min-width: 280px; width: 100%;"
                                         [(ngModel)]="p.articleSearch"
                                         (input)="onArticleSearchChange(i, $any($event.target).value)"
+                                        (keydown)="onArticleSearchKeydown(i, $event)"
                                         placeholder="Rechercher un article..."
                                         autocomplete="off" />
                                     <ul *ngIf="p.articleSearch && filteredArticles[i] && filteredArticles[i].length > 0" 
-                                        class="list-group position-absolute w-100 shadow"
-                                        style="max-height: 600px; overflow-y: auto; z-index: 1050; font-size: 14px;">
-                                        <li class="list-group-item list-group-item-action" 
-                                            *ngFor="let article of filteredArticles[i]"
-                                            (click)="selectArticle(i, article)"
-                                            style="padding: 10px 15px; cursor: pointer; font-size: 14px; line-height: 1.5;">
-                                            {{ article.article_nom }}
-                                        </li>
+                                        class="list-group position-absolute w-100 shadow product-autocomplete-dropdown">
+                                        <li class="list-group-item list-group-item-action product-autocomplete-item" 
+                                            *ngFor="let article of filteredArticles[i]; let articleIndex = index"
+                                            [class.active]="highlightedArticleIndex[i] === articleIndex"
+                                            (click)="selectArticle(i, article)">{{ article.article_nom }}</li>
                                     </ul>
                                 </div>
                             </ng-container>
@@ -165,19 +162,24 @@
                         </td>
 
                         <td>
-                            <select class="form-select form-select-sm" [(ngModel)]="p.rubrique_id" (ngModelChange)="onRubriqueChange(i)">
-                                <option [ngValue]="null">Sélectionner une rubrique</option>
-                                <option *ngFor="let rubrique of rubriques" [ngValue]="rubrique.id">
-                                    {{ rubrique.nom }}
-                                </option>
-                            </select>
-                            <div *ngIf="p.rubrique_nom && p.rubrique_nom !== ''" class="badge bg-info text-white mt-1">
-                                {{ p.rubrique_nom }}
+                            <div class="d-flex gap-2 align-items-center">
+                                <select class="form-select form-select-sm" [(ngModel)]="p.rubrique_id" (ngModelChange)="onRubriqueChange(i)">
+                                    <option [ngValue]="null">Sélectionner une rubrique</option>
+                                    <option *ngFor="let rubrique of rubriques" [ngValue]="rubrique.id">
+                                        {{ rubrique.nom }}
+                                    </option>
+                                </select>
+                                <select class="form-select form-select-sm" [(ngModel)]="p.depot_id" (ngModelChange)="onDepotChange(i)">
+                                    <option [ngValue]="null">Sélectionner un dépôt</option>
+                                    <option *ngFor="let depot of depots" [ngValue]="depot.id">
+                                        {{ depot.nom }}
+                                    </option>
+                                </select>
                             </div>
                         </td>
 
                         <td style="padding: 2px;">
-                            <button class="btn btn-danger" style="padding: 1px 4px; font-size: 0.7rem;" (click)="removeProduit(i)" title="Supprimer">🗑️</button>
+                            <button class="btn btn-danger" style="padding: 1px 4px; font-size: 0.7rem;" (click)="removeProduit(i)" title="Supprimer">X</button>
                         </td>
                     </tr>
 
@@ -185,7 +187,7 @@
                     <tr *ngIf="produits.length > 0">
                         <td colspan="100" class="text-end pt-3">
                             <button class="btn btn-success btn-sm" (click)="enregistrerTout()">
-                                💾 Enregistrer tout
+                                Enregistrer tout
                             </button>
                         </td>
                     </tr>
@@ -200,7 +202,7 @@
 
     <!-- Boutons d'action -->
     <div class="d-flex justify-content-end gap-3 mb-3">
-        <button class="btn btn-outline-primary" (click)="voirEntreeStock()">📄 Voir entrée de stock</button>
+        <button class="btn btn-outline-primary" (click)="voirEntreeStock()">Voir entrée de stock</button>
     </div>
 
 </div>
@@ -210,7 +212,7 @@
   <div class="modal-dialog modal-lg" role="document">
     <div class="modal-content p-3">
       <div class="modal-header">
-        <h5 class="modal-title">📧 Envoyer l'entrée de stock par e-mail</h5>
+        <h5 class="modal-title">Envoyer l'entrée de stock par e-mail</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
@@ -232,7 +234,7 @@
             <textarea formControlName="body" class="form-control" rows="5" placeholder="Rédigez votre message ici..."></textarea>
           </div>
           <div class="mb-2">
-            <strong>📎 Pièce jointe : </strong> entree-stock.pdf
+            <strong>Pièce jointe : </strong> entree-stock.pdf
           </div>
         </form>
       </div>
@@ -246,3 +248,5 @@
     </div>
   </div>
 </div>
+
+

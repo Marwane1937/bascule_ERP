@@ -122,6 +122,10 @@
   background-color: #dc3545;
 }
 
+.toast-warning {
+  background-color: #f59e0b;
+}
+
 .toast-icon {
   margin-right: 10px;
   font-size: 18px;
@@ -462,9 +466,145 @@
   transition: opacity 0.2s;
 }
 
+.column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -1px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 3;
+}
+
+.column-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 22%;
+  bottom: 22%;
+  right: 3px;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 2px;
+}
+
+.column-header:hover .column-resize-handle::after {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+/* Tableau livraisons: compacter les colonnes pour éviter le scroll horizontal */
+.livraison-page.livraison-page--detail {
+  max-width: 100%;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.livraison-page .page-inner--detail {
+  max-width: 100%;
+}
+
+.livraison-table-wrap {
+  overflow-x: visible !important;
+}
+
+.livraison-list-table {
+  table-layout: fixed;
+  width: 100%;
+  font-size: 0.82rem;
+}
+
+.livraison-list-table th,
+.livraison-list-table td {
+  vertical-align: middle;
+  padding: 0.26rem 0.3rem;
+}
+
+.livraison-list-table .livraison-amount-col,
+.livraison-list-table .livraison-amount-cell {
+  width: 110px;
+  min-width: 110px;
+  white-space: nowrap;
+}
+
+.livraison-list-table .livraison-amount-cell {
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.livraison-amount-label {
+  white-space: nowrap;
+}
+
+.livraison-client-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: none;
+  line-height: 1.2;
+}
+
+.livraison-commande-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.livraison-date-cell {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.livraison-list-table .btn-group > .btn,
+.livraison-list-table .dropdown-toggle,
+.livraison-list-table .badge {
+  white-space: nowrap;
+}
+
+.livraison-list-table th:nth-last-child(2),
+.livraison-list-table td:nth-last-child(2),
+.livraison-list-table th:last-child,
+.livraison-list-table td:last-child {
+  white-space: nowrap;
+}
+
+.livraison-commande-cell,
+.livraison-client-cell {
+  max-width: none;
+}
+
+.livraison-list-table .btn-group > .btn {
+  padding-left: 0.28rem;
+  padding-right: 0.28rem;
+  font-size: 0.76rem;
+}
+
+.livraison-list-table .badge {
+  font-size: 0.72rem;
+  padding: 0.24rem 0.36rem;
+}
+
+.select-col-header,
+.select-col-cell {
+  width: 18px !important;
+  min-width: 18px !important;
+  max-width: 18px !important;
+  padding: 1px !important;
+}
+
+.select-col-checkbox {
+  width: 11px;
+  height: 11px;
+  margin: 0;
+}
+
 .pinned-column {
   background-color: #e7f3ff !important;
   font-weight: 600;
+}
+
+.livraison-row--focused td {
+  color: #dc2626 !important;
+  font-weight: 700;
 }
 
 /* Menu contextuel des colonnes */
@@ -572,4 +712,324 @@
 
 .table thead th.sortable i {
   font-size: 0.85em;
+}
+
+.livraison-commande-cell {
+  width: 126px;
+  min-width: 126px;
+  max-width: 126px;
+  white-space: nowrap;
+}
+
+.livraison-date-cell {
+  width: 150px;
+  min-width: 150px;
+  max-width: 150px;
+}
+
+.livraison-commande-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.22rem 0.45rem;
+  border-radius: 999px;
+  color: #214a88;
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.livraison-commande-trigger__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.livraison-commande-trigger.is-hoverable {
+  cursor: pointer;
+  background: linear-gradient(135deg, rgba(33, 74, 136, 0.08), rgba(37, 179, 135, 0.08));
+}
+
+.livraison-commande-trigger.is-hoverable:hover {
+  background: linear-gradient(135deg, rgba(33, 74, 136, 0.14), rgba(37, 179, 135, 0.14));
+  color: #12386d;
+  transform: translateY(-1px);
+}
+
+.livraison-commande-trigger__icon {
+  flex: 0 0 auto;
+  font-size: 0.62rem;
+  color: #25b387;
+}
+
+.commande-progress-popover {
+  position: fixed;
+  z-index: 1400;
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(430px, calc(100vh - 24px));
+  padding: 0.9rem;
+  border: 1px solid rgba(16, 24, 40, 0.08);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at top right, rgba(37, 179, 135, 0.12), transparent 38%),
+    linear-gradient(155deg, #fbfdff 0%, #f4f9ff 100%);
+  box-shadow: 0 24px 65px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+}
+
+.commande-progress-popover__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.commande-progress-popover__eyebrow {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7b8ba5;
+}
+
+.commande-progress-popover__header strong {
+  color: #16365d;
+  font-size: 1rem;
+}
+
+.commande-progress-popover__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: #e8f3ff;
+  color: #2155a3;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.commande-progress-popover__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.commande-progress-popover__metric {
+  padding: 0.6rem 0.65rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(32, 72, 134, 0.08);
+}
+
+.commande-progress-popover__metric span {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: #75849f;
+  font-size: 0.75rem;
+}
+
+.commande-progress-popover__metric strong {
+  color: #132d4f;
+  font-size: 0.95rem;
+}
+
+.commande-progress-popover__progress {
+  margin-bottom: 0.85rem;
+  padding: 0.75rem 0.8rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(32, 72, 134, 0.08);
+}
+
+.commande-progress-popover__progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.55rem;
+  color: #556984;
+  font-size: 0.76rem;
+}
+
+.commande-progress-popover__progress-head strong {
+  color: #16365d;
+  font-size: 0.82rem;
+}
+
+.commande-progress-popover__progress-bar {
+  height: 9px;
+  border-radius: 999px;
+  background: #e6edf5;
+  overflow: hidden;
+}
+
+.commande-progress-popover__progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f0b544 0%, #ffcf6b 100%);
+}
+
+.commande-progress-popover__loading,
+.commande-progress-popover__empty {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 88px;
+  padding: 0.95rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #52637f;
+}
+
+.commande-progress-popover__list {
+  display: grid;
+  gap: 0.65rem;
+  max-height: 230px;
+  padding-right: 0.2rem;
+  overflow-y: auto;
+}
+
+.commande-progress-line {
+  padding: 0.8rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(33, 74, 136, 0.08);
+}
+
+.commande-progress-line__top,
+.commande-progress-line__progress-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.commande-progress-line__top {
+  margin-bottom: 0.55rem;
+}
+
+.commande-progress-line__name {
+  color: #112741;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.commande-progress-line__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.28rem 0.68rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.commande-progress-line__status.is-pending {
+  background: #ffe7c2;
+  color: #a15c00;
+}
+
+.commande-progress-line__status.is-preparation {
+  background: #fff0cf;
+  color: #926100;
+}
+
+.commande-progress-line__status.is-ready {
+  background: #d9f6ed;
+  color: #0c7a5b;
+}
+
+.commande-progress-line__status.is-delivery {
+  background: #dbeeff;
+  color: #1d5a97;
+}
+
+.commande-progress-line__status.is-done {
+  background: #d9f7de;
+  color: #18794e;
+}
+
+.commande-progress-line__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-bottom: 0.6rem;
+}
+
+.commande-progress-line__metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  padding: 0.5rem 0.55rem;
+  border-radius: 12px;
+  background: #f7fafd;
+}
+
+.commande-progress-line__metric span,
+.commande-progress-line__metric small {
+  color: #72829b;
+  font-size: 0.7rem;
+}
+
+.commande-progress-line__metric strong {
+  color: #142b49;
+  font-size: 0.88rem;
+}
+
+.commande-progress-line__progress-label {
+  margin-bottom: 0.45rem;
+  color: #5c6e88;
+  font-size: 0.74rem;
+}
+
+.commande-progress-line__progress-label strong {
+  color: #16365d;
+  font-size: 0.8rem;
+}
+
+.commande-progress-line__bar {
+  position: relative;
+  height: 9px;
+  border-radius: 999px;
+  background: #e8eef6;
+  overflow: hidden;
+}
+
+.commande-progress-line__bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.commande-progress-line__bar-fill.is-prepared {
+  background: linear-gradient(90deg, #ffd27a 0%, #f0b544 100%);
+}
+
+@media (max-width: 768px) {
+  .commande-progress-popover {
+    width: min(340px, calc(100vw - 20px));
+    padding: 0.8rem;
+  }
+
+  .commande-progress-popover__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .commande-progress-line__metrics {
+    grid-template-columns: 1fr;
+  }
 }

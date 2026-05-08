@@ -53,6 +53,9 @@ export class AuthService {
   private documentSocieteSubject = new BehaviorSubject<DocumentSociete | null>(null);
   private currentSocieteSubject = new BehaviorSubject<Societe | null>(null);
   private userPermissionsSubject = new BehaviorSubject<UserPermission[]>([]);
+  private readonly permissionAliases: { [key: string]: string[] } = {
+    'Recette/Dépense': ['Recette/Dépense', 'Recettes', 'Dépenses']
+  };
 
   public currentUser$ = this.currentUserSubject.asObservable();
   public documentSociete$ = this.documentSocieteSubject.asObservable();
@@ -414,11 +417,10 @@ export class AuthService {
       return true;
     }
     
-    const permission = permissions.find(p => p.menu_item === menuItemName);
-    // Gérer les deux formats : 1/0 (int) ou true/false (bool) ou '1'/'0' (string)
-    const hasAccess = permission ? this.checkAccess(permission.access) : false;
-    
-    return hasAccess;
+    const aliases = this.permissionAliases[menuItemName] || [menuItemName];
+    return permissions.some(permission =>
+      aliases.includes(permission.menu_item) && this.checkAccess(permission.access)
+    );
   }
 
   // Helper pour vérifier l'accès (gère différents formats)

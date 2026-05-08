@@ -11,6 +11,20 @@ export class VenteService {
 
   constructor(private http: HttpClient) { }
 
+  getClientSuggestions(options: any = {}): Observable<any> {
+    let params = new HttpParams();
+    if (options.search !== undefined) params = params.set('search', options.search || '');
+    if (options.limit) params = params.set('limit', options.limit.toString());
+    return this.http.get(`${this.apiUrl}/reporting/client-suggestions`, { params });
+  }
+
+  getArticleSuggestions(options: any = {}): Observable<any> {
+    let params = new HttpParams();
+    if (options.search !== undefined) params = params.set('search', options.search || '');
+    if (options.limit) params = params.set('limit', options.limit.toString());
+    return this.http.get(`${this.apiUrl}/reporting/article-suggestions`, { params });
+  }
+
   // ============= REPORTING VENTE =============
 
   /**
@@ -77,4 +91,3 @@ export class VenteService {
     return this.http.get(`${this.apiUrl}/reporting/ca-clients`, { params });
   }
 }
-

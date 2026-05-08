@@ -46,11 +46,45 @@
       <div class="tab-pane fade" [class.show]="activeTab === 'etat-stock'" [class.active]="activeTab === 'etat-stock'">
 
         <!-- Barre de recherche et filtres -->
-        <div class="row mb-3">
-          <div class="col-md-4">
+        <div class="row g-2 mb-3">
+          <div class="col-md-3">
+            <div class="input-group position-relative">
+              <span class="input-group-text"><i class="fas fa-tag"></i></span>
+              <input type="text" class="form-control" placeholder="Article (code/nom)"
+                     [(ngModel)]="etatStockArticle"
+                     (input)="onEtatStockArticleSearchChange($any($event.target).value)"
+                     (focus)="onEtatStockArticleInputFocus()"
+                     (blur)="onEtatStockArticleInputBlur()"
+                     (keyup.enter)="onEtatStockSearch()"
+                     autocomplete="off">
+              <div class="position-absolute top-100 start-0 w-100 z-index-1050"
+                   *ngIf="etatStockShowArticleAutocomplete && etatStockFilteredArticles.length > 0"
+                   style="max-height: 220px; overflow-y: auto; background: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-top: 2px;">
+                <div *ngFor="let article of etatStockFilteredArticles"
+                     class="p-2 cursor-pointer hover-bg-light"
+                     (mousedown)="selectEtatStockArticle(article)"
+                     style="cursor: pointer; border-bottom: 1px solid #f0f0f0;">
+                  <strong>{{ article.article_cod }}</strong> - {{ article.article_nom }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-2">
+            <div class="input-group">
+              <span class="input-group-text">Du</span>
+              <input type="date" class="form-control" [(ngModel)]="etatStockDateFrom">
+            </div>
+          </div>
+          <div class="col-md-2">
+            <div class="input-group">
+              <span class="input-group-text">Au</span>
+              <input type="date" class="form-control" [(ngModel)]="etatStockDateTo">
+            </div>
+          </div>
+          <div class="col-md-3">
             <div class="input-group">
               <span class="input-group-text"><i class="fas fa-search"></i></span>
-              <input type="text" class="form-control" placeholder="Rechercher par code ou nom..."
+              <input type="text" class="form-control" placeholder="Recherche générale..."
                      [(ngModel)]="etatStockSearchTerm" (keyup.enter)="onEtatStockSearch()">
               <button class="btn btn-primary" type="button" (click)="onEtatStockSearch()">
                 <i class="fas fa-search"></i>
@@ -65,12 +99,7 @@
               <option [value]="100">100 par page</option>
             </select>
           </div>
-          <div class="col-md-2">
-            <select class="form-select" [(ngModel)]="etatStockDepotId" (change)="getEtatStock()">
-              <option [value]="1">Dépôt Principal</option>
-            </select>
-          </div>
-          <div class="col-md-4 text-end">
+          <div class="col-12 text-end">
             <div class="btn-export-group">
               <button class="btn-export-pdf" (click)="exportEtatStock('pdf')" title="Exporter PDF">
                 <i class="fas fa-file-pdf"></i> PDF
@@ -81,11 +110,179 @@
               <button class="btn btn-outline-primary" (click)="getEtatStock()">
                 <i class="fas fa-sync-alt"></i> Actualiser
               </button>
+              <button class="btn btn-outline-secondary" (click)="clearEtatStockFilters()">
+                <i class="fas fa-times"></i> Effacer
+              </button>
             </div>
           </div>
         </div>
 
         <!-- Tableau État de Stock -->
+        <div class="row g-2 mb-3">
+          <div class="col-md-2 col-sm-6">
+            <div class="stock-kpi">
+              <span class="stock-kpi-label">Articles période</span>
+              <strong>{{ etatStockSummary.article_count || 0 }}</strong>
+            </div>
+          </div>
+          <div class="col-md-2 col-sm-6">
+            <div class="stock-kpi stock-kpi-success">
+              <span class="stock-kpi-label">Entrées</span>
+              <strong>{{ etatStockSummary.total_entree || 0 | number:'1.0-2' }}</strong>
+            </div>
+          </div>
+          <div class="col-md-2 col-sm-6">
+            <div class="stock-kpi stock-kpi-danger">
+              <span class="stock-kpi-label">Sorties</span>
+              <strong>{{ etatStockSummary.total_sortie || 0 | number:'1.0-2' }}</strong>
+            </div>
+          </div>
+          <div class="col-md-2 col-sm-6">
+            <div class="stock-kpi">
+              <span class="stock-kpi-label">Solde période</span>
+              <strong>{{ etatStockSummary.solde_quantite || 0 | number:'1.0-2' }}</strong>
+            </div>
+          </div>
+          <div class="col-md-2 col-sm-6">
+            <div class="stock-kpi stock-kpi-primary">
+              <span class="stock-kpi-label">Stock à date</span>
+              <strong>{{ etatStockSnapshot.stock_quantite || 0 | number:'1.0-2' }}</strong>
+            </div>
+          </div>
+          <div class="col-md-2 col-sm-6">
+            <div class="stock-kpi">
+              <span class="stock-kpi-label">Valeur stock</span>
+              <strong>{{ formatCurrency(etatStockSnapshot.valeur_stock || 0) }}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-2 mb-3">
+          <div class="col-md-3 col-sm-6">
+            <div class="stock-kpi stock-kpi-success">
+              <span class="stock-kpi-label">Articles en stock</span>
+              <strong>{{ etatStockSnapshot.positive_count || 0 }}</strong>
+            </div>
+          </div>
+          <div class="col-md-3 col-sm-6">
+            <div class="stock-kpi stock-kpi-danger">
+              <span class="stock-kpi-label">Stock négatif</span>
+              <strong>{{ etatStockSnapshot.negative_count || 0 }}</strong>
+            </div>
+          </div>
+          <div class="col-md-3 col-sm-6">
+            <div class="stock-kpi">
+              <span class="stock-kpi-label">Valeur entrées</span>
+              <strong>{{ formatCurrency(etatStockSummary.valeur_entree || 0) }}</strong>
+            </div>
+          </div>
+          <div class="col-md-3 col-sm-6">
+            <div class="stock-kpi">
+              <span class="stock-kpi-label">Valeur sorties</span>
+              <strong>{{ formatCurrency(etatStockSummary.valeur_sortie || 0) }}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="stock-analysis-section mb-3">
+          <div class="stock-analysis-header">
+            <h5><i class="fas fa-chart-pie me-2"></i>États d'analyse du stock</h5>
+          </div>
+          <div class="row g-3">
+            <div class="col-xl-3 col-lg-6">
+              <div class="stock-analysis-panel">
+                <div class="stock-analysis-title">Alertes</div>
+                <div class="stock-analysis-metric">
+                  <span>Stock négatif</span>
+                  <strong class="text-danger">{{ etatStockAnalysis.current.stock_negative_count || 0 }}</strong>
+                </div>
+                <div class="stock-analysis-metric">
+                  <span>Stock nul</span>
+                  <strong>{{ etatStockAnalysis.current.stock_zero_count || 0 }}</strong>
+                </div>
+                <div class="stock-analysis-metric">
+                  <span>Sans mouvement</span>
+                  <strong>{{ etatStockAnalysis.sansMouvementCount || 0 }}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-xl-3 col-lg-6">
+              <div class="stock-analysis-panel">
+                <div class="stock-analysis-title">Valorisation</div>
+                <div class="stock-analysis-metric">
+                  <span>Stock actuel</span>
+                  <strong>{{ etatStockAnalysis.current.stock_quantite || 0 | number:'1.0-2' }}</strong>
+                </div>
+                <div class="stock-analysis-metric">
+                  <span>Marge potentielle</span>
+                  <strong>{{ formatCurrency(etatStockAnalysis.current.marge_potentielle || 0) }}</strong>
+                </div>
+                <div class="stock-analysis-metric">
+                  <span>Taux rotation</span>
+                  <strong>{{ etatStockAnalysis.rotation.taux_rotation || 0 | number:'1.0-2' }}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-xl-3 col-lg-6">
+              <div class="stock-analysis-panel">
+                <div class="stock-analysis-title">Top sorties</div>
+                <div class="stock-analysis-row" *ngFor="let item of etatStockAnalysis.topSorties">
+                  <span><strong>{{ item.article_cod }}</strong> {{ item.article_nom }}</span>
+                  <strong class="text-danger">{{ item.quantite || 0 | number:'1.0-2' }}</strong>
+                </div>
+                <div class="stock-analysis-empty" *ngIf="!etatStockAnalysis.topSorties || etatStockAnalysis.topSorties.length === 0">
+                  Aucun mouvement
+                </div>
+              </div>
+            </div>
+
+            <div class="col-xl-3 col-lg-6">
+              <div class="stock-analysis-panel">
+                <div class="stock-analysis-title">Top entrées</div>
+                <div class="stock-analysis-row" *ngFor="let item of etatStockAnalysis.topEntrees">
+                  <span><strong>{{ item.article_cod }}</strong> {{ item.article_nom }}</span>
+                  <strong class="text-success">{{ item.quantite || 0 | number:'1.0-2' }}</strong>
+                </div>
+                <div class="stock-analysis-empty" *ngIf="!etatStockAnalysis.topEntrees || etatStockAnalysis.topEntrees.length === 0">
+                  Aucun mouvement
+                </div>
+              </div>
+            </div>
+
+            <div class="col-xl-6">
+              <div class="stock-analysis-panel">
+                <div class="stock-analysis-title">Articles sans mouvement</div>
+                <div class="stock-analysis-row" *ngFor="let item of etatStockAnalysis.sansMouvement">
+                  <span><strong>{{ item.article_cod }}</strong> {{ item.article_nom }}</span>
+                  <strong>{{ item.stock_quantite || 0 | number:'1.0-2' }}</strong>
+                </div>
+                <div class="stock-analysis-empty" *ngIf="!etatStockAnalysis.sansMouvement || etatStockAnalysis.sansMouvement.length === 0">
+                  Aucun article
+                </div>
+              </div>
+            </div>
+
+            <div class="col-xl-6">
+              <div class="stock-analysis-panel">
+                <div class="stock-analysis-title">Stock négatif</div>
+                <div class="stock-analysis-row" *ngFor="let item of etatStockAnalysis.stockNegatif">
+                  <span><strong>{{ item.article_cod }}</strong> {{ item.article_nom }}</span>
+                  <strong class="text-danger">{{ item.stock_quantite || 0 | number:'1.0-2' }}</strong>
+                </div>
+                <div class="stock-analysis-empty" *ngIf="!etatStockAnalysis.stockNegatif || etatStockAnalysis.stockNegatif.length === 0">
+                  Aucune alerte
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="alert alert-info py-2" *ngIf="etatStockFallbackApplied">
+          Aucun mouvement trouvé dans la période sélectionnée. Le tableau affiche le stock à date pour l'article choisi.
+        </div>
+
         <div class="card">
           <div class="card-header">
             <h5 class="card-title mb-0">État détaillé du stock</h5>
@@ -136,7 +333,7 @@
                   <tr *ngIf="!etatStockLoading && etatStock.length === 0">
                     <td colspan="7" class="text-center py-4 text-muted">
                       <i class="fas fa-inbox fa-2x mb-2"></i><br>
-                      Aucun article trouvé
+                      Aucun mouvement trouvé pour ces critères
                     </td>
                   </tr>
                   <tr *ngFor="let item of etatStock">
@@ -219,9 +416,7 @@
                 <div *ngFor="let article of filteredArticles" 
                      class="p-2 cursor-pointer hover-bg-light"
                      (mousedown)="selectArticle(article)"
-                     style="cursor: pointer; border-bottom: 1px solid #f0f0f0;"
-                     onmouseover="this.style.backgroundColor='#f8f9fa'" 
-                     onmouseout="this.style.backgroundColor='white'">
+                     style="cursor: pointer; border-bottom: 1px solid #f0f0f0;">
                   <strong>{{ article.article_cod }}</strong> - {{ article.article_nom }}
                 </div>
               </div>

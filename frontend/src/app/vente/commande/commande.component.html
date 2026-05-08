@@ -1,7 +1,7 @@
-<div class="container py-4">
-  <div class="page-inner">
+<div class="container-fluid py-4 commande-page" [class.commande-page--detail]="detailMode">
+  <div class="page-inner" [class.page-inner--detail]="detailMode">
 
-    <!-- En-tête -->
+    <!-- En-tete -->
     <div class="page-header mb-4">
       <h3 class="fw-bold text-dark">Ventes</h3>
       <ul class="breadcrumbs d-flex align-items-center">
@@ -55,18 +55,18 @@
                     formControlName="description" />
                 </div>
                 <div class="col-md-6 mb-3">
-                  <label for="Description" class="form-label">Date Création <span class="text-danger">*</span></label>
-                  <input type="date" class="form-control" id="date" formControlName="date" required />
+                  <label for="Description" class="form-label">Date Creation <span class="text-danger">*</span></label>
+                  <input type="datetime-local" class="form-control" id="date" formControlName="date" required />
                 </div>
 
                 <div class="col-md-6 mb-3">
-                  <label for="Validité" class="form-label">Validité de l'offre</label>
-                  <input type="date" class="form-control" id="Validité" formControlName="date_fin" />
+                  <label for="Validite" class="form-label">Validite de l'offre</label>
+                  <input type="date" class="form-control" id="Validite" formControlName="date_fin" />
                 </div>
                 <div class="col-md-6 mb-3 position-relative">
 
                   <label for="ClientSearch" class="form-label">Client <span class="text-danger">*</span></label>
-                  <input id="ClientSearch" type="text" class="form-control" placeholder="Commencez à écrire..."
+                  <input id="ClientSearch" type="text" class="form-control" placeholder="Commencez a ecrire..."
                     [(ngModel)]="searchTerm" (input)="onSearchChange($any($event.target).value)" 
                     [ngModelOptions]="{standalone: true}" autocomplete="off"
                     name="clientSearch" [class.is-invalid]="DevisForm.get('part_id')?.invalid && DevisForm.get('part_id')?.touched" />
@@ -74,7 +74,7 @@
                   <div *ngIf="DevisForm.get('part_id')?.invalid && DevisForm.get('part_id')?.touched" class="invalid-feedback">
                     Le client est requis
                   </div>
-                  <!-- Liste visible uniquement si le champ contient du texte ET qu'il y a des résultats -->
+                  <!-- Liste visible uniquement si le champ contient du texte ET qu'il y a des resultats -->
                   <ul *ngIf="searchTerm && filteredClients.length > 0" class="list-group position-absolute w-100 shadow"
                     style="max-height: 200px; overflow-y: auto; z-index: 1050;">
                     <li class="list-group-item list-group-item-action" *ngFor="let client of filteredClients"
@@ -85,12 +85,12 @@
                 </div>
                 <div class="col-md-6 mb-3 position-relative">
                   <label for="CommercialSearch" class="form-label">Commercial</label>
-                  <input id="CommercialSearch" type="text" class="form-control" placeholder="Commencez à écrire..."
+                  <input id="CommercialSearch" type="text" class="form-control" placeholder="Commencez a ecrire..."
                     [(ngModel)]="searchCommercial" (input)="onCommercialSearchChange($any($event.target).value)" 
                     [ngModelOptions]="{standalone: true}" autocomplete="off"
                     name="commercialSearch" />
                   <input type="hidden" formControlName="contact_id" />
-                  <!-- Liste visible seulement si une saisie est présente ET des résultats -->
+                  <!-- Liste visible seulement si une saisie est presente ET des resultats -->
                   <ul *ngIf="searchCommercial && filteredCommerciaux.length > 0"
                     class="list-group position-absolute w-100 shadow"
                     style="max-height: 200px; overflow-y: auto; z-index: 1050;">
@@ -100,10 +100,16 @@
                     </li>
                   </ul>
                 </div>
-
+                <div class="col-md-6 mb-3">
+                  <label for="DepotIdCommande" class="form-label">Depot</label>
+                  <select id="DepotIdCommande" class="form-select" formControlName="depot_id">
+                    <option [ngValue]="null">-- Choisir un depot --</option>
+                    <option *ngFor="let depot of depots" [ngValue]="depot.id">{{ depot.nom }}</option>
+                  </select>
+                </div>
               </div>
               <div class="modal-footer bg-light border-top">
-                <button type="submit" class="btn btn-info" [disabled]="!DevisForm.valid">✅
+                <button type="submit" class="btn btn-info" [disabled]="!DevisForm.valid">OK
                   Enregistrer</button>
               </div>
             </form>
@@ -121,7 +127,7 @@
                 <input 
                     type="text" 
                     class="form-control" 
-                    placeholder="Rechercher par numéro, client ou commercial..." 
+                    placeholder="Rechercher par numero, client, depot ou status..." 
                     [(ngModel)]="searchTermCommandes"
                     (keyup.enter)="onSearchCommandes()">
                 <button class="btn btn-primary" type="button" (click)="onSearchCommandes()">
@@ -138,8 +144,12 @@
             </select>
         </div>
         <div class="col-md-5 text-end">
+            <button class="btn me-2" [ngClass]="detailMode ? 'btn-primary' : 'btn-outline-primary'" (click)="toggleDetailMode()">
+                <i class="fas" [ngClass]="detailMode ? 'fa-compress-alt' : 'fa-expand-alt'"></i>
+                {{ detailMode ? 'Vue compacte' : 'Plus de detail' }}
+            </button>
             <button class="btn btn-outline-secondary me-2" (click)="toggleAdvancedFiltersCommandes()">
-                <i class="fas fa-filter"></i> Filtres avancés
+                <i class="fas fa-filter"></i> Filtres avances
                 <i class="fas" [class.fa-chevron-down]="!showAdvancedFiltersCommandes" [class.fa-chevron-up]="showAdvancedFiltersCommandes"></i>
             </button>
             <button class="btn btn-outline-success" (click)="exportToCSVCommandes()" title="Exporter en CSV/Excel">
@@ -148,17 +158,17 @@
         </div>
     </div>
 
-    <!-- Filtres avancés -->
+    <!-- Filtres avances -->
     <div class="row mb-3" *ngIf="showAdvancedFiltersCommandes">
         <div class="col-md-12">
             <div class="card border-primary">
                 <div class="card-header bg-primary text-white">
-                    <i class="fas fa-filter"></i> Filtres avancés
+                    <i class="fas fa-filter"></i> Filtres avances
                 </div>
                 <div class="card-body">
                     <div class="row g-3">
                         <div class="col-md-4">
-                            <label class="form-label"><i class="fas fa-calendar-alt"></i> Date de début</label>
+                            <label class="form-label"><i class="fas fa-calendar-alt"></i> Date de debut</label>
                             <input type="date" class="form-control" [(ngModel)]="filterDateFromCommandes" (change)="onFilterChangeCommandes()">
                         </div>
                         <div class="col-md-4">
@@ -173,7 +183,7 @@
                     <div class="row mt-3">
                         <div class="col-md-12 text-end">
                             <button class="btn btn-outline-danger" (click)="resetFiltersCommandes()">
-                                <i class="fas fa-times"></i> Réinitialiser les filtres
+                                <i class="fas fa-times"></i> Reinitialiser les filtres
                             </button>
                         </div>
                     </div>
@@ -187,8 +197,8 @@
       <div class="col-md-12">
         <div class="card border-0 shadow-sm rounded-3">
           <div class="card-body">
-            <div class="table-responsive" style="position: relative; min-height: 400px;">
-              <!-- Loader amélioré avec overlay -->
+            <div class="table-responsive commande-table-wrap" style="position: relative; min-height: 400px;">
+              <!-- Loader ameliore avec overlay -->
               <div *ngIf="loadingCommandes" 
                 class="text-center my-4" 
                 style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
@@ -201,13 +211,23 @@
 
               <table 
                 id="devisTable-Commande" 
-                class="table table-bordered table-striped table-hover" 
+                class="table table-bordered table-striped table-hover commande-list-table" 
                 width="100%"
+                [style.min-width.px]="detailMode ? getTableMinWidth() : null"
                 [style.opacity]="loadingCommandes ? '0.5' : '1'">
+                <colgroup>
+                  <col *ngIf="columnVisibility.numero" [style.width]="getColumnWidth('numero')">
+                  <col *ngIf="columnVisibility.date" [style.width]="getColumnWidth('date')">
+                  <col *ngIf="columnVisibility.client" [style.width]="getColumnWidth('client')">
+                  <col *ngIf="columnVisibility.depot" [style.width]="getColumnWidth('depot')">
+                  <col *ngIf="columnVisibility.status" [style.width]="getColumnWidth('status')">
+                  <col *ngIf="columnVisibility.progression" [style.width]="getColumnWidth('progression')">
+                  <col [style.width.px]="actionColumnWidth">
+                </colgroup>
                 <thead class="table-light">
                   <!-- Bouton pour afficher/masquer les filtres -->
                   <tr *ngIf="!showFilterRow" style="background-color: #f8f9fa; border-bottom: 2px solid #dee2e6;">
-                    <td [attr.colspan]="getVisibleColumnsCount() + 2" class="text-center py-2" style="padding: 8px;">
+                    <td [attr.colspan]="getVisibleColumnsCount() + 1" class="text-center py-2" style="padding: 8px;">
                       <button 
                         class="btn btn-sm btn-outline-primary" 
                         (click)="showFilterRow = true"
@@ -218,18 +238,18 @@
                       </button>
                     </td>
                   </tr>
-                  <!-- Ligne des en-têtes avec tri et menu contextuel -->
+                  <!-- Ligne des en-tetes avec tri et menu contextuel -->
                   <tr>
-                    <th style="width: 50px;"><input type="checkbox" (change)="toggleAllCommande($event)"></th>
                     <th *ngIf="columnVisibility.numero" 
+                        #numeroHeader
                         (click)="onSortCommandes('numero')" 
                         (contextmenu)="showColumnContextMenu($event, 'numero')"
-                        class="sortable column-header" 
+                        class="sortable column-header commande-numero-cell" 
                         style="cursor: pointer; position: relative;"
-                        [style.width]="columnWidths.numero"
+                        [style.width]="getColumnWidth('numero')"
                         [class.pinned-column]="isColumnPinned('numero')">
                       <div class="d-flex align-items-center justify-content-between">
-                        <span>Numéro</span>
+                        <span>Numero</span>
                         <div class="d-flex align-items-center gap-1">
                           <i *ngIf="isColumnPinned('numero')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
                           <i class="fas ms-1" [ngClass]="getSortIconCommandes('numero')"></i>
@@ -240,13 +260,17 @@
                           </button>
                         </div>
                       </div>
+                      <span class="column-resize-handle"
+                            title="Redimensionner"
+                            (mousedown)="startColumnResize($event, 'numero', numeroHeader)"></span>
                     </th>
                     <th *ngIf="columnVisibility.date" 
+                        #dateHeader
                         (click)="onSortCommandes('date')" 
                         (contextmenu)="showColumnContextMenu($event, 'date')"
-                        class="sortable column-header" 
+                        class="sortable column-header commande-date-cell" 
                         style="cursor: pointer; position: relative;"
-                        [style.width]="columnWidths.date"
+                        [style.width]="getColumnWidth('date')"
                         [class.pinned-column]="isColumnPinned('date')">
                       <div class="d-flex align-items-center justify-content-between">
                         <span>Date</span>
@@ -260,13 +284,17 @@
                           </button>
                         </div>
                       </div>
+                      <span class="column-resize-handle"
+                            title="Redimensionner"
+                            (mousedown)="startColumnResize($event, 'date', dateHeader)"></span>
                     </th>
                     <th *ngIf="columnVisibility.client" 
+                        #clientHeader
                         (click)="onSortCommandes('client')" 
                         (contextmenu)="showColumnContextMenu($event, 'client')"
                         class="sortable column-header" 
                         style="cursor: pointer; position: relative;"
-                        [style.width]="columnWidths.client"
+                        [style.width]="getColumnWidth('client')"
                         [class.pinned-column]="isColumnPinned('client')">
                       <div class="d-flex align-items-center justify-content-between">
                         <span>Client</span>
@@ -280,50 +308,87 @@
                           </button>
                         </div>
                       </div>
+                      <span class="column-resize-handle"
+                            title="Redimensionner"
+                            (mousedown)="startColumnResize($event, 'client', clientHeader)"></span>
                     </th>
-                    <th *ngIf="columnVisibility.commercial" 
-                        (click)="onSortCommandes('commercial')" 
-                        (contextmenu)="showColumnContextMenu($event, 'commercial')"
+                    <th *ngIf="columnVisibility.depot" 
+                        #depotHeader
+                        (click)="onSortCommandes('depot')" 
+                        (contextmenu)="showColumnContextMenu($event, 'depot')"
                         class="sortable column-header" 
                         style="cursor: pointer; position: relative;"
-                        [style.width]="columnWidths.commercial"
-                        [class.pinned-column]="isColumnPinned('commercial')">
+                        [style.width]="getColumnWidth('depot')"
+                        [class.pinned-column]="isColumnPinned('depot')">
                       <div class="d-flex align-items-center justify-content-between">
-                        <span>Commercial</span>
+                        <span>Depot</span>
                         <div class="d-flex align-items-center gap-1">
-                          <i *ngIf="isColumnPinned('commercial')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
-                          <i class="fas ms-1" [ngClass]="getSortIconCommandes('commercial')"></i>
+                          <i *ngIf="isColumnPinned('depot')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
+                          <i class="fas ms-1" [ngClass]="getSortIconCommandes('depot')"></i>
                           <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
-                                  (click)="openColumnMenu($event, 'commercial')"
+                                  (click)="openColumnMenu($event, 'depot')"
                                   style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
                             <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
                           </button>
                         </div>
                       </div>
+                      <span class="column-resize-handle"
+                            title="Redimensionner"
+                            (mousedown)="startColumnResize($event, 'depot', depotHeader)"></span>
                     </th>
-                    <th *ngIf="columnVisibility.description" 
-                        class="column-header" 
-                        style="position: relative;"
-                        [style.width]="columnWidths.description"
-                        [class.pinned-column]="isColumnPinned('description')">
+                    <th *ngIf="columnVisibility.status"
+                        #statusHeader
+                        (click)="onSortCommandes('status')"
+                        (contextmenu)="showColumnContextMenu($event, 'status')"
+                        class="sortable column-header"
+                        style="cursor: pointer; position: relative;"
+                        [style.width]="getColumnWidth('status')"
+                        [class.pinned-column]="isColumnPinned('status')">
                       <div class="d-flex align-items-center justify-content-between">
-                        <span>Description</span>
+                        <span>Status</span>
                         <div class="d-flex align-items-center gap-1">
-                          <i *ngIf="isColumnPinned('description')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
-                          <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
-                                  (click)="openColumnMenu($event, 'description')"
+                          <i *ngIf="isColumnPinned('status')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
+                          <i class="fas ms-1" [ngClass]="getSortIconCommandes('status')"></i>
+                          <button class="btn btn-sm p-0 ms-1 column-menu-btn"
+                                  (click)="openColumnMenu($event, 'status')"
                                   style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
                             <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
                           </button>
                         </div>
                       </div>
+                      <span class="column-resize-handle"
+                            title="Redimensionner"
+                            (mousedown)="startColumnResize($event, 'status', statusHeader)"></span>
                     </th>
-                    <th style="width: 150px;" class="text-center">Actions</th>
+                    <th *ngIf="columnVisibility.progression"
+                        #progressionHeader
+                        (click)="onSortCommandes('progression_preparation')"
+                        (contextmenu)="showColumnContextMenu($event, 'progression')"
+                        class="sortable column-header"
+                        style="cursor: pointer; position: relative; width: 210px;"
+                        [style.width]="getColumnWidth('progression')"
+                        [class.pinned-column]="isColumnPinned('progression')">
+                      <div class="d-flex align-items-center justify-content-between">
+                        <span>Progression</span>
+                        <div class="d-flex align-items-center gap-1">
+                          <i *ngIf="isColumnPinned('progression')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
+                          <i class="fas ms-1" [ngClass]="getSortIconCommandes('progression_preparation')"></i>
+                          <button class="btn btn-sm p-0 ms-1 column-menu-btn"
+                                  (click)="openColumnMenu($event, 'progression')"
+                                  style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
+                            <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <span class="column-resize-handle"
+                            title="Redimensionner"
+                            (mousedown)="startColumnResize($event, 'progression', progressionHeader)"></span>
+                    </th>
+                    <th [style.width.px]="actionColumnWidth" class="text-center action-cell">Actions</th>
                   </tr>
                   <!-- Ligne des filtres (style Excel) -->
                   <tr *ngIf="showFilterRow" class="filter-row" style="background-color: #f8f9fa; border-top: 2px solid #dee2e6;">
-                    <th style="padding: 4px;"></th>
-                    <th *ngIf="columnVisibility.numero" style="padding: 4px; position: relative;">
+                    <th *ngIf="columnVisibility.numero" style="padding: 4px; position: relative;" [style.width]="getColumnWidth('numero')">
                       <div class="d-flex align-items-center">
                         <input 
                           type="text" 
@@ -335,7 +400,7 @@
                         <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
                       </div>
                     </th>
-                    <th *ngIf="columnVisibility.date" style="padding: 4px; position: relative;">
+                    <th *ngIf="columnVisibility.date" style="padding: 4px; position: relative;" [style.width]="getColumnWidth('date')">
                       <div class="d-flex align-items-center">
                         <input 
                           type="date" 
@@ -346,7 +411,7 @@
                         <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
                       </div>
                     </th>
-                    <th *ngIf="columnVisibility.client" style="padding: 4px; position: relative;">
+                    <th *ngIf="columnVisibility.client" style="padding: 4px; position: relative;" [style.width]="getColumnWidth('client')">
                       <div class="d-flex align-items-center">
                         <input 
                           type="text" 
@@ -358,33 +423,45 @@
                         <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
                       </div>
                     </th>
-                    <th *ngIf="columnVisibility.commercial" style="padding: 4px; position: relative;">
+                    <th *ngIf="columnVisibility.depot" style="padding: 4px; position: relative;" [style.width]="getColumnWidth('depot')">
                       <div class="d-flex align-items-center">
                         <input 
                           type="text" 
                           class="form-control form-control-sm filter-input" 
                           placeholder="Rechercher..."
-                          [(ngModel)]="columnFilters.commercial"
-                          (input)="onColumnFilterChange('commercial', $any($event.target).value)"
+                          [(ngModel)]="columnFilters.depot"
+                          (input)="onColumnFilterChange('depot', $any($event.target).value)"
                           style="font-size: 0.85rem; padding-right: 24px;">
                         <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
                       </div>
                     </th>
-                    <th *ngIf="columnVisibility.description" style="padding: 4px; position: relative;">
+                    <th *ngIf="columnVisibility.status" style="padding: 4px; position: relative;" [style.width]="getColumnWidth('status')">
                       <div class="d-flex align-items-center">
-                        <input 
-                          type="text" 
-                          class="form-control form-control-sm filter-input" 
+                        <input
+                          type="text"
+                          class="form-control form-control-sm filter-input"
                           placeholder="Rechercher..."
-                          [(ngModel)]="columnFilters.description"
-                          (input)="onColumnFilterChange('description', $any($event.target).value)"
+                          [(ngModel)]="columnFilters.status"
+                          (input)="onColumnFilterChange('status', $any($event.target).value)"
                           style="font-size: 0.85rem; padding-right: 24px;">
                         <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
                       </div>
                     </th>
-                    <th style="width: 150px;" class="text-center">
+                    <th *ngIf="columnVisibility.progression" style="padding: 4px; position: relative;" [style.width]="getColumnWidth('progression')">
+                      <div class="d-flex align-items-center">
+                        <input
+                          type="text"
+                          class="form-control form-control-sm filter-input"
+                          placeholder="Rechercher..."
+                          [(ngModel)]="columnFilters.progression"
+                          (input)="onColumnFilterChange('progression', $any($event.target).value)"
+                          style="font-size: 0.85rem; padding-right: 24px;">
+                        <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; font-size: 0.75rem; pointer-events: none;"></i>
+                      </div>
+                    </th>
+                    <th [style.width.px]="actionColumnWidth" class="text-center action-cell">
                       <div class="d-flex align-items-center justify-content-center gap-2">
-                        <button class="btn btn-sm btn-outline-secondary" (click)="clearColumnFilters()" title="Réinitialiser les filtres">
+                        <button class="btn btn-sm btn-outline-secondary" (click)="clearColumnFilters()" title="Reinitialiser les filtres">
                           <i class="fas fa-times"></i>
                         </button>
                         <button class="btn btn-sm btn-outline-primary" (click)="showFilterRow = false" title="Masquer les filtres">
@@ -396,28 +473,47 @@
                 </thead>
                 <tbody>
                   <tr *ngIf="!loadingCommandes && commandes.length === 0">
-                    <td [attr.colspan]="getVisibleColumnsCount() + 2" class="text-center py-4">
-                      <p class="text-muted mb-0">Aucune commande trouvée</p>
+                    <td [attr.colspan]="getVisibleColumnsCount() + 1" class="text-center py-4">
+                      <p class="text-muted mb-0">Aucune commande trouvee</p>
                     </td>
                   </tr>
                   <tr *ngFor="let d of commandes; let i = index">
-                    <td><input type="checkbox" [(ngModel)]="d.checked"></td>
-                    <td *ngIf="columnVisibility.numero">{{ d.numero }}</td>
-                    <td *ngIf="columnVisibility.date">{{ d.date ? (d.date | date:'dd/MM/yyyy') : '-' }}</td>
-                    <td *ngIf="columnVisibility.client">{{ d.client || '-' }}</td>
-                    <td *ngIf="columnVisibility.commercial">{{ d.commercial || '-' }}</td>
-                    <td *ngIf="columnVisibility.description">{{ d.description || '-' }}</td>
-                    <td class="text-center">
-                      <div class="d-flex align-items-center justify-content-center gap-1">
-                        <button class="btn btn-sm btn-outline-info" (click)="OnEditCommande(d.document_id)" title="Modifier">
-                          <i class="fas fa-edit"></i>
+                    <td *ngIf="columnVisibility.numero" class="commande-numero-cell" [style.width]="getColumnWidth('numero')">{{ d.numero }}</td>
+                    <td *ngIf="columnVisibility.date" class="commande-date-cell" [style.width]="getColumnWidth('date')">{{ d.date ? (d.date | date:'dd/MM/yyyy') : '-' }}</td>
+                    <td *ngIf="columnVisibility.client" class="commande-client-cell" [style.width]="getColumnWidth('client')" [title]="d.client || '-'">{{ d.client || '-' }}</td>
+                    <td *ngIf="columnVisibility.depot" [style.width]="getColumnWidth('depot')">{{ d.depot || '-' }}</td>
+                    <td *ngIf="columnVisibility.status" [style.width]="getColumnWidth('status')">
+                      <span [class]="getCommandeStatusBadgeClass(d)">{{ formatStatus(d.status ?? d.Status) }}</span>
+                    </td>
+                    <td *ngIf="columnVisibility.progression" class="commande-progress-cell" [style.width]="getColumnWidth('progression')">
+                      <div class="commande-progress-text">{{ getCommandeProgressLabel(d) }}</div>
+                      <div class="progress progress-recap commande-progress-bar">
+                        <div class="progress-bar" [style.width.%]="getCommandeProgressPercent(d)"></div>
+                      </div>
+                    </td>
+                    <td class="text-center action-cell">
+                      <div class="dropdown" (click)="$event.stopPropagation()">
+                        <button class="btn btn-sm btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                          <i class="fas fa-bolt me-1"></i> Actions
                         </button>
-                        <button *ngIf="pdfPermissionsService.hasAnyPdfAccess('commande')" class="btn btn-sm btn-outline-purple" (click)="OnPrintCommande(d.document_id)" title="Imprimer PDF">
-                          <i class="fas fa-file-pdf"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger" (click)="removeCommande(d, i)" title="Supprimer">
-                          <i class="fas fa-trash-alt"></i>
-                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                          <li>
+                            <button class="dropdown-item" type="button" (click)="OnEditCommande(d.document_id)">
+                              <i class="fas fa-edit me-2"></i> Modifier
+                            </button>
+                          </li>
+                          <li *ngIf="pdfPermissionsService.hasAnyPdfAccess('commande')">
+                            <button class="dropdown-item" type="button" (click)="OnPrintCommande(d.document_id)">
+                              <i class="fas fa-file-pdf me-2"></i> PDF
+                            </button>
+                          </li>
+                          <li><hr class="dropdown-divider"></li>
+                          <li>
+                            <button class="dropdown-item text-danger" type="button" (click)="removeCommande(d, i)">
+                              <i class="fas fa-trash-alt me-2"></i> Supprimer
+                            </button>
+                          </li>
+                        </ul>
                       </div>
                     </td>
                   </tr>
@@ -674,3 +770,4 @@
     <span>Réinitialiser les colonnes</span>
   </div>
 </div>
+

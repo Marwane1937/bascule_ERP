@@ -12,7 +12,7 @@
         <li class="nav-item fw-semibold text-muted">Liste Retours Client</li>
       </ul>
     </div>
-    <div *ngIf="successMessage" class="modern-toast" [ngClass]="{ 'toast-success': !isError, 'toast-error': isError }">
+    <div *ngIf="successMessage" class="modern-toast" [class.toast-success]="!isError" [class.toast-error]="isError">
       <span class="toast-icon">
         <i *ngIf="!isError" class="bi bi-check-circle-fill"></i>
         <i *ngIf="isError" class="bi bi-exclamation-triangle-fill"></i>
@@ -215,7 +215,7 @@
                         <span>Numéro</span>
                         <div class="d-flex align-items-center gap-1">
                           <i *ngIf="isColumnPinned('numero')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
-                          <i class="fas ms-1" [ngClass]="getSortIconRetours('numero')"></i>
+                          <i [class]="'fas ms-1 ' + getSortIconRetours('numero')"></i>
                           <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
                                   (click)="openColumnMenu($event, 'numero')"
                                   style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
@@ -235,7 +235,7 @@
                         <span>Date</span>
                         <div class="d-flex align-items-center gap-1">
                           <i *ngIf="isColumnPinned('date')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
-                          <i class="fas ms-1" [ngClass]="getSortIconRetours('date')"></i>
+                          <i [class]="'fas ms-1 ' + getSortIconRetours('date')"></i>
                           <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
                                   (click)="openColumnMenu($event, 'date')"
                                   style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
@@ -255,7 +255,7 @@
                         <span>Client</span>
                         <div class="d-flex align-items-center gap-1">
                           <i *ngIf="isColumnPinned('client')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
-                          <i class="fas ms-1" [ngClass]="getSortIconRetours('client')"></i>
+                          <i [class]="'fas ms-1 ' + getSortIconRetours('client')"></i>
                           <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
                                   (click)="openColumnMenu($event, 'client')"
                                   style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
@@ -275,7 +275,7 @@
                         <span>Total HT</span>
                         <div class="d-flex align-items-center gap-1">
                           <i *ngIf="isColumnPinned('total_ht')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
-                          <i class="fas ms-1" [ngClass]="getSortIconRetours('total_ht')"></i>
+                          <i [class]="'fas ms-1 ' + getSortIconRetours('total_ht')"></i>
                           <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
                                   (click)="openColumnMenu($event, 'total_ht')"
                                   style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
@@ -295,7 +295,7 @@
                         <span>Total TVA</span>
                         <div class="d-flex align-items-center gap-1">
                           <i *ngIf="isColumnPinned('total_tva')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
-                          <i class="fas ms-1" [ngClass]="getSortIconRetours('total_tva')"></i>
+                          <i [class]="'fas ms-1 ' + getSortIconRetours('total_tva')"></i>
                           <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
                                   (click)="openColumnMenu($event, 'total_tva')"
                                   style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
@@ -315,7 +315,7 @@
                         <span>Total TTC</span>
                         <div class="d-flex align-items-center gap-1">
                           <i *ngIf="isColumnPinned('total_ttc')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
-                          <i class="fas ms-1" [ngClass]="getSortIconRetours('total_ttc')"></i>
+                          <i [class]="'fas ms-1 ' + getSortIconRetours('total_ttc')"></i>
                           <button class="btn btn-sm p-0 ms-1 column-menu-btn" 
                                   (click)="openColumnMenu($event, 'total_ttc')"
                                   style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
@@ -423,9 +423,9 @@
                     <td *ngIf="columnVisibility.numero">{{ r.numero }}</td>
                     <td *ngIf="columnVisibility.date">{{ r.date ? (r.date | date:'dd/MM/yyyy') : '-' }}</td>
                     <td *ngIf="columnVisibility.client">{{ r.client || '-' }}</td>
-                    <td *ngIf="columnVisibility.total_ht" class="text-end">{{ r.total_ht | number:'1.2-2' }} dh</td>
-                    <td *ngIf="columnVisibility.total_tva" class="text-end">{{ r.total_tva | number:'1.2-2' }} dh</td>
-                    <td *ngIf="columnVisibility.total_ttc" class="text-end fw-bold">{{ r.total_ttc | number:'1.2-2' }} dh</td>
+                    <td *ngIf="columnVisibility.total_ht" class="text-end">{{ formatAmount(r.total_ht) }} dh</td>
+                    <td *ngIf="columnVisibility.total_tva" class="text-end">{{ formatAmount(r.total_tva) }} dh</td>
+                    <td *ngIf="columnVisibility.total_ttc" class="text-end fw-bold">{{ formatAmount(r.total_ttc) }} dh</td>
                     <td class="text-center">
                       <span *ngIf="isFacturee(r)" class="badge bg-success">FACTURÉ</span>
                       <span *ngIf="!isFacturee(r)" class="badge bg-danger">NON FACTURÉ</span>
@@ -499,7 +499,7 @@
   </div>
   <div class="menu-divider"></div>
   <div class="menu-item" (click)="togglePinColumn(activeColumnMenu)">
-    <i class="fas" [ngClass]="{'fa-thumbtack': !isColumnPinned(activeColumnMenu), 'fa-times': isColumnPinned(activeColumnMenu)}"></i>
+    <i [class]="'fas ' + (!isColumnPinned(activeColumnMenu) ? 'fa-thumbtack' : 'fa-times')"></i>
     <span>{{ isColumnPinned(activeColumnMenu) ? 'Désépingler' : 'Épingler' }}</span>
   </div>
   <div class="menu-item" (click)="autoSizeColumn(activeColumnMenu)">
@@ -508,7 +508,7 @@
   </div>
   <div class="menu-divider"></div>
   <div class="menu-item" (click)="toggleColumnVisibility(activeColumnMenu)">
-    <i class="fas" [ngClass]="{'fa-eye-slash': columnVisibility[activeColumnMenu], 'fa-eye': !columnVisibility[activeColumnMenu]}"></i>
+    <i [class]="'fas ' + (columnVisibility[activeColumnMenu] ? 'fa-eye-slash' : 'fa-eye')"></i>
     <span>{{ columnVisibility[activeColumnMenu] ? 'Masquer' : 'Afficher' }}</span>
   </div>
   <div class="menu-divider"></div>

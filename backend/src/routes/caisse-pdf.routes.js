@@ -13,21 +13,23 @@ const axios = require('axios');
 const FormData = require('form-data');
 
 
+
+
 // Middleware de débogage pour toutes les requêtes
 router.use((req, res, next) => {
   next();
 });
 
-// Appliquer le middleware d'injection de base de données
-router.use(databaseInjector.injectConnection.bind(databaseInjector));
+// Note: databaseInjector est appliqué individuellement sur chaque route POST qui en a besoin,
+// après authenticateToken, pour garantir le bon ordre d'exécution
 
 // Route de test pour vérifier que le router fonctionne
 router.get('/test', (req, res) => {
   res.json({ success: true, message: 'Route caisse-pdf fonctionne correctement' });
 });
 
-// Route GET pour servir les PDFs depuis le cache mémoire
-router.get('/:filename', authenticateToken, async (req, res) => {
+// Route GET publique pour servir les PDFs depuis le cache mémoire (appelée via window.open() sans headers)
+router.get('/:filename', async (req, res) => {
   try {
     const { filename } = req.params;
     
@@ -64,7 +66,7 @@ router.get('/:filename', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/generate', authenticateToken, async (req, res) => {
+router.post('/generate', authenticateToken, databaseInjector.injectConnection.bind(databaseInjector), async (req, res) => {
   try {
     const { caisse_id } = req.body;
 
@@ -76,7 +78,8 @@ router.post('/generate', authenticateToken, async (req, res) => {
     }
 
     // Récupérer les données de la caisse
-    const caisseData = await caisseService.getCaisseDocumentById(caisseId);
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const caisseData = await caisseService.getCaisseDocumentById(caisseId, sequelize);
 
     if (!caisseData) {
       console.error('[caisse-pdf] Caisse introuvable:', caisseId);
@@ -88,7 +91,7 @@ router.post('/generate', authenticateToken, async (req, res) => {
     const documentSociete = pdfConfigService.getDocumentSociete();
 
     // Générer le PDF (sera supprimé immédiatement après lecture)
-    const pdfPath = await caissePdfService.genererCaissePDF(caisseData, {
+    const pdfPath = await caissePdfService.genererCaisseJourneePDF(caisseData, {
       documentSociete: documentSociete
     });
 
@@ -133,7 +136,7 @@ router.post('/generate', authenticateToken, async (req, res) => {
 
 // Générer un rapport PDF avec plage de dates
 // IMPORTANT: Cette route doit être AVANT toute route paramétrée comme /:id
-router.post('/rapport', authenticateToken, async (req, res) => {
+router.post('/rapport', authenticateToken, databaseInjector.injectConnection.bind(databaseInjector), async (req, res) => {
   try {
     console.log('[caisse-pdf-rapport] 📥 Requête reçue pour générer rapport PDF');
     console.log('[caisse-pdf-rapport] Body:', req.body);
@@ -166,7 +169,8 @@ router.post('/rapport', authenticateToken, async (req, res) => {
     // Générer le PDF
     const pdfPath = await caissePdfService.genererRapportCaissePDF(donnees, {
       documentSociete: documentSociete,
-      caisseType: caisseType || 'declared'
+      caisseType: caisseType || 'declared',
+      sequelizeConnection: sequelize
     });
 
 
@@ -215,7 +219,7 @@ router.post('/rapport', authenticateToken, async (req, res) => {
 });
 
 // Générer un rapport PDF filtré par employé et plage de dates
-router.post('/rapport-by-employe', authenticateToken, async (req, res) => {
+router.post('/rapport-by-employe', authenticateToken, databaseInjector.injectConnection.bind(databaseInjector), async (req, res) => {
   try {
     console.log('[caisse-pdf-rapport-by-employe] 📥 Requête reçue pour générer rapport PDF par employé');
     console.log('[caisse-pdf-rapport-by-employe] Body:', req.body);
@@ -279,7 +283,8 @@ router.post('/rapport-by-employe', authenticateToken, async (req, res) => {
       documentSociete: documentSociete,
       caisseType: caisseType || 'declared',
       employeNom: employeNom,
-      employeId: employeId
+      employeId: employeId,
+      sequelizeConnection: sequelize
     });
 
 
@@ -328,7 +333,7 @@ router.post('/rapport-by-employe', authenticateToken, async (req, res) => {
 });
 
 // Générer un rapport PDF pour les rubriques 2000/3000
-router.post('/rapport-group-2000-3000', authenticateToken, async (req, res) => {
+router.post('/rapport-group-2000-3000', authenticateToken, databaseInjector.injectConnection.bind(databaseInjector), async (req, res) => {
   try {
     console.log('[caisse-pdf-rapport-group-2000-3000] 📥 Requête reçue');
     const { dateFrom, dateTo, caisseType, rubriqueIds } = req.body;
@@ -380,12 +385,13 @@ router.post('/rapport-group-2000-3000', authenticateToken, async (req, res) => {
 
 // Générer un PDF de caisse filtré par employé
 // IMPORTANT: Cette route doit être définie AVANT toute route paramétrée
-router.post('/generate-by-employe', authenticateToken, async (req, res) => {
+router.post('/generate-by-employe', authenticateToken, databaseInjector.injectConnection.bind(databaseInjector), async (req, res) => {
   try {
-    const { caisse_id, employe_id } = req.body;
+    const { caisse_id, employe_id, sens } = req.body;
 
     const caisseId = parseInt(caisse_id, 10);
     const employeId = parseInt(employe_id, 10);
+    const detailSens = sens === 1 || sens === -1 ? sens : parseInt(sens, 10);
 
     if (isNaN(caisseId)) {
       return res.status(400).json({ success: false, message: 'caisse_id invalide' });
@@ -399,7 +405,12 @@ router.post('/generate-by-employe', authenticateToken, async (req, res) => {
     // Récupérer les données de bon de caisse selon les requêtes SQL spécifiées
     // Passer req.sequelize pour utiliser la connexion injectée
     const sequelize = req.sequelize || require('../services/database-switch.service').getConnectionToUse();
-    const bonDeCaisseData = await caisseService.getBonDeCaisseByEmploye(caisseId, employeId, sequelize);
+    const bonDeCaisseData = await caisseService.getBonDeCaisseByEmploye(
+      caisseId,
+      employeId,
+      sequelize,
+      detailSens === 1 || detailSens === -1 ? detailSens : null
+    );
 
     if (!bonDeCaisseData) {
       return res.status(404).json({ success: false, message: 'Données de bon de caisse introuvables' });
@@ -449,19 +460,25 @@ router.post('/generate-by-employe', authenticateToken, async (req, res) => {
 
 // Envoyer le PDF de caisse par employé via Telegram
 // IMPORTANT: Cette route doit être définie AVANT toute route paramétrée
-router.post('/send-telegram-by-employe', authenticateToken, async (req, res) => {
+router.post('/send-telegram-by-employe', authenticateToken, databaseInjector.injectConnection.bind(databaseInjector), async (req, res) => {
   try {
-    const { caisse_id, employe_id, message, chat_id } = req.body;
+    const { caisse_id, employe_id, message, chat_id, sens } = req.body;
 
     const caisseId = parseInt(caisse_id, 10);
     const employeId = parseInt(employe_id, 10);
+    const detailSens = sens === 1 || sens === -1 ? sens : parseInt(sens, 10);
 
     if (isNaN(caisseId)) return res.status(400).json({ success: false, message: 'caisse_id invalide' });
     if (isNaN(employeId)) return res.status(400).json({ success: false, message: 'employe_id invalide' });
 
     // Récupérer les données du bon de caisse
     const sequelize = req.sequelize || require('../services/database-switch.service').getConnectionToUse();
-    const bonDeCaisseData = await caisseService.getBonDeCaisseByEmploye(caisseId, employeId, sequelize);
+    const bonDeCaisseData = await caisseService.getBonDeCaisseByEmploye(
+      caisseId,
+      employeId,
+      sequelize,
+      detailSens === 1 || detailSens === -1 ? detailSens : null
+    );
     if (!bonDeCaisseData) return res.status(404).json({ success: false, message: 'Données de bon de caisse introuvables' });
 
     // Récupérer le chat_id Telegram de l'employé
@@ -628,12 +645,13 @@ router.post('/send-telegram-by-employe', authenticateToken, async (req, res) => 
 
 // Envoyer le PDF de caisse par employé via WhatsApp (route conservée pour compatibilité)
 // IMPORTANT: Cette route doit être définie AVANT toute route paramétrée
-router.post('/send-whatsapp-by-employe', authenticateToken, async (req, res) => {
+router.post('/send-whatsapp-by-employe', authenticateToken, databaseInjector.injectConnection.bind(databaseInjector), async (req, res) => {
   try {
-    const { caisse_id, employe_id, message } = req.body;
+    const { caisse_id, employe_id, message, sens } = req.body;
 
     const caisseId = parseInt(caisse_id, 10);
     const employeId = parseInt(employe_id, 10);
+    const detailSens = sens === 1 || sens === -1 ? sens : parseInt(sens, 10);
 
     if (isNaN(caisseId)) return res.status(400).json({ success: false, message: 'caisse_id invalide' });
     if (isNaN(employeId)) return res.status(400).json({ success: false, message: 'employe_id invalide' });
@@ -641,7 +659,12 @@ router.post('/send-whatsapp-by-employe', authenticateToken, async (req, res) => 
     // Récupérer les données du bon de caisse
     // Passer req.sequelize pour utiliser la connexion injectée
     const sequelize = req.sequelize || require('../services/database-switch.service').getConnectionToUse();
-    const bonDeCaisseData = await caisseService.getBonDeCaisseByEmploye(caisseId, employeId, sequelize);
+    const bonDeCaisseData = await caisseService.getBonDeCaisseByEmploye(
+      caisseId,
+      employeId,
+      sequelize,
+      detailSens === 1 || detailSens === -1 ? detailSens : null
+    );
     if (!bonDeCaisseData) return res.status(404).json({ success: false, message: 'Données de bon de caisse introuvables' });
 
     const phone = bonDeCaisseData.employe?.telephone;
@@ -845,4 +868,3 @@ router.post('/send-whatsapp-by-employe', authenticateToken, async (req, res) => 
 });
 
 module.exports = router;
-

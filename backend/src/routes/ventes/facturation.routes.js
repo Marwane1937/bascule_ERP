@@ -14,8 +14,9 @@ router.use(databaseInjector.injectConnection.bind(databaseInjector));
 // IMPORTANT: Les routes spécifiques doivent être AVANT les routes paramétrées
 router.get('/report', facturationController.getFacturationReport);
 router.get('/:id/montant', facturationController.getFactureMontant);
+router.get('/:id/parcours', facturationController.getFactureParcours);
+router.get('/:id/livraisons-details', facturationController.getFactureLivraisonDetails);
 router.get('/', facturationController.getFactures);
 router.get('/:id', facturationController.getFacture);
 
 module.exports = router;
-

@@ -8,8 +8,12 @@ const getReceptions = async (options = {}, sequelizeConnection = null) => {
   return await receptionModel.getAllReceptions(options, sequelizeConnection);
 };
 
-const createReceptionFromCommande = async (commandeId, details = null, sequelizeConnection = null) => {
-  return await receptionModel.createReceptionFromCommande(commandeId, details, sequelizeConnection);
+const createReceptionFromCommande = async (commandeId, details = null, userId = null, sequelizeConnection = null) => {
+  return await receptionModel.createReceptionFromCommande(commandeId, details, userId, sequelizeConnection);
+};
+
+const createReceptionFromStockEntree = async (entreeStockId, sequelizeConnection = null) => {
+  return await receptionModel.createReceptionFromStockEntree(entreeStockId, sequelizeConnection);
 };
 
 const getReceptionById = async (id, sequelizeConnection = null) => {
@@ -24,8 +28,8 @@ const deleteReception = async (id, sequelizeConnection = null) => {
   return await receptionModel.deleteReception(id, sequelizeConnection);
 };
 
-const saveDetail = async ({ lignes }, sequelizeConnection = null) => {
-  return await receptionModel.saveDetailLines(lignes, sequelizeConnection);
+const saveDetail = async ({ lignes, userId = null }, sequelizeConnection = null) => {
+  return await receptionModel.saveDetailLines(lignes, userId, sequelizeConnection);
 };
 
 const deleteLignesParIds = async (ligneIds, sequelizeConnection = null) => {
@@ -36,11 +40,10 @@ module.exports = {
   getCommandesNonReceptionnees,
   getReceptions,
   createReceptionFromCommande,
+  createReceptionFromStockEntree,
   getReceptionById,
   updateReception,
   deleteReception,
   saveDetail,
   deleteLignesParIds
 };
-
-

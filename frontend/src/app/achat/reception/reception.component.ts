@@ -1,6 +1,7 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { AchatsService } from 'src/app/service/achats.service';
+import { BaseService } from 'src/app/service/base.service';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -11,6 +12,7 @@ import Swal from 'sweetalert2';
 export class ReceptionComponent implements OnInit, OnDestroy {
   // Liste réceptions (stock.type = 1)
   receptions: any[] = [];
+  allReceptions: any[] = [];
   loadingReceptions = true;
 
   // Pagination / recherche
@@ -21,6 +23,17 @@ export class ReceptionComponent implements OnInit, OnDestroy {
   searchTerm = '';
   sortColumn = 'date';
   sortDirection: 'ASC' | 'DESC' = 'DESC';
+  fournisseurColumnWidth = 140;
+  showFilterRow = false;
+  columnFilters: any = {
+    numero: '',
+    date: '',
+    fournisseur: '',
+    total_ht: '',
+    total_tva: '',
+    total_ttc: '',
+    statut: ''
+  };
 
   loadingCommandes = false;
   showTransfertModal = false;
@@ -37,6 +50,10 @@ export class ReceptionComponent implements OnInit, OnDestroy {
   selectedCommande: any | null = null;
   commandeDetails: any[] = [];
   loadingDetails = false;
+  depots: any[] = [];
+  detailSearchTerm = '';
+  detailSortColumn: 'article' | 'depot' | 'lot' | 'quantite' | 'prix' = 'article';
+  detailSortDirection: 'asc' | 'desc' = 'asc';
 
   // Dashboard
   showDashboard: boolean = false;
@@ -51,21 +68,44 @@ export class ReceptionComponent implements OnInit, OnDestroy {
     chiffreAffaireParFournisseur: [],
     chiffreAffaireParArticle: []
   };
+  showReceptionHistoryModal = false;
+  receptionHistoryLoading = false;
+  receptionHistoryError = '';
+  selectedReceptionHistory: any | null = null;
   
   // Charts
   evolutionChart: any = null;
   fournisseurChart: any = null;
   topFournisseursChart: any = null;
   articleChart: any = null;
+  private resizingFournisseur = false;
+  private fournisseurResizeStartX = 0;
+  private fournisseurResizeStartWidth = 140;
 
   constructor(
     private achatsService: AchatsService,
+    private baseService: BaseService,
     private cdr: ChangeDetectorRef,
     private router: Router
   ) { }
 
   ngOnInit(): void {
     this.loadReceptions(1, '');
+    this.loadDepots();
+  }
+
+  loadDepots(): void {
+    this.baseService.getDepots().subscribe({
+      next: (response: any) => {
+        const data = response?.data || (Array.isArray(response) ? response : []);
+        this.depots = Array.isArray(data) ? data : [];
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.depots = [];
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   loadReceptions(page: number = 1, search: string = ''): void {
@@ -83,14 +123,17 @@ export class ReceptionComponent implements OnInit, OnDestroy {
       next: (response: any) => {
         const data = response?.data || [];
         const pagination = response?.pagination || {};
-        this.receptions = Array.isArray(data) ? data : [];
-        this.totalRecords = pagination.total || 0;
+        this.allReceptions = Array.isArray(data) ? data : [];
+        this.receptions = [...this.allReceptions];
+        this.applyReceptionColumnFilters(false);
+        this.totalRecords = pagination.total || this.receptions.length || 0;
         this.totalPages = pagination.totalPages || 1;
         this.loadingReceptions = false;
         this.cdr.detectChanges();
       },
       error: (err) => {
         this.loadingReceptions = false;
+        this.allReceptions = [];
         this.receptions = [];
         this.totalRecords = 0;
         this.totalPages = 1;
@@ -102,6 +145,80 @@ export class ReceptionComponent implements OnInit, OnDestroy {
 
   onSearch(): void {
     this.loadReceptions(1, this.searchTerm);
+  }
+
+  setReceptionSort(column: string): void {
+    if (this.sortColumn === column) {
+      this.sortDirection = this.sortDirection === 'ASC' ? 'DESC' : 'ASC';
+    } else {
+      this.sortColumn = column;
+      this.sortDirection = 'ASC';
+    }
+
+    this.loadReceptions(1, this.searchTerm);
+  }
+
+  getReceptionSortIcon(column: string): string {
+    if (this.sortColumn !== column) {
+      return 'fa-sort text-muted';
+    }
+    return this.sortDirection === 'ASC' ? 'fa-sort-up' : 'fa-sort-down';
+  }
+
+  onReceptionColumnFilterChange(column: string, value: string): void {
+    this.columnFilters[column] = value;
+    this.applyReceptionColumnFilters();
+  }
+
+  applyReceptionColumnFilters(updateTotal: boolean = true): void {
+    const filtered = this.allReceptions.filter((item: any) => {
+      return Object.keys(this.columnFilters).every((key) => {
+        const filterValue = String(this.columnFilters[key] || '').trim().toLowerCase();
+        if (!filterValue) {
+          return true;
+        }
+
+        const itemValue = this.getReceptionFilterValue(item, key);
+        return String(itemValue || '').toLowerCase().includes(filterValue);
+      });
+    });
+
+    this.receptions = filtered;
+    if (updateTotal) {
+      this.totalRecords = filtered.length;
+    }
+  }
+
+  clearReceptionColumnFilters(): void {
+    this.columnFilters = {
+      numero: '',
+      date: '',
+      fournisseur: '',
+      total_ht: '',
+      total_tva: '',
+      total_ttc: '',
+      statut: ''
+    };
+    this.applyReceptionColumnFilters();
+  }
+
+  getReceptionStatus(reception: any): string {
+    const rawStatus = reception?.statut ?? reception?.status ?? reception?.etat;
+    if (rawStatus === 0 || rawStatus === '0') {
+      return 'Archivé';
+    }
+    return 'Réceptionné';
+  }
+
+  private getReceptionFilterValue(item: any, key: string): string | number {
+    switch (key) {
+      case 'date':
+        return item?.date ? new Date(item.date).toISOString().slice(0, 10) : '';
+      case 'statut':
+        return this.getReceptionStatus(item);
+      default:
+        return item?.[key] ?? '';
+    }
   }
 
   onPageChange(page: number): void {
@@ -116,6 +233,27 @@ export class ReceptionComponent implements OnInit, OnDestroy {
       this.pageSize = newSize;
       this.loadReceptions(1, this.searchTerm);
     }
+  }
+
+  startFournisseurResize(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.resizingFournisseur = true;
+    this.fournisseurResizeStartX = event.clientX;
+    this.fournisseurResizeStartWidth = this.fournisseurColumnWidth;
+  }
+
+  @HostListener('window:mousemove', ['$event'])
+  onWindowMouseMove(event: MouseEvent): void {
+    if (!this.resizingFournisseur) return;
+    const delta = event.clientX - this.fournisseurResizeStartX;
+    this.fournisseurColumnWidth = Math.min(320, Math.max(110, this.fournisseurResizeStartWidth + delta));
+    this.cdr.detectChanges();
+  }
+
+  @HostListener('window:mouseup')
+  onWindowMouseUp(): void {
+    this.resizingFournisseur = false;
   }
 
   openTransfertModal(): void {
@@ -228,6 +366,9 @@ export class ReceptionComponent implements OnInit, OnDestroy {
   selectCommandeForEdit(commande: any): void {
     this.selectedCommande = commande;
     this.commandeDetails = [];
+    this.detailSearchTerm = '';
+    this.detailSortColumn = 'article';
+    this.detailSortDirection = 'asc';
     this.loadingDetails = true;
     this.cdr.detectChanges();
 
@@ -236,17 +377,24 @@ export class ReceptionComponent implements OnInit, OnDestroy {
         const data = response?.data || response;
         const details = data?.details || [];
         this.commandeDetails = Array.isArray(details) ? details.map((d: any) => ({
+          source_detail_id: d.id,
           article_nom: d.article_nom || '',
           article_cod: d.article_cod || '',
           article_id: d.article_id,
-          quantite: +d.quantite,
+          quantite_commandee: +(d.quantite_commandee ?? d.quantite ?? 0),
+          quantite_receptionnee: +(d.quantite_receptionnee ?? 0),
+          quantite_restante: +(d.quantite_restante ?? d.quantite ?? 0),
+          quantite: +(d.quantite_restante ?? d.quantite ?? 0),
           prix: +d.prix,
           taux_tva: d.taux_tva != null ? +d.taux_tva : 0,
           // Désignation: bon-commande backend normalise `designation` (depuis quill ou description)
           // fallback sur description si nécessaire
           description: d.designation || d.description || '',
           remise: d.remise != null ? +d.remise : 0,
-          remise_montant: d.remise_montant != null ? +d.remise_montant : 0
+          remise_montant: d.remise_montant != null ? +d.remise_montant : 0,
+          etat: Number(d?.etat || 0),
+          depot_id: this.normalizeDepotId(d?.depot_id ?? d?.adresse_id),
+          numero_lot: d.numero_lot || d.serie || ''
         })) : [];
 
         this.loadingDetails = false;
@@ -270,6 +418,26 @@ export class ReceptionComponent implements OnInit, OnDestroy {
       Swal.fire('Info', 'Aucune ligne à réceptionner.', 'info');
       return;
     }
+    const linesToReceive = this.commandeDetails.filter((line: any) => {
+      if (this.isReceptionCompleteLine(line)) return false;
+      if (Number(line?.quantite || 0) <= 0) return false;
+      return !!this.normalizeDepotId(line?.depot_id);
+    });
+
+    if (!linesToReceive.length) {
+      Swal.fire('Info', 'Aucune ligne valide a receptionner.', 'info');
+      return;
+    }
+
+    for (let i = 0; i < linesToReceive.length; i++) {
+      const line = linesToReceive[i];
+      const lineDepotId = this.normalizeDepotId(line?.depot_id);
+      if (Number(line?.quantite || 0) > Number(line?.quantite_restante || 0)) {
+        Swal.fire('Quantite invalide', `La ligne ${i + 1} depasse la quantite restante a receptionner.`, 'warning');
+        return;
+      }
+      line.depot_id = lineDepotId;
+    }
 
     Swal.fire({
       title: 'Valider la réception ?',
@@ -289,7 +457,7 @@ export class ReceptionComponent implements OnInit, OnDestroy {
         didOpen: () => Swal.showLoading()
       });
 
-      this.achatsService.createReceptionFromCommande(this.selectedCommande.document_id, this.commandeDetails).subscribe({
+      this.achatsService.createReceptionFromCommande(this.selectedCommande.document_id, linesToReceive).subscribe({
         next: (response: any) => {
           Swal.fire({
             icon: 'success',
@@ -307,6 +475,100 @@ export class ReceptionComponent implements OnInit, OnDestroy {
         }
       });
     });
+  }
+
+  private normalizeDepotId(value: any): number | null {
+    const n = Number(value);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  }
+
+  isReceptionCompleteLine(line: any): boolean {
+    return Number(line?.quantite_restante || 0) <= 0 || Number(line?.etat || 0) === 1;
+  }
+
+  isReceptionPartialLine(line: any): boolean {
+    return Number(line?.quantite_receptionnee || 0) > 0 && !this.isReceptionCompleteLine(line);
+  }
+
+  get filteredCommandeDetails(): any[] {
+    const term = this.normalizeText(this.detailSearchTerm);
+    const filtered = !term
+      ? [...this.commandeDetails]
+      : this.commandeDetails.filter((line: any) => {
+          const depotName = this.getDepotName(line?.depot_id);
+          const haystacks = [
+            line?.article_cod,
+            line?.article_nom,
+            line?.description,
+            line?.numero_lot,
+            depotName
+          ];
+          return haystacks.some(value => this.normalizeText(value).includes(term));
+        });
+
+    return filtered.sort((a: any, b: any) => {
+      const left = this.getDetailSortValue(a, this.detailSortColumn);
+      const right = this.getDetailSortValue(b, this.detailSortColumn);
+
+      if (typeof left === 'number' || typeof right === 'number') {
+        const leftNum = Number(left) || 0;
+        const rightNum = Number(right) || 0;
+        return this.detailSortDirection === 'asc' ? leftNum - rightNum : rightNum - leftNum;
+      }
+
+      const compare = String(left).localeCompare(String(right), 'fr', { sensitivity: 'base' });
+      return this.detailSortDirection === 'asc' ? compare : -compare;
+    });
+  }
+
+  setDetailSort(column: 'article' | 'depot' | 'lot' | 'quantite' | 'prix'): void {
+    if (this.detailSortColumn === column) {
+      this.detailSortDirection = this.detailSortDirection === 'asc' ? 'desc' : 'asc';
+      return;
+    }
+
+    this.detailSortColumn = column;
+    this.detailSortDirection = 'asc';
+  }
+
+  getDetailSortIcon(column: 'article' | 'depot' | 'lot' | 'quantite' | 'prix'): string {
+    if (this.detailSortColumn !== column) {
+      return 'fa-sort text-muted';
+    }
+    return this.detailSortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down';
+  }
+
+  getDepotName(depotId: any): string {
+    const normalizedId = this.normalizeDepotId(depotId);
+    if (!normalizedId) {
+      return '';
+    }
+    const depot = this.depots.find((item: any) => Number(item?.id) === normalizedId);
+    return String(depot?.nom || '');
+  }
+
+  private getDetailSortValue(line: any, column: 'article' | 'depot' | 'lot' | 'quantite' | 'prix'): string | number {
+    switch (column) {
+      case 'depot':
+        return this.getDepotName(line?.depot_id);
+      case 'lot':
+        return line?.numero_lot || '';
+      case 'quantite':
+        return Number(line?.quantite) || 0;
+      case 'prix':
+        return Number(line?.prix) || 0;
+      case 'article':
+      default:
+        return `${line?.article_cod || ''} ${line?.article_nom || ''} ${line?.description || ''}`.trim();
+    }
+  }
+
+  private normalizeText(value: any): string {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
   }
 
   transfererCommandeVersReception(commandeId: number, numero?: string): void {
@@ -347,6 +609,70 @@ export class ReceptionComponent implements OnInit, OnDestroy {
 
   editReception(documentId: number): void {
     this.router.navigate(['/Edit-Reception', documentId]);
+  }
+
+  openReceptionHistory(reception: any): void {
+    const documentId = Number(reception?.document_id || reception?.id || 0);
+    if (!documentId) {
+      return;
+    }
+
+    this.showReceptionHistoryModal = true;
+    this.receptionHistoryLoading = true;
+    this.receptionHistoryError = '';
+    this.selectedReceptionHistory = null;
+
+    this.achatsService.getReceptionById(documentId).subscribe({
+      next: (response: any) => {
+        this.selectedReceptionHistory = response?.data || response || null;
+        this.receptionHistoryLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: (error: any) => {
+        this.receptionHistoryLoading = false;
+        this.receptionHistoryError = error?.error?.message || 'Impossible de charger l historique de cette reception.';
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  closeReceptionHistory(): void {
+    this.showReceptionHistoryModal = false;
+    this.receptionHistoryLoading = false;
+    this.receptionHistoryError = '';
+    this.selectedReceptionHistory = null;
+  }
+
+  getReceptionHistorySourceLabel(history: any): string {
+    const sourceType = String(history?.source_document_type || '').toUpperCase();
+    if (sourceType === 'BON_COMMANDE') {
+      return 'Bon de commande';
+    }
+    if (sourceType === 'ENTREE_STOCK') {
+      return 'Entree de stock';
+    }
+    return 'Source';
+  }
+
+  openReceptionHistorySource(): void {
+    const history = this.selectedReceptionHistory;
+    const sourceId = Number(history?.source_document_id || 0);
+    const sourceType = String(history?.source_document_type || '').toUpperCase();
+
+    if (!sourceId) {
+      return;
+    }
+
+    this.closeReceptionHistory();
+
+    if (sourceType === 'BON_COMMANDE') {
+      this.router.navigate(['/Edit-Bon-Commande-Achat', sourceId]);
+      return;
+    }
+
+    if (sourceType === 'ENTREE_STOCK') {
+      this.router.navigate(['/Edit-EntreeStock', sourceId]);
+    }
   }
 
   deleteReception(documentId: number, numero: string): void {
@@ -852,4 +1178,3 @@ export class ReceptionComponent implements OnInit, OnDestroy {
     }
   }
 }
-

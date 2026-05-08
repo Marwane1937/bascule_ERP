@@ -52,12 +52,13 @@ const getCaisseDocuments = async (req, res) => {
 // Obtenir un document de caisse par ID
 const getCaisseDocumentById = async (req, res) => {
   try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
     const id = parseInt(req.params.id);
     if (!id) {
       return res.status(400).json({ success: false, message: 'ID invalide' });
     }
 
-    const result = await caisseService.getCaisseDocumentById(id);
+    const result = await caisseService.getCaisseDocumentById(id, sequelize);
     if (!result) {
       return res.status(404).json({ success: false, message: 'Document non trouvé' });
     }
@@ -249,6 +250,7 @@ const getSoldeCaisse = async (req, res) => {
       success: false,
       message: err.message || 'Erreur lors du calcul du solde',
       data: {
+        total_fond: 0,
         total_entrees: 0,
         total_sorties: 0,
         solde: 0
@@ -264,7 +266,7 @@ const getNextCaisseNumero = async (req, res) => {
     const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
     const prefix = req.params.prefix?.toUpperCase();
     
-    if (!prefix || (prefix !== 'CD' && prefix !== 'CR' && prefix !== 'CDB' && prefix !== 'CRB')) {
+    if (!prefix || (prefix !== 'CD' && prefix !== 'CR' && prefix !== 'CDB' && prefix !== 'CRB' && prefix !== 'JC' && prefix !== 'JCB')) {
       return res.status(400).json({
         success: false,
         message: 'Prefix doit être CD (caisse dépense), CR (caisse recette), CDB (caisse dépense black) ou CRB (caisse recette black)'
@@ -318,16 +320,180 @@ const createCaisseFromReglement = async (req, res) => {
   }
 };
 
+const createCaisseDocumentV2 = async (req, res) => {
+  try {
+    const { document, details } = req.body;
+
+    if (!document) {
+      return res.status(400).json({
+        success: false,
+        message: 'Document requis'
+      });
+    }
+
+    const detailsArray = details === undefined || details === null
+      ? []
+      : details;
+
+    if (!Array.isArray(detailsArray)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Details doit être un tableau (peut être vide)'
+      });
+    }
+
+    if (!document.date) {
+      return res.status(400).json({
+        success: false,
+        message: 'La date est requise'
+      });
+    }
+
+    if (!document.affectation || String(document.affectation).trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'Le champ affectation est obligatoire'
+      });
+    }
+
+    const invalidDetail = detailsArray.find((detail) => detail?.sens !== undefined && detail?.sens !== null && detail.sens !== 1 && detail.sens !== -1);
+    if (invalidDetail) {
+      return res.status(400).json({
+        success: false,
+        message: 'Chaque ligne doit préciser sens = 1 (recette) ou -1 (dépense)'
+      });
+    }
+
+    if (req.user && req.user.id) {
+      document.user_id = req.user.id;
+    }
+
+    const result = await caisseService.createCaisseDocument(document, detailsArray);
+    return res.status(201).json({
+      success: true,
+      data: result,
+      message: 'Document de caisse créé avec succès'
+    });
+  } catch (err) {
+    const statusCode = err.message && (err.message.includes('requis') || err.message.includes('invalide')) ? 400 : 500;
+    return res.status(statusCode).json({
+      success: false,
+      message: err.message || 'Erreur lors de la création du document'
+    });
+  }
+};
+
+const updateCaisseDocumentV2 = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const id = parseInt(req.params.id, 10);
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'ID invalide' });
+    }
+
+    const { document, details } = req.body;
+    if (!Array.isArray(details)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Details doit être un tableau'
+      });
+    }
+
+    const invalidDetail = details.find((detail) => {
+      if (detail?.sens === undefined || detail?.sens === null) {
+        return false;
+      }
+      const detailSens = Number(detail.sens);
+      return detailSens !== 1 && detailSens !== -1;
+    });
+    if (invalidDetail) {
+      return res.status(400).json({
+        success: false,
+        message: 'Chaque ligne doit préciser sens = 1 (recette) ou -1 (dépense)'
+      });
+    }
+
+    if (req.user && req.user.id && document) {
+      document.user_id = req.user.id;
+    }
+
+    const result = await caisseService.updateCaisseDocument(id, document || {}, details, sequelize);
+    return res.json({
+      success: true,
+      data: result,
+      message: 'Document modifié avec succès'
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la modification du document'
+    });
+  }
+};
+
+const updateCaisseDocumentBySensV2 = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const id = parseInt(req.params.id, 10);
+    const sens = parseInt(req.params.sens, 10);
+
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'ID invalide' });
+    }
+
+    if (sens !== 1 && sens !== -1) {
+      return res.status(400).json({ success: false, message: 'Sens invalide' });
+    }
+
+    const { document, details } = req.body;
+    if (!Array.isArray(details)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Details doit être un tableau'
+      });
+    }
+
+    const invalidDetail = details.find((detail) => {
+      if (detail?.sens === undefined || detail?.sens === null) {
+        return false;
+      }
+      const detailSens = Number(detail.sens);
+      return detailSens !== 1 && detailSens !== -1;
+    });
+    if (invalidDetail) {
+      return res.status(400).json({
+        success: false,
+        message: 'Chaque ligne doit préciser sens = 1 (recette) ou -1 (dépense)'
+      });
+    }
+
+    if (req.user && req.user.id && document) {
+      document.user_id = req.user.id;
+    }
+
+    const result = await caisseService.updateCaisseDocumentBySens(id, sens, document || {}, details, sequelize);
+    return res.json({
+      success: true,
+      data: result,
+      message: 'Lignes du document modifiées avec succès'
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la modification des lignes du document'
+    });
+  }
+};
+
 module.exports = {
   getCaisseDocuments,
   getCaisseDocumentById,
-  createCaisseDocument,
-  updateCaisseDocument,
+  createCaisseDocument: createCaisseDocumentV2,
+  updateCaisseDocument: updateCaisseDocumentV2,
+  updateCaisseDocumentBySens: updateCaisseDocumentBySensV2,
   cloturerCaisseDocument,
   deleteCaisseDocument,
   getSoldeCaisse,
   createCaisseFromReglement,
   getNextCaisseNumero
 };
-
-

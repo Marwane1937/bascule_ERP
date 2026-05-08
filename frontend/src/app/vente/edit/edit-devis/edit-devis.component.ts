@@ -1,3 +1,4 @@
+import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -15,6 +16,7 @@ Quill.register('modules/mention', QuillMention.default);
 
 type DevisProduitLigne = {
   id: number;
+  ligne?: number;
   designation: string;
   article_id: number;
   pu: number;
@@ -24,10 +26,11 @@ type DevisProduitLigne = {
   total: number;
   reducMode: 'pourcentage' | 'montant' | string;
   articleSearch: string;
+  stock_disponible?: number | null;
   // Champs additionnels (optionnels) pour la nomenclature
   isNomenclature?: boolean;
   nomenclatureLines?: any[];
-  // Optionnel: pour tracer l'origine (produit composé)
+  // Optionnel: pour tracer l'origine (produit compos?)
   compose_id?: number;
   compose_qte?: number;
   compose_pu?: number;
@@ -88,6 +91,7 @@ export class EditDevisComponent implements OnInit {
   }]
 
   filteredArticles: { [key: number]: any[] } = {};
+  highlightedArticleIndex: { [key: number]: number } = {};
   produitsNomenclature: any[] = [];
   filteredNomenclatureArticles: { [key: number]: any[] } = {};
 
@@ -114,7 +118,7 @@ export class EditDevisComponent implements OnInit {
   ];
 
   transporteurs: string[] = [
-    'Inconnu', 'Amana', 'ARAMEX', 'Barid Al-Maghrib', 'Cathedis', 'Chronopost', 'Colis Privé',
+    'Inconnu', 'Amana', 'ARAMEX', 'Barid Al-Maghrib', 'Cathedis', 'Chronopost', 'Colis Priv?',
     'DHL', 'FedEx', 'GLS', 'Jumia Logistics', 'La Voie Express', 'Maroc Express',
     'Mondial Relay', 'TNT', 'UPS', 'Yamato Transport'
   ].sort();
@@ -124,8 +128,64 @@ export class EditDevisComponent implements OnInit {
   taxeTotal = 0;
   reducTotal = 0;
   totalGeneral = 0;
-  isClientExonerated = false; // Indique si le client est exonéré de TVA
+  isClientExonerated = false; // Indique si le client est exon?r? de TVA
   private exoCheckToken = 0;
+
+  private getLineUnitPrice(line: DevisProduitLigne): number {
+    if (line.isNomenclature && Number(line.compose_pu) > 0) {
+      return Number(line.compose_pu) || 0;
+    }
+    return Number(line.pu) || 0;
+  }
+
+  private getLineQty(line: DevisProduitLigne): number {
+    return Number(line.qte) || 0;
+  }
+
+  private normalizeTaxeValue(value: any): number {
+    if (value === '' || value === null || value === undefined) {
+      return 0;
+    }
+
+    const numericValue = typeof value === 'string'
+      ? Number(value.replace(',', '.'))
+      : Number(value);
+
+    if (!Number.isFinite(numericValue)) {
+      return 0;
+    }
+
+    const normalizedValue = numericValue > 1 ? numericValue / 100 : numericValue;
+    return Math.min(Math.max(normalizedValue, 0), 1);
+  }
+
+  getTaxePercent(line: DevisProduitLigne): number {
+    return Math.round(this.normalizeTaxeValue(line?.taxe) * 10000) / 100;
+  }
+
+  onTaxePercentChange(index: number, value: any): void {
+    const produit = this.produits[index];
+    if (!produit) {
+      return;
+    }
+
+    const numericValue = typeof value === 'string'
+      ? Number(value.replace(',', '.'))
+      : Number(value);
+
+    const safePercent = Number.isFinite(numericValue)
+      ? Math.min(Math.max(numericValue, 0), 100)
+      : 0;
+
+    produit.taxe = safePercent / 100;
+    this.recalculateTotal(index);
+  }
+
+  private resequenceProduitLignes(): void {
+    this.produits.forEach((produit, index) => {
+      produit.ligne = index + 1;
+    });
+  }
 
   constructor(private baseService: BaseService, private fb: FormBuilder, private route: ActivatedRoute,
     private venteSerivce: VentesService, private emailService: EmailService,
@@ -134,8 +194,8 @@ export class EditDevisComponent implements OnInit {
     this.emailForm = this.fb.group({
       to: ['', [Validators.required, Validators.email]],
       cc: [''],
-      subject: ['Devis à votre attention'],
-      body: ['Bonjour,\n\nVeuillez trouver ci-joint le devis demandé.\n\nCordialement,']
+      subject: ['Devis ? votre attention'],
+      body: ['Bonjour,\n\nVeuillez trouver ci-joint le devis demand?.\n\nCordialement,']
     });
   }
 
@@ -145,7 +205,7 @@ export class EditDevisComponent implements OnInit {
     
       const id = +this.route.snapshot.paramMap.get('document_id')!;
     
-    // Charger toutes les données en parallèle pour accélérer le chargement
+    // Charger toutes les donn?es en parall?le pour acc?l?rer le chargement
     forkJoin({
       produits: this.baseService.getProduit(),
       produitsNomenclature: this.baseService.getProduitsNomenclature().pipe(catchError(() => of({ data: [] }))),
@@ -178,7 +238,7 @@ export class EditDevisComponent implements OnInit {
         } else {
           clientsData = [];
         }
-        this.clients = clientsData;
+        this.clients = (clientsData || []).filter((client: any) => Number(client?.type) === 1);
         this.filteredClients = [...this.clients];
         
         // Traitement des commerciaux
@@ -197,7 +257,7 @@ export class EditDevisComponent implements OnInit {
         this.processDevisData(data.devis);
       },
       error: (err) => {
-        Swal.fire({ icon: 'error', title: 'Erreur', text: 'Erreur lors du chargement des données.' });
+        Swal.fire({ icon: 'error', title: 'Erreur', text: 'Erreur lors du chargement des donn?es.' });
       }
     });
     
@@ -225,7 +285,7 @@ export class EditDevisComponent implements OnInit {
     }
   }
 
-  // Traitement des données du devis après chargement parallèle
+  // Traitement des donn?es du devis apr?s chargement parall?le
   private processDevisData(data: any): void {
     if (!data) {
       Swal.fire({ icon: 'error', title: 'Erreur', text: 'Devis introuvable.' });
@@ -254,13 +314,28 @@ export class EditDevisComponent implements OnInit {
             commercialSearch: commercialTrouve ? commercialTrouve.nom : ''
           });
 
-    // Vérifier l'exonération TVA au chargement du devis
+    // V?rifier l'exon?ration TVA au chargement du devis
     if (data.part_id) {
       this.checkClientExoneration(data.part_id);
     }
 
     if (data.details && Array.isArray(data.details)) {
-        this.produits = data.details.map((detail: any) => {
+        const orderedDetails = [...data.details].sort((a: any, b: any) => {
+          const ligneA = Number(a?.ligne || 0);
+          const ligneB = Number(b?.ligne || 0);
+          if (ligneA > 0 && ligneB > 0 && ligneA !== ligneB) {
+            return ligneA - ligneB;
+          }
+          if (ligneA > 0 && ligneB <= 0) {
+            return -1;
+          }
+          if (ligneA <= 0 && ligneB > 0) {
+            return 1;
+          }
+          return Number(a?.id || 0) - Number(b?.id || 0);
+        });
+
+        this.produits = orderedDetails.map((detail: any, index: number) => {
           const produitTrouve = this.produits1.find(p => +p.article_id === +detail.article_id);
 
           let reduc = 0;
@@ -276,13 +351,14 @@ export class EditDevisComponent implements OnInit {
 
           return {
             id: detail.id,
+            ligne: Number(detail.ligne || 0) || (index + 1),
             article_id: detail.article_id,
             designation: detail.designation,
             pu: +detail.prix,
             qte: +detail.quantite,
             reduc: reduc,
             reducMode: reducMode,
-            taxe: +detail.taux_tva,
+            taxe: this.normalizeTaxeValue(detail.taux_tva),
             total: 0,
             articleSearch: produitTrouve ? produitTrouve.article_nom : ''
           };
@@ -435,7 +511,7 @@ export class EditDevisComponent implements OnInit {
 
   recalculateTotal(index: number) {
     const prod = this.produits[index];
-    const base = prod.pu * prod.qte;
+    const base = this.getLineUnitPrice(prod) * this.getLineQty(prod);
 
     if (prod.reducMode === 'pourcentage') {
       if (prod.reduc > 100) prod.reduc = 100;
@@ -456,10 +532,12 @@ export class EditDevisComponent implements OnInit {
   }
 
   calculerTotaux() {
-    this.sousTotal = this.produits.reduce((acc, p) => acc + p.pu * p.qte, 0);
+    this.sousTotal = this.produits.reduce((acc, p) => {
+      return acc + (this.getLineUnitPrice(p) * this.getLineQty(p));
+    }, 0);
 
     this.reducTotal = this.produits.reduce((acc, p) => {
-      const base = p.pu * p.qte;
+      const base = this.getLineUnitPrice(p) * this.getLineQty(p);
       const reduc = p.reducMode === 'pourcentage'
         ? (p.reduc / 100) * base
         : p.reduc;
@@ -468,32 +546,32 @@ export class EditDevisComponent implements OnInit {
 
     const baseApresReduc = this.sousTotal - this.reducTotal;
 
-    // TVA: si client exonéré (valide) => 0, sinon taux normal (p.taxe)
+    // TVA: si client exon?r? (valide) => 0, sinon taux normal (p.taxe)
     this.taxeTotal = this.produits.reduce((acc, p) => {
-      const base = p.pu * p.qte;
+      const base = this.getLineUnitPrice(p) * this.getLineQty(p);
       const reduc = p.reducMode === 'pourcentage'
         ? (p.reduc / 100) * base
         : p.reduc;
       const baseApresReducLigne = Math.max(base - reduc, 0);
-      const taux = this.isClientExonerated ? 0 : (p.taxe ?? 0);
+      const taux = this.isClientExonerated ? 0 : this.normalizeTaxeValue(p.taxe);
       return acc + (taux * baseApresReducLigne);
     }, 0);
 
     this.totalGeneral = baseApresReduc + this.taxeTotal + this.fraisPort;
   }
 
-  // Vérifier si le client a une exonération TVA valide
+  // V?rifier si le client a une exon?ration TVA valide
   checkClientExoneration(part_id: number): void {
     const token = ++this.exoCheckToken;
 
     this.baseService.getAllExonerations(part_id).pipe(
-      // Parfois l'API peut échouer temporairement -> retry léger
+      // Parfois l'API peut ?chouer temporairement -> retry l?ger
       retry({ count: 2, delay: 300 }),
       catchError((err: any) => {
         return of({ success: false, data: [] });
       })
     ).subscribe((response: any) => {
-      // Si une nouvelle requête a été lancée après, ignorer cette réponse (évite flip 20%->0%->20%)
+      // Si une nouvelle requ?te a ?t? lanc?e apr?s, ignorer cette r?ponse (?vite flip 20%->0%->20%)
       if (token !== this.exoCheckToken) {
         return;
       }
@@ -513,7 +591,7 @@ export class EditDevisComponent implements OnInit {
 
       this.isClientExonerated = !!validExoneration;
 
-      // Recalculer les totaux + forcer le refresh UI (évite cas où l'UI reste à 20% visuellement)
+      // Recalculer les totaux + forcer le refresh UI (?vite cas o? l'UI reste ? 20% visuellement)
       this.calculerTotaux();
       this.cdr.detectChanges();
     });
@@ -527,6 +605,7 @@ export class EditDevisComponent implements OnInit {
   addProduit() {
     this.produits.push({
       id: 0,
+      ligne: this.produits.length + 1,
       designation: '',
       article_id: 0,
       pu: 0,
@@ -558,7 +637,74 @@ export class EditDevisComponent implements OnInit {
       });
     }
     this.produits.splice(index, 1);
+    this.resequenceProduitLignes();
     this.calculerTotaux();
+  }
+
+  onProduitDrop(event: CdkDragDrop<DevisProduitLigne[]>): void {
+    if (event.previousIndex === event.currentIndex) {
+      return;
+    }
+
+    moveItemInArray(this.produits, event.previousIndex, event.currentIndex);
+    this.resequenceProduitLignes();
+    this.filteredArticles = {};
+    this.filteredNomenclatureArticles = {};
+    this.highlightedArticleIndex = {};
+    this.calculerTotaux();
+
+    const document_id = +this.route.snapshot.paramMap.get('document_id')!;
+    const lignesOrdre = this.produits
+      .map((p, index) => ({ p, index }))
+      .filter(({ p }) => Number(p?.id || 0) > 0 && Number(p?.article_id || 0) > 0)
+      .map(({ p, index }) => {
+        const desiredTax = this.isClientExonerated ? 0 : this.normalizeTaxeValue(p.taxe);
+        const payload: any = {
+          id: p.id,
+          article_id: p.article_id,
+          designation: p.designation,
+          pu: p.pu,
+          qte: p.qte,
+          taxe: String(desiredTax),
+          ligne: index + 1,
+          document_id,
+          update_mode: 'U'
+        };
+
+        if (p.reducMode === 'pourcentage') {
+          payload.remise = p.reduc / 100;
+          payload.remise_montant = null;
+        } else {
+          payload.remise_montant = p.reduc;
+          payload.remise = null;
+        }
+
+        return payload;
+      });
+
+    const hasUnsavedRows = this.produits.some((p) => !Number(p?.id || 0));
+
+    if (lignesOrdre.length === 0) {
+      if (hasUnsavedRows) {
+        this.showNotification('Ordre mis a jour. Enregistrez pour le sauvegarder.', false);
+      }
+      return;
+    }
+
+    this.venteSerivce.SaveLignesDetailDevis(lignesOrdre).subscribe({
+      next: () => {
+        this.produitsOriginal = JSON.parse(JSON.stringify(this.produits));
+        this.showNotification(
+          hasUnsavedRows
+            ? 'Ordre enregistre pour les lignes existantes. Enregistrez tout pour les nouvelles lignes.'
+            : 'Ordre des lignes enregistre avec succes.',
+          false
+        );
+      },
+      error: () => {
+        this.showNotification('Erreur lors de la sauvegarde de l ordre des lignes.', true);
+      }
+    });
   }
 
   onProduitSelected(index: number) {
@@ -580,6 +726,7 @@ export class EditDevisComponent implements OnInit {
   onArticleSearchChange(index: number, term: string) {
     if (!term) {
       this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
       return;
     }
 
@@ -587,6 +734,7 @@ export class EditDevisComponent implements OnInit {
 
     if (term.length === 0) {
       this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
       return;
     }
 
@@ -595,6 +743,7 @@ export class EditDevisComponent implements OnInit {
         this.filteredArticles[index] = this.produits1.filter((article: any) =>
           article.article_nom && article.article_nom.toLowerCase().includes(term)
         );
+        this.highlightedArticleIndex[index] = this.filteredArticles[index].length ? 0 : -1;
       });
       return;
     }
@@ -602,6 +751,38 @@ export class EditDevisComponent implements OnInit {
     this.filteredArticles[index] = this.produits1.filter((article: any) =>
       article.article_nom && article.article_nom.toLowerCase().includes(term)
     );
+    this.highlightedArticleIndex[index] = this.filteredArticles[index].length ? 0 : -1;
+  }
+
+  onArticleSearchKeydown(index: number, event: KeyboardEvent) {
+    const articles = this.filteredArticles[index] || [];
+    if (!articles.length) return;
+
+    const currentIndex = this.highlightedArticleIndex[index] ?? -1;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.highlightedArticleIndex[index] = currentIndex < articles.length - 1 ? currentIndex + 1 : 0;
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.highlightedArticleIndex[index] = currentIndex > 0 ? currentIndex - 1 : articles.length - 1;
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const selectedArticle = articles[currentIndex >= 0 ? currentIndex : 0];
+      if (selectedArticle) this.selectArticle(index, selectedArticle);
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
+    }
   }
 
   onNomenclatureSearchChange(index: number, term: string) {
@@ -624,7 +805,17 @@ export class EditDevisComponent implements OnInit {
     const composeId = article?.article_id;
     if (!composeId) return;
     const composeQty = Number(this.produits?.[index]?.qte) || 1;
-    const composePu = Number(article?.pu ?? 0) || 0;
+    const composePu = 1;
+    const composeProduit = this.produits1.find((x: any) => +x.article_id === +composeId);
+    const composeRealPu = Number(
+      article?.pu ??
+      article?.prix_vente ??
+      article?.prix ??
+      composeProduit?.pu ??
+      composeProduit?.prix_vente ??
+      composeProduit?.prix ??
+      0
+    ) || 0;
     const composeDesignation = article?.article_nom || '';
 
     // Charger la nomenclature (composants) puis remplacer la ligne par les composants
@@ -641,7 +832,7 @@ export class EditDevisComponent implements OnInit {
         return;
       }
 
-      // Créer d'abord la ligne pour le produit composé
+      // Cr?er d'abord la ligne pour le produit compos?
       const composeRow: DevisProduitLigne = {
         id: 0,
         designation: composeDesignation,
@@ -650,19 +841,20 @@ export class EditDevisComponent implements OnInit {
         qte: composeQty,
         reduc: 0,
         taxe: this.isClientExonerated ? 0 : 0.2,
-        total: composePu * composeQty,
+        total: composeRealPu * composeQty,
         reducMode: 'montant',
         articleSearch: composeDesignation,
         compose_id: composeId,
-        isNomenclature: true
+        isNomenclature: true,
+        compose_pu: composeRealPu
       };
 
-      // Ensuite créer les lignes pour les composants
+      // Ensuite cr?er les lignes pour les composants
       const composantRows: DevisProduitLigne[] = lines.map((comp: any) => {
         const composantId = comp?.Composant_id || comp?.composant_id;
         const produitTrouve = this.produits1.find((x: any) => +x.article_id === +composantId);
         const qte = Number(comp?.Quantite ?? comp?.quantite) || 0;
-        const pu = Number(produitTrouve?.pu ?? produitTrouve?.prix_vente ?? 0) || 0;
+        const pu = 1;
         const taxe = Number(produitTrouve?.taxe ?? 0.2);
         const designation = produitTrouve?.article_nom || comp?.composant_nom || '';
 
@@ -679,7 +871,7 @@ export class EditDevisComponent implements OnInit {
           articleSearch: designation,
           compose_id: composeId,
           compose_qte: composeQty,
-          compose_pu: composePu,
+          compose_pu: composeRealPu,
           compose_designation: composeDesignation
         };
       }).filter((r: any) => !!r.article_id);
@@ -688,22 +880,24 @@ export class EditDevisComponent implements OnInit {
         Swal.fire({
           icon: 'warning',
           title: 'Nomenclature invalide',
-          text: 'Aucun composant valide trouvé pour ce produit.'
+          text: 'Aucun composant valide trouv? pour ce produit.'
         });
         return;
       }
 
-      // Remplacer la ligne actuelle par : le produit composé + tous les composants
+      // Remplacer la ligne actuelle par : le produit compos? + tous les composants
       const allRows = [composeRow, ...composantRows];
       this.produits.splice(index, 1, ...allRows);
+      this.resequenceProduitLignes();
 
-      // Réinitialiser les index de filtres (les indices ont changé)
+      // R?initialiser les index de filtres (les indices ont chang?)
       this.filteredArticles = {};
       this.filteredNomenclatureArticles = {};
 
-      // Recalculer les totaux des lignes insérées (composé + composants)
+      // Recalculer les totaux des lignes ins?r?es (compos? + composants)
       for (let j = index; j < index + allRows.length; j++) {
         this.recalculateTotal(j);
+        this.updateLineStockDisponible(j, this.produits[j]?.article_id);
       }
 
       // Afficher la liste pour voir tous les composants
@@ -713,67 +907,316 @@ export class EditDevisComponent implements OnInit {
     });
   }
 
-  imprimerPdfNormal() {
-    const id = this.route.snapshot.paramMap.get('document_id');
-    if (!id) {
-      Swal.fire({ icon: 'error', title: 'Erreur', text: 'document_id introuvable.' });
+  private buildDevisLineChanges(): any[] | null {
+    const lignesAModifier: any[] = [];
+    const document_id = +this.route.snapshot.paramMap.get('document_id')!;
+    this.resequenceProduitLignes();
+
+    for (let i = 0; i < this.produits.length; i++) {
+      const p = this.produits[i];
+      const desiredTax = this.isClientExonerated ? 0 : this.normalizeTaxeValue(p.taxe);
+
+      if (!p.article_id || !p.pu || !p.qte) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Ligne invalide',
+          html: `La ligne <strong>${i + 1}</strong> est incomplete (article, prix ou quantite manquants).`,
+        });
+        return null;
+      }
+
+      const pOriginal = this.produitsOriginal[i];
+      const payload: any = {
+        id: p.id,
+        article_id: p.article_id,
+        designation: p.designation,
+        pu: p.pu,
+        qte: p.qte,
+        taxe: String(desiredTax),
+        ligne: i + 1,
+        document_id,
+        update_mode: pOriginal ? 'U' : 'I'
+      };
+
+      if (p.reducMode === 'pourcentage') {
+        payload.remise = p.reduc / 100;
+        payload.remise_montant = null;
+      } else {
+        payload.remise_montant = p.reduc;
+        payload.remise = null;
+      }
+
+      if (!pOriginal) {
+        delete payload.id;
+        lignesAModifier.push(payload);
+        continue;
+      }
+
+      const modifie = (
+        p.id !== pOriginal.id ||
+        (Number(p.ligne || 0) || (i + 1)) !== (Number(pOriginal.ligne || 0) || (i + 1)) ||
+        p.designation !== pOriginal.designation ||
+        p.article_id !== pOriginal.article_id ||
+        p.pu !== pOriginal.pu ||
+        p.qte !== pOriginal.qte ||
+        p.reduc !== pOriginal.reduc ||
+        p.reducMode !== pOriginal.reducMode ||
+        desiredTax !== this.normalizeTaxeValue(pOriginal.taxe)
+      );
+
+      if (modifie) {
+        lignesAModifier.push(payload);
+      }
+    }
+
+    return lignesAModifier;
+  }
+
+  private persistDevisChangesBeforePdf(onSuccess: () => void): void {
+    const lignesAModifier = this.buildDevisLineChanges();
+    if (lignesAModifier === null) {
       return;
     }
-    this.emailService.generateDevisPDF(id, { printMode: 'normal' }).subscribe({
-      next: (res) => {
-        const url = res?.pdfUrl;
-        if (url) window.open(url, '_blank');
-        else Swal.fire({ icon: 'error', title: 'Erreur', text: 'Lien PDF non reçu.' });
+
+    if (lignesAModifier.length === 0) {
+      onSuccess();
+      return;
+    }
+
+    this.venteSerivce.SaveLignesDetailDevis(lignesAModifier).subscribe({
+      next: () => {
+        this.produitsOriginal = JSON.parse(JSON.stringify(this.produits));
+        onSuccess();
       },
-      error: () => Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors de la génération du PDF." })
+      error: () => {
+        Swal.fire({
+          icon: 'error',
+          title: 'Erreur',
+          text: "Impossible d'enregistrer les lignes avant l'impression.",
+        });
+      }
     });
   }
 
-  async imprimerPdfNomenclature() {
+  private genererDevisPdf(printMode: 'normal' | 'simple' | 'nomenclature', composeArticle: any = null, withStamp: boolean = false): void {
     const id = this.route.snapshot.paramMap.get('document_id');
     if (!id) {
       Swal.fire({ icon: 'error', title: 'Erreur', text: 'document_id introuvable.' });
       return;
     }
-
-    const composeIds = Array.from(new Set((this.produits || []).map(p => p.compose_id).filter((x: any) => !!x))) as number[];
-    // Pas de popup: on laisse le backend détecter automatiquement l'article composé à partir des lignes du devis.
-    // Si on a un hint en session (compose_id), on envoie quand même ses infos (quantité/prix) pour être exact.
-    let composeArticlePayload: any = null;
-    if (composeIds.length > 0) {
-      const composeId = composeIds[0]; // sans popup: prendre le premier
-      const firstRow = (this.produits || []).find(p => +(p.compose_id ?? 0) === +composeId);
-      const articleCompose = this.produitsNomenclature?.find((a: any) => +a.article_id === +composeId);
-      composeArticlePayload = {
-        article_id: composeId,
-        article_cod: articleCompose?.article_cod || '',
-        article_nom: articleCompose?.article_nom || firstRow?.compose_designation || '',
-        prix: Number(firstRow?.compose_pu ?? articleCompose?.pu ?? 0) || 0,
-        quantite: Number(firstRow?.compose_qte ?? 1) || 1
-      };
-    }
-
-    this.emailService.generateDevisPDF(id, { printMode: 'nomenclature', composeArticle: composeArticlePayload }).subscribe({
+    this.emailService.generateDevisPDF(id, { withStamp, printMode, composeArticle }).subscribe({
       next: (res) => {
         const url = res?.pdfUrl;
         if (url) window.open(url, '_blank');
-        else Swal.fire({ icon: 'error', title: 'Erreur', text: 'Lien PDF non reçu.' });
+        else Swal.fire({ icon: 'error', title: 'Erreur', text: 'Lien PDF non re?u.' });
       },
-      error: () => Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors de la génération du PDF." })
+      error: () => Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors de la g?n?ration du PDF." })
     });
+  }
+
+  imprimerPdfNormal() {
+    this.persistDevisChangesBeforePdf(() => this.genererDevisPdf('normal'));
+  }
+
+  imprimerPdfSimple() {
+    this.persistDevisChangesBeforePdf(() => this.genererDevisPdf('simple'));
+  }
+
+  private buildComposeArticlePayload(): any {
+    const composeIds = Array.from(new Set((this.produits || []).map(p => p.compose_id).filter((x: any) => !!x))) as number[];
+    if (composeIds.length === 0) {
+      return null;
+    }
+
+    const composeId = composeIds[0];
+    const firstRow = (this.produits || []).find(p => +(p.compose_id ?? 0) === +composeId);
+    const articleCompose = this.produitsNomenclature?.find((a: any) => +a.article_id === +composeId);
+
+    return {
+      article_id: composeId,
+      article_cod: articleCompose?.article_cod || '',
+      article_nom: articleCompose?.article_nom || firstRow?.compose_designation || '',
+      prix: Number(firstRow?.compose_pu ?? articleCompose?.pu ?? 0) || 0,
+      quantite: Number(firstRow?.compose_qte ?? 1) || 1
+    };
+  }
+
+  async imprimerPdfNomenclature() {
+    this.persistDevisChangesBeforePdf(() => this.genererDevisPdf('nomenclature', this.buildComposeArticlePayload()));
   }
 
   selectArticle(index: number, article: any) {
     this.produits[index].article_id = article.article_id;
     this.produits[index].articleSearch = article.article_nom;
+    this.produits[index].stock_disponible = null;
     this.filteredArticles[index] = [];
+    this.highlightedArticleIndex[index] = -1;
 
     this.produits[index].designation = article.article_nom;
     this.produits[index].pu = article.pu || 0;
     this.produits[index].qte = 1;
     this.produits[index].reduc = 0;
     this.produits[index].taxe = (article.taxe ?? 0.2);
+    this.updateLineStockDisponible(index, article.article_id);
     this.recalculateTotal(index);
+  }
+
+  private updateLineStockDisponible(index: number, articleId: any): void {
+    const id = Number(articleId || 0);
+    if (!id || !this.produits?.[index]) return;
+    this.baseService.getArticleStockDisponible(id).pipe(
+      catchError(() => of({ success: false, data: { stock_disponible: 0 } }))
+    ).subscribe((response: any) => {
+      if (!this.produits?.[index]) return;
+      const raw = response?.data?.stock_disponible;
+      const n = Number(raw);
+      this.produits[index].stock_disponible = Number.isFinite(n) ? n : 0;
+    });
+  }
+
+  isStockRuptureLine(line: any): boolean {
+    if (!line || !Number(line?.article_id || 0)) return false;
+    const n = Number(line?.stock_disponible);
+    return Number.isFinite(n) && n <= 0;
+  }
+
+  private escLetter(value: any): string {
+    return String(value ?? '-')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  openArticleLetter(index: number): void {
+    const line = this.produits?.[index];
+    const articleId = Number(line?.article_id || 0);
+    if (!articleId) {
+      Swal.fire({ icon: 'info', title: 'Article non s?lectionn?', text: 'Veuillez choisir un article d?abord.' });
+      return;
+    }
+
+    const a = (this.produits1 || []).find((x: any) => Number(x?.article_id) === articleId);
+    if (!a) {
+      Swal.fire({ icon: 'warning', title: 'D?tail indisponible', text: 'D?tails article non trouv?s.' });
+      return;
+    }
+
+    const detail = {
+      article_id: a.article_id,
+      code: a.article_cod ?? a.Code_Article,
+      designation: a.article_nom ?? a.Designation,
+      code_barre: a.code_barre,
+      famille: a.famille_nom ?? a.famille ?? a.Famille,
+      unite: a.unite_nom ?? a.unite ?? a.Unite,
+      quantite_unite: a.quantite_unite ?? a.prix_quantite ?? a['Quantite_unite'],
+      stock_max: a.stock_max,
+      stock_min: a.stock_min,
+      perissabilite: a.perissabilite ?? a.Perissabilite,
+      etat: a.etat ?? a.etat_article,
+      prix_achat: a.prix_achat,
+      prix_vente: a.prix_vente,
+      depot: a.depot_nom ?? a.Depot
+    };
+
+    const item = (icon: string, label: string, value: any, valueStyle: string = '', isRaw: boolean = false) =>
+      `<div style="display:grid;grid-template-columns:20px 120px 1fr;gap:8px;align-items:start;padding:6px 0;border-bottom:1px dashed rgba(92,60,28,.22);text-align:left;">
+        <span style="color:#6f4420;">${icon}</span>
+        <span style="font-weight:700;color:#5b3515;">${this.escLetter(label)}</span>
+        <span style="color:#3a2512;word-break:break-word;${valueStyle}">${isRaw ? String(value ?? '-') : this.escLetter(value)}</span>
+      </div>`;
+
+    this.baseService.getArticleStockDisponible(articleId).pipe(
+      catchError(() => of({ success: false, data: { article_id: articleId, stock_disponible: 0 } }))
+    ).subscribe((response: any) => {
+      const stockDisponibleRaw = response?.data?.stock_disponible;
+      const stockDisponible = Number(stockDisponibleRaw ?? 0);
+      const stockDisponiblePositive = Number.isFinite(stockDisponible) && stockDisponible > 0;
+      const stockDisponibleColor = stockDisponiblePositive ? '#166534' : '#b91c1c';
+      const stockDisponibleDisplay = Number.isFinite(stockDisponible)
+        ? String(stockDisponible)
+        : this.escLetter(stockDisponibleRaw ?? '-');
+      if (this.produits?.[index]) {
+        this.produits[index].stock_disponible = Number.isFinite(stockDisponible) ? stockDisponible : 0;
+      }
+      const ruptureBanner = (!stockDisponiblePositive)
+        ? `<div style="margin:0 0 12px;padding:8px 10px;border:1px solid #dc2626;border-radius:8px;background:#fee2e2;color:#991b1b;font-weight:800;text-align:center;">Rupture de stock</div>`
+        : '';
+
+      const leftColumn = [
+        item('&#9872;', 'ID', detail.article_id),
+        item('&#10016;', 'Code', detail.code),
+        item('&#9998;', 'Designation', detail.designation),
+        item('&#8962;', 'Famille', detail.famille),
+        item('&#9878;', 'Unite', detail.unite),
+        item('&#8861;', 'Quantite unite', detail.quantite_unite),
+        item('&#8703;', 'Etat', detail.etat)
+      ].join('');
+
+      const rightColumn = [
+        item('&#8759;', 'Code barre', detail.code_barre),
+        item('&#8595;', 'Stock min', detail.stock_min, 'color:#b91c1c;font-weight:800;animation:stockMinBlink 1s step-end infinite;'),
+        item('&#9733;', 'Stock disponible', `<strong style="color:${stockDisponibleColor};font-weight:900;">${stockDisponibleDisplay}</strong>`, '', true),
+        item('&#8593;', 'Stock max', detail.stock_max),
+        item('&#9762;', 'Perissabilite', detail.perissabilite),
+        item('&#10003;', 'Prix achat', detail.prix_achat),
+        item('&#10010;', 'Prix vente', detail.prix_vente),
+        item('&#9873;', 'Depot', detail.depot)
+      ].join('');
+
+      const editUrl = `/Edit-Produit/${encodeURIComponent(String(detail.article_id ?? ''))}`;
+
+      const html = `
+        <style>
+          @keyframes stockMinBlink {
+            0%, 45% { opacity: 1; }
+            46%, 100% { opacity: 0.25; }
+          }
+        </style>
+        <div style="
+          position:relative;
+          border:1px solid #9c7443;
+          border-radius:12px;
+          padding:22px 18px 14px;
+          background:
+            radial-gradient(circle at 12% 16%, rgba(117,74,34,.18) 0, rgba(117,74,34,0) 22%),
+            radial-gradient(circle at 86% 78%, rgba(117,74,34,.14) 0, rgba(117,74,34,0) 20%),
+            repeating-linear-gradient(-38deg, rgba(114,74,37,.045) 0, rgba(114,74,37,.045) 6px, rgba(114,74,37,.015) 6px, rgba(114,74,37,.015) 12px),
+            linear-gradient(180deg,#f3e1be 0%,#ead2a7 100%);
+          box-shadow: inset 0 1px 0 rgba(255,248,233,.72), inset 0 0 42px rgba(120,84,48,.12);
+          font-family: Palatino Linotype, Bookman Old Style, Garamond, Times New Roman, serif;">
+          <div style="
+            text-align:center;
+            font-size:1.35rem;
+            letter-spacing:.11em;
+            font-weight:700;
+            text-transform:uppercase;
+            color:#5f3b17;
+            margin-bottom:14px;
+            padding-bottom:8px;
+            border-bottom:1px solid rgba(90,58,27,.4);">Fiche Article</div>
+          ${ruptureBanner}
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+            <div style="border:1px solid rgba(113,73,35,.22);border-radius:8px;padding:8px 10px;background:rgba(255,248,231,.4);">${leftColumn}</div>
+            <div style="border:1px solid rgba(113,73,35,.22);border-radius:8px;padding:8px 10px;background:rgba(255,248,231,.4);">${rightColumn}</div>
+          </div>
+
+          <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+            <a href="${editUrl}" style="text-decoration:none;padding:7px 12px;border-radius:8px;border:1px solid #6d451f;background:#7f5126;color:#f8e9cc;font-weight:700;">Edit Produit</a>
+          </div>
+        </div>
+      `;
+
+      Swal.fire({
+        html,
+        width: 900,
+        background: 'transparent',
+        confirmButtonText: 'Fermer',
+        customClass: { confirmButton: 'medieval-letter-btn' }
+      });
+    });
   }
 
   activerModeEditor() {
@@ -786,7 +1229,8 @@ export class EditDevisComponent implements OnInit {
 
   AllClients() {
     this.baseService.getClient().subscribe((response: any) => {
-      this.clients = response?.data || (Array.isArray(response) ? response : []);
+      const allPartenaires = response?.data || (Array.isArray(response) ? response : []);
+      this.clients = (allPartenaires || []).filter((client: any) => Number(client?.type) === 1);
       this.filteredClients = this.clients;
     })
   }
@@ -812,7 +1256,7 @@ export class EditDevisComponent implements OnInit {
     this.filteredClients = [];
     this.searchTerm = client.nom;
     
-    // Vérifier l'exonération TVA du client
+    // V?rifier l'exon?ration TVA du client
     if (client.part_id) {
       this.checkClientExoneration(client.part_id);
     }
@@ -857,18 +1301,19 @@ export class EditDevisComponent implements OnInit {
   enregistrerTout(): void {
     const lignesAModifier: any[] = [];
     const document_id = +this.route.snapshot.paramMap.get('document_id')!;
+    this.resequenceProduitLignes();
     for (let i = 0; i < this.produits.length; i++) {
       const p = this.produits[i];
-      // Règle TVA (détail produit):
-      // - client exonéré valide -> taux_tva = 0
-      // - sinon -> taux TVA standard = 0.2 (20%)
-      const desiredTax = this.isClientExonerated ? 0 : 0.2;
+      // R?gle TVA (d?tail produit):
+      // - client exon?r? valide -> taux_tva = 0
+      // - sinon -> taux TVA saisi sur la ligne
+      const desiredTax = this.isClientExonerated ? 0 : this.normalizeTaxeValue(p.taxe);
 
       if (!p.article_id || !p.pu || !p.qte) {
         Swal.fire({
           icon: 'error',
           title: 'Ligne invalide',
-          html: `La ligne <strong>${i + 1}</strong> est incomplète (article, prix ou quantité manquants).`,
+          html: `La ligne <strong>${i + 1}</strong> est incompl?te (article, prix ou quantit? manquants).`,
         });
         return;
       }
@@ -882,6 +1327,7 @@ export class EditDevisComponent implements OnInit {
           pu: p.pu,
           qte: p.qte,
           taxe: String(desiredTax),
+          ligne: i + 1,
           document_id,
           update_mode: 'I'
         };
@@ -899,13 +1345,15 @@ export class EditDevisComponent implements OnInit {
       }
 
       const modifie = (
+        p.id !== pOriginal.id ||
+        (Number(p.ligne || 0) || (i + 1)) !== (Number(pOriginal.ligne || 0) || (i + 1)) ||
         p.designation !== pOriginal.designation ||
         p.article_id !== pOriginal.article_id ||
         p.pu !== pOriginal.pu ||
         p.qte !== pOriginal.qte ||
         p.reduc !== pOriginal.reduc ||
         p.reducMode !== pOriginal.reducMode ||
-        desiredTax !== pOriginal.taxe
+        desiredTax !== this.normalizeTaxeValue(pOriginal.taxe)
       );
 
       if (modifie) {
@@ -916,6 +1364,7 @@ export class EditDevisComponent implements OnInit {
           pu: p.pu,
           qte: p.qte,
           taxe: String(desiredTax),
+          ligne: i + 1,
           document_id,
           update_mode: 'U',
         };
@@ -936,7 +1385,7 @@ export class EditDevisComponent implements OnInit {
       Swal.fire({
         icon: 'info',
         title: 'Aucune modification',
-        text: 'Aucune ligne modifiée ou ajoutée.',
+        text: 'Aucune ligne modifi?e ou ajout?e.',
       });
       return;
     }
@@ -945,10 +1394,10 @@ export class EditDevisComponent implements OnInit {
       next: (res) => {
         Swal.fire({
           icon: 'success',
-          title: 'Enregistrement réussi',
-          text: `${lignesAModifier.length} ligne(s) enregistrée(s) avec succès.`,
+          title: 'Enregistrement reussi',
+          text: lignesAModifier.length + " ligne(s) enregistree(s) avec succes.",
         });
-        // Recharger le devis pour refléter les lignes insérées (nomenclature => plusieurs lignes)
+        // Recharger le devis pour refl?ter les lignes ins?r?es (nomenclature => plusieurs lignes)
         this.venteSerivce.getDevisById(document_id).subscribe({
           next: (updated: any) => {
             this.processDevisData(updated?.data || updated);
@@ -1020,8 +1469,8 @@ export class EditDevisComponent implements OnInit {
       next: res => {
         Swal.fire({
           icon: 'success',
-          title: 'E-mail envoyé !',
-          text: 'Le devis a été envoyé avec succès.',
+          title: 'E-mail envoye !',
+          text: 'Le devis a ete envoye avec succes.',
           timer: 3000,
           showConfirmButton: false
         });
@@ -1031,14 +1480,14 @@ export class EditDevisComponent implements OnInit {
         Swal.fire({
           icon: 'error',
           title: 'Erreur',
-          text: 'Échec de l\'envoi de l\'e-mail.'
+          text: 'Echec de l\'envoi de l\'e-mail.'
         });
       }
     });
   }
 
   envoyerWhatsApp(devis: any) {
-    const numero = prompt('Entrez le numéro WhatsApp du client (ex: 212612345678):');
+    const numero = prompt('Entrez le num?ro WhatsApp du client (ex: 212612345678):');
     if (!numero) return;
 
     let numeroNettoye = numero.replace(/\D/g, '');
@@ -1049,11 +1498,11 @@ export class EditDevisComponent implements OnInit {
     }
 
     if (numeroNettoye.length < 12) {
-      alert('Numéro de téléphone invalide');
+      alert('Num?ro de t?l?phone invalide');
       return;
     }
 
-    const messagePersonnalise = prompt('Message personnalisé (optionnel):') || 'Votre devis en pièce jointe';
+    const messagePersonnalise = prompt('Message personnalis? (optionnel):') || 'Votre devis en pi?ce jointe';
 
     const loadingElement = document.createElement('div');
     loadingElement.innerHTML = 'Envoi du PDF via WhatsApp...';
@@ -1069,7 +1518,7 @@ export class EditDevisComponent implements OnInit {
         document.body.removeChild(loadingElement);
 
         if (res.success) {
-          alert('PDF envoyé en pièce jointe via WhatsApp !');
+          alert('PDF envoy? en pi?ce jointe via WhatsApp !');
         } else {
           alert('Erreur: ' + res.message);
         }
@@ -1084,24 +1533,10 @@ export class EditDevisComponent implements OnInit {
   }
 
   voirCommande(withStamp: boolean = false): void {
-    const id = this.route.snapshot.paramMap.get('document_id');
-    if (!id) {
-      Swal.fire({ icon: 'error', title: 'Erreur', text: 'document_id introuvable.' });
-      return;
-    }
     // Compat: ancien bouton "Voir commande" garde le comportement normal
-    this.emailService.generateDevisPDF(id, { withStamp, printMode: 'normal' }).subscribe({
-      next: (res: any) => {
-        const url = res?.pdfUrl;
-        if (url) {
-          window.open(url, '_blank');
-        } else {
-          Swal.fire({ icon: 'error', title: 'Erreur', text: 'Lien PDF non reçu.' });
-        }
-      },
-      error: (err: any) => {
-        Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors de la génération du PDF." });
-      }
-    });
+    this.persistDevisChangesBeforePdf(() => this.genererDevisPdf('normal', null, withStamp));
   }
 }
+
+
+

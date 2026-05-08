@@ -18,10 +18,14 @@ export interface Notification {
   user_id?: number;
   // Champs pour notifications calculées
   client?: string;
+  numero?: string;
+  total_ht?: number;
   jours_restants?: number;
+  parent?: number | null;
   stock_id?: number;
   redirectRoute?: string;
   isCalculated?: boolean;
+  notificationType?: string;
 }
 
 export interface NotificationFilters {
@@ -148,4 +152,3 @@ export class NotificationService {
     return this.http.get(`${this.apiUrl}/calculated`);
   }
 }
-

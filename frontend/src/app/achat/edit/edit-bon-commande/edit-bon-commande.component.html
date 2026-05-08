@@ -83,7 +83,7 @@
     </div>
 
     <!-- Produits -->
-    <div class="bg-white rounded shadow-sm p-4 mb-3">
+    <div class="bg-white rounded shadow-sm p-4 mb-3 products-panel">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h6 class="mb-0">📦 Liste des Articles</h6>
             <button class="btn btn-success" (click)="addProduit()">➕ Ajouter article</button>
@@ -91,7 +91,7 @@
 
 
         <!-- Tableau -->
-        <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+        <div class="table-responsive products-table-wrap">
             <table class="table table-striped align-middle text-center">
                 <thead class="table-light">
                     <tr>
@@ -107,22 +107,22 @@
                 <tbody>
                     <tr *ngFor="let p of produits; let i = index">
                         <td>
-                            <div class="position-relative">
+                            <div class="position-relative product-search-cell">
                                 <input 
                                     type="text" 
                                     class="form-control form-control-sm" 
                                     style="min-width: 280px; width: 100%;"
                                     [(ngModel)]="p.articleSearch"
                                     (input)="onArticleSearchChange(i, $any($event.target).value)"
+                                    (keydown)="onArticleSearchKeydown(i, $event)"
                                     placeholder="Rechercher un article..."
                                     autocomplete="off" />
                                 <ul *ngIf="p.articleSearch && filteredArticles[i] && filteredArticles[i].length > 0" 
-                                    class="list-group position-absolute w-100 shadow"
-                                    style="max-height: 600px; overflow-y: auto; z-index: 1050; font-size: 14px;">
-                                    <li class="list-group-item list-group-item-action" 
-                                        *ngFor="let article of filteredArticles[i]"
-                                        (click)="selectArticle(i, article)"
-                                        style="padding: 10px 15px; cursor: pointer; font-size: 14px; line-height: 1.5;">
+                                    class="list-group position-absolute w-100 shadow product-autocomplete-dropdown">
+                                    <li class="list-group-item list-group-item-action product-autocomplete-item" 
+                                        *ngFor="let article of filteredArticles[i]; let articleIndex = index"
+                                        [class.active]="highlightedArticleIndex[i] === articleIndex"
+                                        (click)="selectArticle(i, article)">
                                         {{ article.article_nom }}
                                     </li>
                                 </ul>

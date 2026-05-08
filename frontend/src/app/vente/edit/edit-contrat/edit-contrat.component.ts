@@ -1,11 +1,11 @@
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { BaseService } from 'src/app/service/base.service';
 import { VentesService } from 'src/app/service/ventes.service';
 import Quill from 'quill';
 import Swal from 'sweetalert2';
-import { forkJoin, of } from 'rxjs';
+import { forkJoin, of, Subscription } from 'rxjs';
 import { catchError, retry } from 'rxjs/operators';
 const QuillMention = require('quill-mention');
 declare var bootstrap: any;
@@ -16,7 +16,7 @@ Quill.register('modules/mention', QuillMention.default);
   templateUrl: './edit-contrat.component.html',
   styleUrls: ['./edit-contrat.component.css']
 })
-export class EditContratComponent implements OnInit {
+export class EditContratComponent implements OnInit, OnDestroy {
   produits1: any[] = [];
   mode: 'editor' | 'table' = 'table';
   ligneSelectionnee: number | null = null;
@@ -33,6 +33,9 @@ export class EditContratComponent implements OnInit {
   isError: boolean = false;
   numeroContrat: string = 'CT25-0001';
   info: any;
+  private preservedContractDurationDays: number | null = null;
+  private isAdjustingContractDates = false;
+  private contractDateSubscriptions: Subscription[] = [];
 
   contrat = {
     client: 'Nom du client',
@@ -54,6 +57,7 @@ export class EditContratComponent implements OnInit {
   }]
 
   filteredArticles: { [key: number]: any[] } = {};
+  highlightedArticleIndex: { [key: number]: number } = {};
 
   fraisPort = 0;
   sousTotal = 0;
@@ -75,6 +79,7 @@ export class EditContratComponent implements OnInit {
   ngOnInit(): void {
     this.modules = {};
     this.initForm();
+    this.setupContractDurationPreservation();
     const id = +this.route.snapshot.paramMap.get('id')!;
 
     forkJoin({
@@ -103,7 +108,7 @@ export class EditContratComponent implements OnInit {
         } else {
           clientsData = [];
         }
-        this.clients = clientsData;
+        this.clients = this.keepOnlyClients(clientsData);
         this.filteredClients = [...this.clients];
 
         let conditionsData = data.conditions?.data || data.conditions || [];
@@ -119,6 +124,18 @@ export class EditContratComponent implements OnInit {
     this.ContratForm.get('clientSearch')?.valueChanges.subscribe(value => {
       this.searchTerm = value || '';
       this.onSearchChange(value);
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.contractDateSubscriptions.forEach((subscription) => subscription.unsubscribe());
+    this.contractDateSubscriptions = [];
+  }
+
+  private keepOnlyClients(partners: any[]): any[] {
+    return (Array.isArray(partners) ? partners : []).filter((partner: any) => {
+      const typeValue = Number(partner?.type);
+      return !Number.isFinite(typeValue) || typeValue === 1;
     });
   }
 
@@ -147,6 +164,7 @@ export class EditContratComponent implements OnInit {
       date_expire: data.date_expire ? data.date_expire.substring(0, 10) : '',
       condition_id: data.condition_id || null
     });
+    this.syncPreservedContractDuration();
 
     if (data.part_id) {
       this.checkClientExoneration(+data.part_id);
@@ -238,6 +256,111 @@ export class EditContratComponent implements OnInit {
       condition_id: [null],
       clientSearch: ['']
     });
+  }
+
+  private setupContractDurationPreservation(): void {
+    const datePlanifControl = this.ContratForm.get('date_planif');
+    const dateExpireControl = this.ContratForm.get('date_expire');
+
+    if (!datePlanifControl || !dateExpireControl) {
+      return;
+    }
+
+    this.contractDateSubscriptions.forEach((subscription) => subscription.unsubscribe());
+    this.contractDateSubscriptions = [
+      datePlanifControl.valueChanges.subscribe(() => this.handleContractDateChange('date_planif')),
+      dateExpireControl.valueChanges.subscribe(() => this.handleContractDateChange('date_expire'))
+    ];
+  }
+
+  private handleContractDateChange(changedField: 'date_planif' | 'date_expire'): void {
+    if (this.isAdjustingContractDates) {
+      return;
+    }
+
+    const planif = this.parseDateOnly(this.ContratForm.get('date_planif')?.value);
+    const expire = this.parseDateOnly(this.ContratForm.get('date_expire')?.value);
+
+    if (!planif || !expire) {
+      if (!planif && !expire) {
+        this.preservedContractDurationDays = null;
+      }
+      return;
+    }
+
+    const currentDurationDays = this.getDateDiffDays(planif, expire);
+    if (currentDurationDays === null || currentDurationDays < 0) {
+      return;
+    }
+
+    if (this.preservedContractDurationDays === null) {
+      this.preservedContractDurationDays = currentDurationDays;
+      return;
+    }
+
+    if (currentDurationDays === this.preservedContractDurationDays) {
+      return;
+    }
+
+    const targetControlName = changedField === 'date_planif' ? 'date_expire' : 'date_planif';
+    const anchorDate = changedField === 'date_planif' ? planif : expire;
+    const targetDate = changedField === 'date_planif'
+      ? this.addDays(anchorDate, this.preservedContractDurationDays)
+      : this.addDays(anchorDate, -this.preservedContractDurationDays);
+
+    this.isAdjustingContractDates = true;
+    this.ContratForm.patchValue({
+      [targetControlName]: this.formatDateOnly(targetDate)
+    }, { emitEvent: false });
+    this.isAdjustingContractDates = false;
+  }
+
+  private syncPreservedContractDuration(): void {
+    const planif = this.parseDateOnly(this.ContratForm.get('date_planif')?.value);
+    const expire = this.parseDateOnly(this.ContratForm.get('date_expire')?.value);
+    const durationDays = this.getDateDiffDays(planif, expire);
+    this.preservedContractDurationDays = durationDays !== null && durationDays >= 0 ? durationDays : null;
+  }
+
+  private parseDateOnly(value: any): Date | null {
+    const normalizedValue = String(value || '').trim();
+    if (!normalizedValue) {
+      return null;
+    }
+
+    const parsed = new Date(`${normalizedValue}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+
+    return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  }
+
+  private getDateDiffDays(startDate: Date | null, endDate: Date | null): number | null {
+    if (!startDate || !endDate) {
+      return null;
+    }
+
+    return Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  private addDays(date: Date | null, days: number): Date | null {
+    if (!date) {
+      return null;
+    }
+
+    const nextDate = new Date(date.getTime());
+    nextDate.setDate(nextDate.getDate() + Number(days || 0));
+    return nextDate;
+  }
+
+  private formatDateOnly(value: Date | null): string {
+    if (!value || Number.isNaN(value.getTime())) {
+      return '';
+    }
+
+    const pad = (part: number) => String(part).padStart(2, '0');
+    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
   }
 
   toggleEdit(): void {
@@ -494,6 +617,7 @@ export class EditContratComponent implements OnInit {
   onArticleSearchChange(index: number, term: string) {
     if (!term) {
       this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
       return;
     }
 
@@ -501,6 +625,7 @@ export class EditContratComponent implements OnInit {
 
     if (term.length === 0) {
       this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
       return;
     }
 
@@ -509,6 +634,7 @@ export class EditContratComponent implements OnInit {
         this.filteredArticles[index] = this.produits1.filter((article: any) =>
           article.article_nom && article.article_nom.toLowerCase().includes(term)
         );
+        this.highlightedArticleIndex[index] = this.filteredArticles[index].length ? 0 : -1;
       });
       return;
     }
@@ -516,12 +642,45 @@ export class EditContratComponent implements OnInit {
     this.filteredArticles[index] = this.produits1.filter((article: any) =>
       article.article_nom && article.article_nom.toLowerCase().includes(term)
     );
+    this.highlightedArticleIndex[index] = this.filteredArticles[index].length ? 0 : -1;
+  }
+
+  onArticleSearchKeydown(index: number, event: KeyboardEvent) {
+    const articles = this.filteredArticles[index] || [];
+    if (!articles.length) return;
+
+    const currentIndex = this.highlightedArticleIndex[index] ?? -1;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.highlightedArticleIndex[index] = currentIndex < articles.length - 1 ? currentIndex + 1 : 0;
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.highlightedArticleIndex[index] = currentIndex > 0 ? currentIndex - 1 : articles.length - 1;
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const selectedArticle = articles[currentIndex >= 0 ? currentIndex : 0];
+      if (selectedArticle) this.selectArticle(index, selectedArticle);
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
+    }
   }
 
   selectArticle(index: number, article: any) {
     this.produits[index].article_id = article.article_id;
     this.produits[index].articleSearch = article.article_nom;
     this.filteredArticles[index] = [];
+    this.highlightedArticleIndex[index] = -1;
 
     this.produits[index].designation = article.article_nom;
     this.produits[index].pu = article.pu || 0;

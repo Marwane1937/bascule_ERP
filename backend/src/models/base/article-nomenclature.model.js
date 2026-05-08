@@ -142,6 +142,8 @@ module.exports = {
           a.article_id,
           a.article_cod,
           a.article_nom,
+          a.prix_vente,
+          a.prix_vente AS pu,
           a.famille,
           a.unite_id
         FROM article_Nomenclature n
@@ -156,5 +158,4 @@ module.exports = {
   upsertNomenclatureLine,
   deleteNomenclatureLine,
 };
-
 

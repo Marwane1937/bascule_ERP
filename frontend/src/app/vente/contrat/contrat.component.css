@@ -57,14 +57,291 @@
   cursor: pointer;
 }
 
+.contrat-page.contrat-page--detail {
+  max-width: 100%;
+  padding-left: 10px;
+  padding-right: 10px;
+}
 
+.contrat-page .page-inner--detail {
+  max-width: 100%;
+}
 
+.contrat-toolbar {
+  flex-wrap: nowrap !important;
+  overflow-x: visible;
+}
 
+.table-wrapper {
+  width: 100%;
+  overflow: visible;
+}
 
+.contrat-table {
+  width: 100%;
+  table-layout: fixed;
+  font-size: 0.82rem;
+  margin-bottom: 0;
+  position: relative;
+}
 
+.contrat-table tbody,
+.contrat-table tr {
+  overflow: visible;
+}
 
+.contrat-table th,
+.contrat-table td {
+  vertical-align: middle;
+  padding: 0.3rem 0.34rem;
+}
 
+.contrat-table th {
+  position: relative;
+  white-space: nowrap;
+  padding-right: 1.35rem;
+  overflow: visible;
+  text-overflow: clip;
+}
 
+.column-header {
+  position: relative;
+}
 
+.resizable-column-header {
+  user-select: none;
+}
 
+.column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 10px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 2;
+}
+
+.column-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  left: 4px;
+  width: 2px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.14);
+  transition: background-color 0.2s ease;
+}
+
+.column-resize-handle:hover::after {
+  background: rgba(13, 110, 253, 0.45);
+}
+
+.numero-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+  min-width: 0;
+  overflow: visible;
+}
+
+.numero-cell span {
+  flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.cell-date,
+.cell-status,
+.cell-remaining-days,
+.cell-actions {
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.cell-numero {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.cell-client,
+.cell-client strong {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cell-actions {
+  min-width: 0;
+  position: relative;
+  z-index: 20;
+}
+
+.actions-cell {
+  display: inline-flex;
+  justify-content: center;
+}
+
+.action-dropdown-toggle {
+  white-space: nowrap;
+}
+
+.action-menu-open .cell-actions {
+  z-index: 40;
+}
+
+.contract-action-menu {
+  position: relative;
+  display: inline-flex;
+  justify-content: flex-end;
+}
+
+.contract-action-menu__panel {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  min-width: 13rem;
+  padding: 0.35rem 0;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.18);
+  z-index: 2000;
+}
+
+.contract-action-menu__item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.85rem;
+  color: #1f2937;
+  text-align: left;
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+
+.contract-action-menu__item:hover {
+  background: #f8fafc;
+}
+
+.contract-action-menu__item i {
+  width: 14px;
+  text-align: center;
+}
+
+.contract-action-menu__item--success {
+  color: #157347;
+}
+
+.contract-action-menu__item--danger {
+  color: #dc3545;
+}
+
+.contrat-renewal-btn {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.contrat-renewal-btn:hover {
+  transform: scale(1.08);
+}
+
+.contrat-renewal-btn i {
+  font-size: 1rem;
+}
+
+@keyframes contratHighlightPulse {
+  0% {
+    box-shadow: inset 0 0 0 0 rgba(198, 40, 40, 0.12);
+  }
+  50% {
+    box-shadow: inset 4px 0 0 #c62828, 0 0 0 999px rgba(198, 40, 40, 0.05);
+  }
+  100% {
+    box-shadow: inset 4px 0 0 #c62828;
+  }
+}
+
+.notification-highlight-row td,
+.notification-highlight-row td span,
+.notification-highlight-row td strong,
+.notification-highlight-row td i {
+  color: #c62828 !important;
+  font-weight: 700;
+}
+
+.notification-highlight-row {
+  background-color: #fff1f2 !important;
+  box-shadow: inset 4px 0 0 #c62828;
+  animation: contratHighlightPulse 1.8s ease-out 2;
+}
+
+.notification-highlight-row .badge,
+.notification-highlight-row .remaining-days-badge {
+  background: #ffe3e6 !important;
+  color: #c62828 !important;
+  border-color: #f5c2c7 !important;
+}
+
+.remaining-days-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.remaining-days-ok {
+  background: #e7f8ef;
+  color: #157347;
+}
+
+.remaining-days-alert {
+  background: #fff4db;
+  color: #b26a00;
+}
+
+.remaining-days-overdue {
+  background: #fde7ea;
+  color: #b42318;
+}
+
+.remaining-days-muted {
+  background: #eef2f7;
+  color: #667085;
+}
+
+:host ::ng-deep .swal2-container.swal2-top-end {
+  z-index: 30050 !important;
+}
+
+:host ::ng-deep .swal2-popup.contrat-success-toast {
+  margin-top: 12px;
+}
+
+@media (max-width: 768px) {
+  .contrat-toolbar {
+    flex-wrap: wrap !important;
+    justify-content: flex-end;
+  }
+
+  .contrat-toolbar .btn {
+    width: 100%;
+  }
+}
 

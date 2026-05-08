@@ -61,8 +61,21 @@ export class VenteReportingComponent implements OnInit {
   caClientsSortDirection: 'ASC' | 'DESC' = 'DESC';
   caClientsDateFrom: string = '';
   caClientsDateTo: string = '';
+  clientSuggestions: any[] = [];
+  articleSuggestions: any[] = [];
+  activeAutocomplete: string | null = null;
+  private autocompleteTimer: any = null;
 
   constructor(private venteService: VenteService) { }
+
+  formatNumber(value: any, minimumFractionDigits = 0, maximumFractionDigits = 2): string {
+    const n = Number(value ?? 0);
+    if (!Number.isFinite(n)) return '0';
+    return n.toLocaleString('fr-FR', {
+      minimumFractionDigits,
+      maximumFractionDigits
+    });
+  }
 
   ngOnInit(): void {
     this.getGrandLivre();
@@ -300,6 +313,99 @@ export class VenteReportingComponent implements OnInit {
     return this.caClientsSortDirection === 'ASC' ? 'fa-sort-up' : 'fa-sort-down';
   }
 
+  onClientSearchInput(section: string, value: string): void {
+    this.setSearchTerm(section, value);
+    this.activeAutocomplete = section;
+    this.loadClientSuggestions(value);
+  }
+
+  onArticleSearchInput(value: string): void {
+    this.caArticlesSearchTerm = value || '';
+    this.activeAutocomplete = 'ca-articles';
+    this.loadArticleSuggestions(value);
+  }
+
+  showClientAutocomplete(section: string, value: string = ''): void {
+    this.activeAutocomplete = section;
+    this.loadClientSuggestions(value);
+  }
+
+  showArticleAutocomplete(value: string = ''): void {
+    this.activeAutocomplete = 'ca-articles';
+    this.loadArticleSuggestions(value);
+  }
+
+  hideAutocompleteDelayed(): void {
+    setTimeout(() => {
+      this.activeAutocomplete = null;
+    }, 180);
+  }
+
+  selectClientSuggestion(section: string, client: any): void {
+    this.setSearchTerm(section, client?.client_nom || '');
+    this.activeAutocomplete = null;
+    this.clientSuggestions = [];
+
+    if (section === 'grand-livre') {
+      this.onGrandLivreSearch();
+    } else if (section === 'factures-client') {
+      this.onFacturesClientSearch();
+    } else if (section === 'ca-clients') {
+      this.onChiffreAffairesClientsSearch();
+    }
+  }
+
+  selectArticleSuggestion(article: any): void {
+    this.caArticlesSearchTerm = article?.article_nom || article?.article_cod || '';
+    this.activeAutocomplete = null;
+    this.articleSuggestions = [];
+    this.onChiffreAffairesArticlesSearch();
+  }
+
+  loadClientSuggestions(search: string = ''): void {
+    if (this.autocompleteTimer) {
+      clearTimeout(this.autocompleteTimer);
+    }
+
+    this.autocompleteTimer = setTimeout(() => {
+      this.venteService.getClientSuggestions({ search: search || '', limit: 20 }).subscribe({
+        next: (response: any) => {
+          this.clientSuggestions = response.data || [];
+        },
+        error: () => {
+          this.clientSuggestions = [];
+        }
+      });
+    }, 150);
+  }
+
+  loadArticleSuggestions(search: string = ''): void {
+    if (this.autocompleteTimer) {
+      clearTimeout(this.autocompleteTimer);
+    }
+
+    this.autocompleteTimer = setTimeout(() => {
+      this.venteService.getArticleSuggestions({ search: search || '', limit: 20 }).subscribe({
+        next: (response: any) => {
+          this.articleSuggestions = response.data || [];
+        },
+        error: () => {
+          this.articleSuggestions = [];
+        }
+      });
+    }, 150);
+  }
+
+  private setSearchTerm(section: string, value: string): void {
+    if (section === 'grand-livre') {
+      this.grandLivreSearchTerm = value || '';
+    } else if (section === 'factures-client') {
+      this.facturesClientSearchTerm = value || '';
+    } else if (section === 'ca-clients') {
+      this.caClientsSearchTerm = value || '';
+    }
+  }
+
   // === UTILITAIRES ===
 
   switchTab(tab: string): void {
@@ -316,10 +422,13 @@ export class VenteReportingComponent implements OnInit {
   }
 
   formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount || 0);
+    const value = Number(amount || 0);
+    const sign = value < 0 ? '-' : '';
+    const formatted = new Intl.NumberFormat('fr-FR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(Math.abs(value));
+    return `${sign}${formatted} dh`;
   }
 
   formatDate(date: string): string {
@@ -389,6 +498,7 @@ export class VenteReportingComponent implements OnInit {
                 <tr>
                   <th>Date</th>
                   <th>Document</th>
+                  <th>Type</th>
                   <th>Client</th>
                   <th>Description</th>
                   <th style="text-align: right;">Montant HT</th>
@@ -401,6 +511,7 @@ export class VenteReportingComponent implements OnInit {
                   <tr>
                     <td>${this.formatDate(item.date)}</td>
                     <td>${item.numero || item.facture_num || '-'}</td>
+                    <td>${item.document_type || '-'}</td>
                     <td>${item.client || item.nom || '-'}</td>
                     <td>${item.description || '-'}</td>
                     <td style="text-align: right;">${this.formatCurrency(item.total_ht || item.facture_ht || 0)}</td>
@@ -420,10 +531,11 @@ export class VenteReportingComponent implements OnInit {
 
   exportGrandLivreExcel(): void {
     const csvData = [
-      ['Date', 'Document', 'Client', 'Description', 'Montant HT', 'TVA', 'Montant TTC'],
+      ['Date', 'Document', 'Type', 'Client', 'Description', 'Montant HT', 'TVA', 'Montant TTC'],
       ...this.grandLivre.map(item => [
         this.formatDate(item.date),
         item.numero || item.facture_num || '',
+        item.document_type || '',
         item.client || item.nom || '',
         item.description || '',
         item.total_ht || item.facture_ht || 0,
@@ -485,10 +597,10 @@ export class VenteReportingComponent implements OnInit {
                   <tr>
                     <td>${item.facture_num || '-'}</td>
                     <td>${this.formatDate(item.facture_dat)}</td>
-                    <td>${item.nom || '-'}</td>
+                    <td>${item.client_nom || item.nom || '-'}</td>
                     <td style="text-align: right;">${this.formatCurrency(item.facture_ht || 0)}</td>
                     <td style="text-align: right;">${this.formatCurrency(item.facture_tva || 0)}</td>
-                    <td style="text-align: right;"><strong>${this.formatCurrency((item.facture_ht || 0) + (item.facture_tva || 0))}</strong></td>
+                    <td style="text-align: right;"><strong>${this.formatCurrency(item.total_ttc || (item.facture_ht || 0) + (item.facture_tva || 0))}</strong></td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -507,10 +619,10 @@ export class VenteReportingComponent implements OnInit {
       ...this.facturesClient.map(item => [
         item.facture_num || '',
         this.formatDate(item.facture_dat),
-        item.nom || '',
+        item.client_nom || item.nom || '',
         item.facture_ht || 0,
         item.facture_tva || 0,
-        (item.facture_ht || 0) + (item.facture_tva || 0)
+        item.total_ttc || (item.facture_ht || 0) + (item.facture_tva || 0)
       ])
     ];
 
@@ -562,7 +674,7 @@ export class VenteReportingComponent implements OnInit {
                 <tr>
                   <th>Code Article</th>
                   <th>Nom Article</th>
-                  <th>Catégorie</th>
+                  <th>Famille</th>
                   <th style="text-align: right;">Qté Vendue</th>
                   <th style="text-align: right;">Chiffre d'Affaires</th>
                   <th style="text-align: right;">Prix Moyen</th>
@@ -573,7 +685,7 @@ export class VenteReportingComponent implements OnInit {
                   <tr>
                     <td>${article.article_cod}</td>
                     <td>${article.article_nom}</td>
-                    <td>${article.categorie_nom || '-'}</td>
+                    <td>${article.famille_nom || article.categorie_nom || '-'}</td>
                     <td style="text-align: right;">${article.quantite_vendue?.toFixed(2) || '0.00'}</td>
                     <td style="text-align: right;"><strong>${this.formatCurrency(article.chiffre_affaires || 0)}</strong></td>
                     <td style="text-align: right;">${this.formatCurrency(article.prix_moyen_vente || 0)}</td>
@@ -591,11 +703,11 @@ export class VenteReportingComponent implements OnInit {
 
   exportChiffreAffairesArticlesExcel(): void {
     const csvData = [
-      ['Code Article', 'Nom Article', 'Catégorie', 'Qté Vendue', 'Chiffre d\'Affaires', 'Prix Moyen'],
+      ['Code Article', 'Nom Article', 'Famille', 'Qté Vendue', 'Chiffre d\'Affaires', 'Prix Moyen'],
       ...this.caArticles.map(article => [
         article.article_cod,
         article.article_nom,
-        article.categorie_nom || '',
+        article.famille_nom || article.categorie_nom || '',
         article.quantite_vendue || 0,
         article.chiffre_affaires || 0,
         article.prix_moyen_vente || 0
@@ -710,13 +822,3 @@ export class VenteReportingComponent implements OnInit {
     document.body.removeChild(link);
   }
 }
-
-
-
-
-
-
-
-
-
-

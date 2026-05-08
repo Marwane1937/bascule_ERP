@@ -1,5 +1,26 @@
 const { getConnection } = require('../../config/database');
 
+const normalizeDetailDestination = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'client' || normalized === 'stock') {
+    return normalized;
+  }
+  return null;
+};
+
+const resolveDetailDesignation = (detail, quillDesignation = '') => {
+  if (quillDesignation) {
+    return quillDesignation;
+  }
+
+  const destination = normalizeDetailDestination(detail?.description);
+  if (destination) {
+    return detail?.article_nom || '';
+  }
+
+  return detail?.description || detail?.article_nom || '';
+};
+
 // Récupérer toutes les demandes d'achat avec pagination (type = 0)
 const getAllDemandeAchat = async (options = {}, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
@@ -18,7 +39,7 @@ const getAllDemandeAchat = async (options = {}, sequelizeConnection = null) => {
     const offset = (safePage - 1) * safePageSize;
 
     // Vérifier que orderBy est une colonne valide
-    const validColumns = ['numero', 'date', 'fournisseur', 'description'];
+    const validColumns = ['numero', 'date', 'date_fin', 'fournisseur', 'description'];
     const safeOrderBy = validColumns.includes(orderBy) ? orderBy : 'date';
     const safeOrderDirection = orderDirection.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
     
@@ -45,6 +66,7 @@ const getAllDemandeAchat = async (options = {}, sequelizeConnection = null) => {
         document_id,
         numero,
         date,
+        date_fin,
         fournisseur,
         description
       FROM (
@@ -52,6 +74,7 @@ const getAllDemandeAchat = async (options = {}, sequelizeConnection = null) => {
           a.document_id,
           a.numero,
           a.date,
+          a.date_fin,
           p.nom AS fournisseur,
           a.description,
           ROW_NUMBER() OVER (ORDER BY ${orderByColumn} ${safeOrderDirection}) AS RowNum
@@ -127,7 +150,7 @@ const getDemandeAchatById = async (id) => {
   try {
     // Récupérer les infos principales de la demande d'achat
     const demandeAchatResult = await sequelize.query(
-      'SELECT document_id, numero, date, description, part_id, contact_id, type FROM achat_document WHERE document_id = :id',
+      'SELECT document_id, numero, date, date_fin, description, part_id, contact_id, type FROM achat_document WHERE document_id = :id',
       {
         replacements: { id },
         type: sequelize.QueryTypes.SELECT,
@@ -177,20 +200,21 @@ const getDemandeAchatById = async (id) => {
           }
         );
         
-        // Fusionner les désignations quill avec les détails
-        if (Array.isArray(quillData) && quillData.length > 0) {
-          const quillMap = new Map(quillData.map(q => [q.quill_id, q.designation]));
-          details = details.map(d => ({
-            ...d,
-            designation: quillMap.get(d.id) || d.description || d.article_nom || ''
-          }));
-        }
+        const quillMap = new Map(
+          (Array.isArray(quillData) ? quillData : []).map((q) => [q.quill_id, q.designation])
+        );
+        details = details.map(d => ({
+          ...d,
+          designation: resolveDetailDesignation(d, quillMap.get(d.id) || ''),
+          destination: normalizeDetailDestination(d.description)
+        }));
       } catch (quillError) {
         console.warn('[getDemandeAchatById] Table achat_document_quill non accessible:', quillError.message);
         // Continuer sans les données quill
         details = details.map(d => ({
           ...d,
-          designation: d.description || d.article_nom || ''
+          designation: resolveDetailDesignation(d),
+          destination: normalizeDetailDestination(d.description)
         }));
       }
     } catch (detailError) {
@@ -268,7 +292,7 @@ const formatToSqlDateTime = (value) => {
 
 
 // Ajouter une demande d'achat (type = 0)
-const addDemandeAchat = async ({ numero, date, description, part_id, contact_id, etat, type, parent }) => {
+const addDemandeAchat = async ({ numero, date, date_fin, description, part_id, contact_id, etat, type, parent }) => {
   const sequelize = getConnection();
   const { getCompteurCurrent } = require('../../services/compteur.service');
   
@@ -297,11 +321,12 @@ const addDemandeAchat = async ({ numero, date, description, part_id, contact_id,
       const typeFinal = 0;
       const dateSql = formatToSqlDateTime(date);
   
-      let query = `INSERT INTO achat_document (numero, date, description, part_id, etat, type`;
-      let values = `:numero, :dateSql, :description, :part_id, :etat, :type`;
+      let query = `INSERT INTO achat_document (numero, date, date_fin, description, part_id, etat, type`;
+      let values = `:numero, :dateSql, :date_fin, :description, :part_id, :etat, :type`;
       let replacements = { 
         numero: numeroFinal, 
         dateSql, 
+        date_fin: date_fin || null,
         description, 
         part_id, 
         etat: etat || 1,
@@ -395,6 +420,7 @@ const saveDetail = async (detailData) => {
           quantite = :quantite, 
           prix = 0, 
           taux_tva = :taux_tva, 
+          description = :description,
           remise = :remise, 
           remise_montant = :remise_montant
       WHERE id = :id
@@ -406,6 +432,7 @@ const saveDetail = async (detailData) => {
         article_id: article_id || null,
         quantite: qte || 0,
         taux_tva: taxe || 0.2,
+        description: normalizeDetailDestination(detailData.description),
         remise: remise || null,
         remise_montant: remise_montant || null
       },
@@ -417,9 +444,9 @@ const saveDetail = async (detailData) => {
   
   // Mode Insert - Prix toujours à 0 pour demande d'achat
   const insertQuery = `
-    INSERT INTO achat_document_detail (document_id, article_id, quantite, prix, taux_tva, remise, remise_montant ,cr_date)
+    INSERT INTO achat_document_detail (document_id, article_id, quantite, prix, taux_tva, description, remise, remise_montant ,cr_date)
     OUTPUT INSERTED.id
-    VALUES (:document_id, :article_id, :quantite, 0, :taux_tva, :remise, :remise_montant , GETDATE())
+    VALUES (:document_id, :article_id, :quantite, 0, :taux_tva, :description, :remise, :remise_montant , GETDATE())
   `;
   
   const [result] = await sequelize.query(insertQuery, {
@@ -428,6 +455,7 @@ const saveDetail = async (detailData) => {
       article_id: article_id || null,
       quantite: qte || 0,
       taux_tva: taxe || 0.2,
+      description: normalizeDetailDestination(detailData.description),
       remise: remise || null,
       remise_montant: remise_montant || null
     },
@@ -478,16 +506,16 @@ const saveInfo = async (infoData) => {
 // Mettre à jour une demande d'achat
 const updateDemandeAchat = async (id, demandeAchatData) => {
   const sequelize = getConnection();
-  const { date, description, part_id, contact_id } = demandeAchatData;
+  const { date, date_fin, description, part_id, contact_id } = demandeAchatData;
   
   const query = `
     UPDATE achat_document 
-    SET date = :date, description = :description, part_id = :part_id, contact_id = :contact_id
+    SET date = :date, date_fin = :date_fin, description = :description, part_id = :part_id, contact_id = :contact_id
     WHERE document_id = :id
   `;
   
   await sequelize.query(query, {
-    replacements: { id, date, description, part_id, contact_id: contact_id || null },
+    replacements: { id, date, date_fin: date_fin || null, description, part_id, contact_id: contact_id || null },
     type: sequelize.QueryTypes.UPDATE
   });
   
@@ -560,6 +588,7 @@ const getDemandeAchatForPDF = async (id) => {
         a.document_id, 
         a.numero, 
         a.date, 
+        a.date_fin,
         a.description, 
         p.nom as fournisseur, 
         aa.nom as adresse,
@@ -589,10 +618,16 @@ const getDemandeAchatForPDF = async (id) => {
       SELECT 
         d.id,
         ISNULL(ar.article_cod, '') as article_cod,
-        ISNULL(ar.article_nom, '') as article,
-        ISNULL(d.quantite, 0) as quantite
+        COALESCE(NULLIF(CAST(q.designation AS NVARCHAR(MAX)), ''), ISNULL(ar.article_nom, '')) as article,
+        ISNULL(d.quantite, 0) as quantite,
+        CASE 
+          WHEN LOWER(LTRIM(RTRIM(ISNULL(d.description, '')))) = 'client' THEN 'client'
+          WHEN LOWER(LTRIM(RTRIM(ISNULL(d.description, '')))) = 'stock' THEN 'stock'
+          ELSE ''
+        END as destination
       FROM achat_document_detail d
       LEFT JOIN article ar ON ar.article_id = d.article_id
+      LEFT JOIN achat_document_quill q ON q.quill_id = d.id
       WHERE d.document_id = :id
       ORDER BY d.id
     `;
@@ -607,8 +642,11 @@ const getDemandeAchatForPDF = async (id) => {
       console.log(`[getDemandeAchatForPDF] Demande d'achat ${numericId} sans détails`);
       return [{
         ...demandeAchat,
+        document_kind: 'DEMANDE_ACHAT',
+        client: demandeAchat.fournisseur || '',
         article_cod: '',
         article: 'Aucun article',
+        destination: '',
         quantite: 0
       }];
     }
@@ -616,6 +654,8 @@ const getDemandeAchatForPDF = async (id) => {
     // Fusionner les infos de la demande d'achat avec chaque ligne de détail
     const results = details.map(detail => ({
       ...demandeAchat,
+      document_kind: 'DEMANDE_ACHAT',
+      client: demandeAchat.fournisseur || '',
       ...detail
     }));
     

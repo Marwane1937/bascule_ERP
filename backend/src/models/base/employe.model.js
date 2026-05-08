@@ -19,6 +19,22 @@ const getAllEmployes = async (sequelizeConnection = null) => {
   }
 };
 
+const getEmployesAutocomplete = async (sequelizeConnection = null) => {
+  try {
+    const sequelize = sequelizeConnection || getConnection();
+    const [results] = await sequelize.query(`
+      SELECT id, nom
+      FROM employe
+      WHERE nom IS NOT NULL AND LTRIM(RTRIM(nom)) <> ''
+      ORDER BY nom ASC
+    `);
+    return results;
+  } catch (error) {
+    console.error('[employe.model.js] Erreur autocomplete employes:', error);
+    throw error;
+  }
+};
+
 // Récupérer un employé par ID
 const getEmployeById = async (id) => {
   const sequelize = getConnection();
@@ -165,6 +181,7 @@ const getEmployeTelephone = async (id) => {
 
 module.exports = {
   getAllEmployes,
+  getEmployesAutocomplete,
   getEmployeById,
   addEmploye,
   updateEmploye,
@@ -173,4 +190,3 @@ module.exports = {
   getEmployeByIdWithPhone,
   getEmployeTelephone
 };
-

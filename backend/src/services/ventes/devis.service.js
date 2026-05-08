@@ -74,12 +74,17 @@ const createCommande = async (commandeData, sequelizeConnection = null) => {
     throw new Error('Aucun compteur trouvé pour les commandes. Veuillez créer un compteur avec le code "BC" dans la table compteur.');
   }
   
-  // Date du jour si non fournie
-  const dateCommande = commandeData.date || new Date().toISOString().split('T')[0];
+  // Date/heure courante si non fournie
+  const dateCommande = commandeData.date || new Date().toISOString();
+  const depotId = (() => {
+    const n = parseInt(commandeData?.depot_id ?? commandeData?.adresse_id, 10);
+    return Number.isInteger(n) && n > 0 ? n : null;
+  })();
   
   // Utiliser addCommande qui met etat=NULL automatiquement
   const id = await devisModel.addCommande({ 
     ...commandeData, 
+    depot_id: depotId,
     numero: numeroFormate, 
     date: dateCommande,
     type: 2 // Type commande (etat sera NULL)

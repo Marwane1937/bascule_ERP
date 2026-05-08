@@ -27,6 +27,32 @@
   position: relative;
 }
 
+.column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 14px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+  touch-action: none;
+}
+
+.column-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 22%;
+  bottom: 22%;
+  right: 5px;
+  width: 2px;
+  background: rgba(15, 23, 42, 0.24);
+  border-radius: 2px;
+}
+
+.column-header:hover .column-resize-handle::after {
+  background: rgba(15, 23, 42, 0.55);
+}
+
 .column-header:hover .column-menu-btn {
   opacity: 1 !important;
 }
@@ -146,4 +172,90 @@
 
 .table thead th.sortable i {
   font-size: 0.85em;
+}
+
+.commande-list-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 100%;
+}
+
+.commande-table-wrap {
+  overflow-x: auto;
+}
+
+.commande-list-table th,
+.commande-list-table td {
+  vertical-align: middle;
+  padding: 0.42rem 0.45rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.commande-list-table thead th {
+  overflow: visible;
+  text-overflow: initial;
+}
+
+.commande-client-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.commande-numero-cell,
+.commande-date-cell {
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+  overflow: visible;
+  text-overflow: initial;
+}
+
+.commande-progress-cell {
+  min-width: 200px;
+  max-width: none;
+}
+
+.commande-progress-text {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 0.35rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress-recap {
+  height: 10px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-recap .progress-bar {
+  background: linear-gradient(90deg, #2563eb, #10b981);
+  border-radius: 999px;
+}
+
+.commande-progress-bar {
+  min-width: 150px;
+  max-width: 100%;
+}
+
+.action-cell {
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: initial !important;
+}
+.commande-page.commande-page--detail {
+  max-width: 100%;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.commande-page .page-inner--detail {
+  max-width: 100%;
 }

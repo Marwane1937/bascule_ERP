@@ -64,6 +64,7 @@ export class EditRetourComponent implements OnInit {
   }]
 
   filteredArticles: { [key: number]: any[] } = {};
+  highlightedArticleIndex: { [key: number]: number } = {};
 
   fraisPort = 0;
   sousTotal = 0;
@@ -455,6 +456,7 @@ export class EditRetourComponent implements OnInit {
   onArticleSearchChange(index: number, term: string) {
     if (!term) {
       this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
       return;
     }
 
@@ -462,11 +464,13 @@ export class EditRetourComponent implements OnInit {
 
     if (term.length === 0) {
       this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
       return;
     }
 
     if (!Array.isArray(this.produits1) || this.produits1.length === 0) {
       this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
       return;
     }
 
@@ -476,6 +480,7 @@ export class EditRetourComponent implements OnInit {
       const code = article.article_cod || '';
       return nom.toLowerCase().includes(term) || code.toLowerCase().includes(term);
     });
+    this.highlightedArticleIndex[index] = this.filteredArticles[index].length ? 0 : -1;
 
   }
 
@@ -487,6 +492,7 @@ export class EditRetourComponent implements OnInit {
     this.produits[index].article_id = article.article_id;
     this.produits[index].articleSearch = article.article_nom || '';
     this.filteredArticles[index] = [];
+    this.highlightedArticleIndex[index] = -1;
 
     this.produits[index].designation = article.article_nom || '';
     this.produits[index].pu = article.prix_vente || article.pu || article.prix || 0;
@@ -498,25 +504,26 @@ export class EditRetourComponent implements OnInit {
   }
 
   onArticleKeyDown(index: number, event: KeyboardEvent) {
-    const filtered = this.filteredArticles[index];
-    if (!filtered || filtered.length === 0) {
+    const filtered = this.filteredArticles[index] || [];
+    if (!filtered.length) {
       return;
     }
 
+    const currentIndex = this.highlightedArticleIndex[index] ?? -1;
+
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      const listItems = document.querySelectorAll(`[data-article-list="${index}"] li`);
-      if (listItems.length > 0) {
-        const firstItem = listItems[0] as HTMLElement;
-        firstItem.focus();
-      }
+      this.highlightedArticleIndex[index] = currentIndex < filtered.length - 1 ? currentIndex + 1 : 0;
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.highlightedArticleIndex[index] = currentIndex > 0 ? currentIndex - 1 : filtered.length - 1;
     } else if (event.key === 'Enter') {
       event.preventDefault();
-      if (filtered.length > 0) {
-        this.selectArticle(index, filtered[0]);
-      }
+      const selectedArticle = filtered[currentIndex >= 0 ? currentIndex : 0];
+      if (selectedArticle) this.selectArticle(index, selectedArticle);
     } else if (event.key === 'Escape') {
       this.filteredArticles[index] = [];
+      this.highlightedArticleIndex[index] = -1;
     }
   }
 
@@ -865,4 +872,3 @@ export class EditRetourComponent implements OnInit {
     });
   }
 }
-

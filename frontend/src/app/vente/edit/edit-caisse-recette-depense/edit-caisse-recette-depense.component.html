@@ -1,0 +1,307 @@
+<div class="container-fluid py-4 recette-depense-page recette-edit-page" [class.black-mode]="isBlackMode">
+  <div class="page-inner recette-edit-inner">
+    <div class="page-header page-header--left mb-4" [class.text-white]="isBlackMode">
+      <h3 class="fw-bold mb-1" [class.text-white]="isBlackMode">Finance</h3>
+      <ul class="breadcrumbs d-flex align-items-center flex-wrap mb-0">
+        <li class="nav-home me-2">
+          <a href="#"><i class="fas fa-home text-primary"></i></a>
+        </li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item me-2">
+          <a href="#" [class.text-white]="isBlackMode" [class.text-muted]="!isBlackMode">Caisse</a>
+        </li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item me-2" [class.text-white]="isBlackMode" [class.text-muted]="!isBlackMode">
+          Recette/Depense
+        </li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item fw-semibold" [class.text-white]="isBlackMode" [class.text-muted]="!isBlackMode">
+          Edition
+        </li>
+      </ul>
+    </div>
+
+    <div class="edit-toolbar card border-0 shadow-sm rounded-3 mb-3" [class.black-card]="isBlackMode">
+      <div class="card-body d-flex justify-content-between align-items-center gap-3 flex-wrap" [class.bg-black-content]="isBlackMode">
+        <div class="edit-toolbar__meta" [class.text-white]="isBlackMode">
+          <div class="edit-toolbar__label">Journee ouverte</div>
+          <div class="edit-toolbar__title">{{ selectedDocument?.numero || 'Chargement...' }}</div>
+          <div class="edit-toolbar__sub" *ngIf="selectedDocument">
+            {{ selectedDocument?.date | date:'dd/MM/yyyy' }} | {{ selectedDocument?.affectation || '-' }} | {{ getEtatLabel(selectedDocument) }}
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 flex-wrap">
+          <button type="button" class="btn btn-outline-secondary px-3 py-2 shadow-sm" (click)="goBack()">
+            <i class="fas fa-arrow-left me-2"></i> Retour a la liste
+          </button>
+          <button type="button" class="btn btn-outline-success px-3 py-2 shadow-sm" [disabled]="!selectedDocument" (click)="printDocument()">
+            <i class="fas fa-print me-2"></i> Imprimer
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <ng-container *ngIf="loadingDetail; else editContent">
+      <div class="card border-0 shadow-sm rounded-3 mb-3" [class.black-card]="isBlackMode">
+        <div class="card-body recette-loading-state text-center" [class.bg-black-content]="isBlackMode" [class.text-white]="isBlackMode">
+          <div class="spinner-border text-primary mb-3" role="status"></div>
+          <div class="fw-semibold">Chargement de la journee...</div>
+        </div>
+      </div>
+    </ng-container>
+
+    <ng-template #editContent>
+    <ng-container *ngIf="selectedDocument; else noDocumentState">
+      <div class="row g-3 mb-3">
+        <div class="col-md-6 col-xl-3">
+          <div class="card recette-summary-card recette-summary-card--fond">
+            <div class="card-body">
+              <div class="small text-uppercase">Fond de caisse</div>
+              <div class="recette-summary-card__value">{{ selectedDocument.fond | number:'1.2-2' }} DH</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 col-xl-3">
+          <div class="card recette-summary-card recette-summary-card--recette">
+            <div class="card-body">
+              <div class="small text-uppercase">Total recettes</div>
+              <div class="recette-summary-card__value">{{ getTotalRecettes() | number:'1.2-2' }} DH</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 col-xl-3">
+          <div class="card recette-summary-card recette-summary-card--depense">
+            <div class="card-body">
+              <div class="small text-uppercase">Total depenses</div>
+              <div class="recette-summary-card__value">{{ getTotalDepenses() | number:'1.2-2' }} DH</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 col-xl-3">
+          <div class="card recette-summary-card" [ngClass]="getSoldeNet() >= 0 ? 'recette-summary-card--solde' : 'recette-summary-card--warning'">
+            <div class="card-body">
+              <div class="small text-uppercase">Solde net</div>
+              <div class="recette-summary-card__value">{{ getSoldeNet() | number:'1.2-2' }} DH</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="!isSelectedDocumentEditable()" class="alert alert-warning">
+        Cette journee est cloturee. Les lignes restent consultables en lecture seule.
+      </div>
+
+      <div class="row g-3 detail-panels-row">
+        <div [ngClass]="getPanelColumnClass('recette')">
+          <div
+            class="card recette-side-card recette-panel recette-panel--recette h-100"
+            [class.bg-dark]="isBlackMode"
+            [class.recette-panel--active]="isPanelActive('recette')"
+            [class.recette-panel--inactive]="activePanel && !isPanelActive('recette')"
+            (click)="setActivePanel('recette')"
+            (focusin)="setActivePanel('recette')"
+          >
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2" [class.text-white]="isBlackMode">
+              <div>
+                <h6 class="mb-0 text-success">Lignes recettes</h6>
+                <small [class.text-white-50]="isBlackMode">Toutes les lignes recettes de la journee</small>
+              </div>
+              <button type="button" class="btn btn-success btn-sm" [disabled]="isEditingLocked()" (click)="addRecetteLine()">
+                <i class="fas fa-plus me-1"></i> Ajouter
+              </button>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive detail-table-wrap">
+                <table class="table table-bordered table-hover table-sm align-middle detail-table detail-table--recette" [class.black-table]="isBlackMode">
+                  <colgroup>
+                    <col class="detail-col-rubrique">
+                    <col class="detail-col-employe">
+                    <col class="detail-col-description">
+                    <col class="detail-col-qte">
+                    <col class="detail-col-montant">
+                    <col class="detail-col-total">
+                    <col class="detail-col-action">
+                  </colgroup>
+                  <thead [class.table-light]="!isBlackMode" [class.compact-table-dark-head]="isBlackMode">
+                    <tr>
+                      <th>Rubrique</th>
+                      <th>Employe</th>
+                      <th>Description</th>
+                      <th class="text-center">Qte</th>
+                      <th class="text-end">Montant</th>
+                      <th class="text-end">Total</th>
+                      <th class="text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let detail of recetteDetails; let i = index; trackBy: trackByDetailRow">
+                      <td>
+                        <select class="form-select form-select-sm" [(ngModel)]="detail.rubrique_id" (ngModelChange)="onRubriqueChange(detail)" [disabled]="isEditingLocked()" [class.black-input]="isBlackMode" (click)="setActivePanel('recette')">
+                          <option [ngValue]="null">-- Selectionner --</option>
+                          <option *ngFor="let rubrique of rubriquesRecettes" [ngValue]="rubrique.id">{{ rubrique.nom }}</option>
+                        </select>
+                      </td>
+                      <td>
+                        <select class="form-select form-select-sm" [(ngModel)]="detail.employe_id" (ngModelChange)="detail.employe_nom_complet = getEmployeName($event)" [disabled]="isEditingLocked()" [class.black-input]="isBlackMode" (click)="setActivePanel('recette')">
+                          <option [ngValue]="null">-- Selectionner --</option>
+                          <option *ngFor="let employe of employes" [ngValue]="employe.id">{{ employe.nom_complet }}</option>
+                        </select>
+                      </td>
+                      <td><input type="text" class="form-control form-control-sm detail-description-input" [(ngModel)]="detail.description" [disabled]="isEditingLocked()" [class.black-input]="isBlackMode" (focus)="setActivePanel('recette')" (click)="setActivePanel('recette')"></td>
+                      <td><input type="number" class="form-control form-control-sm text-center qte-input" [(ngModel)]="detail.quantite" [disabled]="isEditingLocked()" min="1" step="1" [class.black-input]="isBlackMode" (focus)="setActivePanel('recette')"></td>
+                      <td><input type="number" class="form-control form-control-sm text-end" [(ngModel)]="detail.montant" [disabled]="isEditingLocked()" min="0" step="0.01" [class.black-input]="isBlackMode" (focus)="setActivePanel('recette')"></td>
+                      <td class="text-end fw-bold" [class.text-white]="isBlackMode">{{ ((detail.quantite || 0) * (detail.montant || 0)) | number:'1.2-2' }}</td>
+                      <td class="text-center">
+                        <div class="dropup">
+                          <button class="btn btn-sm btn-outline-primary line-action-dropdown dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Action
+                          </button>
+                          <ul class="dropdown-menu dropdown-menu-end">
+                            <li>
+                              <button class="dropdown-item" type="button" (click)="printCaisseByEmploye(detail.employe_id, 1)">
+                                <i class="fas fa-print me-2 text-primary"></i> Imprimer
+                              </button>
+                            </li>
+                            <li>
+                              <button class="dropdown-item" type="button" (click)="sendTelegramByEmploye(detail.employe_id, 1)">
+                                <i class="fab fa-telegram me-2 text-info"></i> Telegram
+                              </button>
+                            </li>
+                            <li>
+                              <button class="dropdown-item text-danger" type="button" [disabled]="isEditingLocked()" (click)="removeDetailLine(i, 1)">
+                                <i class="fas fa-trash me-2"></i> Supprimer
+                              </button>
+                            </li>
+                          </ul>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr *ngIf="recetteDetails.length === 0">
+                      <td colspan="7" class="text-center text-muted py-4" [class.text-white-50]="isBlackMode">Aucune ligne de recette.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="card-footer bg-transparent d-flex justify-content-end">
+              <button type="button" class="btn btn-success btn-sm px-3" [disabled]="!canSavePanel('recette')" (click)="savePanelDetails('recette')">
+                <i class="fas" [ngClass]="isSavingPanelActive('recette') ? 'fa-spinner fa-spin me-2' : 'fa-save me-2'"></i>
+                {{ isSavingPanelActive('recette') ? 'Enregistrement...' : 'Enregistrer recettes' }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div [ngClass]="getPanelColumnClass('depense')">
+          <div
+            class="card recette-side-card recette-panel recette-panel--depense h-100"
+            [class.bg-dark]="isBlackMode"
+            [class.recette-panel--active]="isPanelActive('depense')"
+            [class.recette-panel--inactive]="activePanel && !isPanelActive('depense')"
+            (click)="setActivePanel('depense')"
+            (focusin)="setActivePanel('depense')"
+          >
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2" [class.text-white]="isBlackMode">
+              <div>
+                <h6 class="mb-0 text-danger">Lignes depenses</h6>
+                <small [class.text-white-50]="isBlackMode">Toutes les lignes depenses de la journee</small>
+              </div>
+              <button type="button" class="btn btn-danger btn-sm" [disabled]="isEditingLocked()" (click)="addDepenseLine()">
+                <i class="fas fa-plus me-1"></i> Ajouter
+              </button>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-responsive detail-table-wrap">
+                <table class="table table-bordered table-hover table-sm align-middle detail-table detail-table--depense" [class.black-table]="isBlackMode">
+                  <colgroup>
+                    <col class="detail-col-rubrique">
+                    <col class="detail-col-employe">
+                    <col class="detail-col-description">
+                    <col class="detail-col-qte">
+                    <col class="detail-col-montant">
+                    <col class="detail-col-total">
+                    <col class="detail-col-action">
+                  </colgroup>
+                  <thead [class.table-light]="!isBlackMode" [class.compact-table-dark-head]="isBlackMode">
+                    <tr>
+                      <th>Rubrique</th>
+                      <th>Employe</th>
+                      <th>Description</th>
+                      <th class="text-center">Qte</th>
+                      <th class="text-end">Montant</th>
+                      <th class="text-end">Total</th>
+                      <th class="text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let detail of depenseDetails; let i = index; trackBy: trackByDetailRow">
+                      <td>
+                        <select class="form-select form-select-sm" [(ngModel)]="detail.rubrique_id" (ngModelChange)="onRubriqueChange(detail)" [disabled]="isEditingLocked()" [class.black-input]="isBlackMode" (click)="setActivePanel('depense')">
+                          <option [ngValue]="null">-- Selectionner --</option>
+                          <option *ngFor="let rubrique of rubriquesDepenses" [ngValue]="rubrique.id">{{ rubrique.nom }}</option>
+                        </select>
+                      </td>
+                      <td>
+                        <select class="form-select form-select-sm" [(ngModel)]="detail.employe_id" (ngModelChange)="detail.employe_nom_complet = getEmployeName($event)" [disabled]="isEditingLocked()" [class.black-input]="isBlackMode" (click)="setActivePanel('depense')">
+                          <option [ngValue]="null">-- Selectionner --</option>
+                          <option *ngFor="let employe of employes" [ngValue]="employe.id">{{ employe.nom_complet }}</option>
+                        </select>
+                      </td>
+                      <td><input type="text" class="form-control form-control-sm detail-description-input" [(ngModel)]="detail.description" [disabled]="isEditingLocked()" [class.black-input]="isBlackMode" (focus)="setActivePanel('depense')" (click)="setActivePanel('depense')"></td>
+                      <td><input type="number" class="form-control form-control-sm text-center qte-input" [(ngModel)]="detail.quantite" [disabled]="isEditingLocked()" min="1" step="1" [class.black-input]="isBlackMode" (focus)="setActivePanel('depense')"></td>
+                      <td><input type="number" class="form-control form-control-sm text-end" [(ngModel)]="detail.montant" [disabled]="isEditingLocked()" min="0" step="0.01" [class.black-input]="isBlackMode" (focus)="setActivePanel('depense')"></td>
+                      <td class="text-end fw-bold" [class.text-white]="isBlackMode">{{ ((detail.quantite || 0) * (detail.montant || 0)) | number:'1.2-2' }}</td>
+                      <td class="text-center">
+                        <div class="dropup">
+                          <button class="btn btn-sm btn-outline-primary line-action-dropdown dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Action
+                          </button>
+                          <ul class="dropdown-menu dropdown-menu-end">
+                            <li>
+                              <button class="dropdown-item" type="button" (click)="printCaisseByEmploye(detail.employe_id, -1)">
+                                <i class="fas fa-print me-2 text-primary"></i> Imprimer
+                              </button>
+                            </li>
+                            <li>
+                              <button class="dropdown-item" type="button" (click)="sendTelegramByEmploye(detail.employe_id, -1)">
+                                <i class="fab fa-telegram me-2 text-info"></i> Telegram
+                              </button>
+                            </li>
+                            <li>
+                              <button class="dropdown-item text-danger" type="button" [disabled]="isEditingLocked()" (click)="removeDetailLine(i, -1)">
+                                <i class="fas fa-trash me-2"></i> Supprimer
+                              </button>
+                            </li>
+                          </ul>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr *ngIf="depenseDetails.length === 0">
+                      <td colspan="7" class="text-center text-muted py-4" [class.text-white-50]="isBlackMode">Aucune ligne de depense.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="card-footer bg-transparent d-flex justify-content-end">
+              <button type="button" class="btn btn-danger btn-sm px-3" [disabled]="!canSavePanel('depense')" (click)="savePanelDetails('depense')">
+                <i class="fas" [ngClass]="isSavingPanelActive('depense') ? 'fa-spinner fa-spin me-2' : 'fa-save me-2'"></i>
+                {{ isSavingPanelActive('depense') ? 'Enregistrement...' : 'Enregistrer depenses' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </ng-container>
+    </ng-template>
+
+    <ng-template #noDocumentState>
+      <div class="card border-0 shadow-sm rounded-3" [class.black-card]="isBlackMode">
+        <div class="card-body text-center py-5" [class.bg-black-content]="isBlackMode" [class.text-white]="isBlackMode">
+          Aucune journee chargee.
+        </div>
+      </div>
+    </ng-template>
+  </div>
+</div>

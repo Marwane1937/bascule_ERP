@@ -1,0 +1,217 @@
+<div class="container-fluid py-4 recette-depense-page" [class.black-mode]="isBlackMode">
+  <div class="page-inner recette-depense-inner">
+    <div class="page-header page-header--left mb-4" [class.text-white]="isBlackMode">
+      <h3 class="fw-bold mb-1" [class.text-white]="isBlackMode">Finance</h3>
+      <ul class="breadcrumbs d-flex align-items-center flex-wrap mb-0">
+        <li class="nav-home me-2">
+          <a href="#"><i class="fas fa-home text-primary"></i></a>
+        </li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item me-2">
+          <a href="#" [class.text-white]="isBlackMode" [class.text-muted]="!isBlackMode">Caisse</a>
+        </li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item fw-semibold" [class.text-white]="isBlackMode" [class.text-muted]="!isBlackMode">
+          Recette/Depense
+        </li>
+      </ul>
+    </div>
+
+    <div class="row mb-3">
+      <div class="col-12 d-flex justify-content-between gap-2 align-items-center flex-wrap">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <span *ngIf="caisseMode === 'black'" class="badge bg-warning text-dark px-3 py-2">
+            <i class="fas fa-moon me-1"></i><strong>CAISSE BLACK</strong>
+          </span>
+          <button type="button" class="btn btn-info px-3 py-2 shadow-sm" (click)="toggleAdvancedFilters()">
+            <i class="fas fa-filter me-2"></i>
+            {{ showAdvancedFilters ? 'Masquer les filtres' : 'Afficher les filtres' }}
+          </button>
+          <button type="button" class="btn btn-outline-success px-3 py-2 shadow-sm" (click)="exportToCSV()">
+            <i class="fas fa-file-excel me-2"></i> Exporter
+          </button>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+          <button type="button" class="btn btn-warning px-3 py-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#addJourneeModal">
+            <i class="fas fa-plus me-2"></i> Creer une journee
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="row mb-3" *ngIf="showAdvancedFilters">
+      <div class="col-12">
+        <div class="card border-0 shadow-sm rounded-3" [class.black-card]="isBlackMode">
+          <div class="card-body" [class.bg-black-content]="isBlackMode" [class.text-white]="isBlackMode">
+            <div class="row g-3">
+              <div class="col-md-3">
+                <label class="form-label small fw-bold">Date debut</label>
+                <input type="date" class="form-control" [(ngModel)]="filterDateFrom" (change)="onFilterChange()" [class.black-input]="isBlackMode">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label small fw-bold">Date fin</label>
+                <input type="date" class="form-control" [(ngModel)]="filterDateTo" (change)="onFilterChange()" [class.black-input]="isBlackMode">
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small fw-bold">Solde min</label>
+                <input type="number" class="form-control" [(ngModel)]="filterSoldeMin" (input)="onFilterChange()" step="0.01" [class.black-input]="isBlackMode">
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small fw-bold">Solde max</label>
+                <input type="number" class="form-control" [(ngModel)]="filterSoldeMax" (input)="onFilterChange()" step="0.01" [class.black-input]="isBlackMode">
+              </div>
+              <div class="col-md-2 d-flex align-items-end justify-content-end">
+                <button class="btn btn-outline-danger w-100" type="button" (click)="resetFilters()">
+                  <i class="fas fa-times me-2"></i> Reinitialiser
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-12">
+        <div class="card border-0 shadow-sm rounded-3 caisse-card compact-card" [class.black-card]="isBlackMode">
+          <div class="card-body" [class.bg-black-content]="isBlackMode">
+            <div class="row g-2 align-items-center mb-3">
+              <div class="col-md-7">
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text"><i class="fas fa-search"></i></span>
+                  <input
+                    type="text"
+                    class="form-control"
+                    [(ngModel)]="searchTerm"
+                    (keyup.enter)="onSearch()"
+                    (input)="onSearchChange()"
+                    placeholder="Rechercher numero, date ou description..."
+                  />
+                  <button class="btn btn-primary" type="button" (click)="onSearch()">
+                    <i class="fas fa-search"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="col-md-2">
+                <select class="form-select form-select-sm" [(ngModel)]="pageSize" (change)="onPageSizeChange()">
+                  <option [value]="10">10</option>
+                  <option [value]="25">25</option>
+                  <option [value]="50">50</option>
+                  <option [value]="100">100</option>
+                </select>
+              </div>
+              <div class="col-md-3 text-end text-muted small" [class.text-white]="isBlackMode">
+                Total: <strong>{{ totalRecords }}</strong>
+              </div>
+            </div>
+
+            <div class="table-responsive compact-table-wrap">
+              <div *ngIf="loading" class="text-center py-4 compact-loader">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2 mb-0 text-muted small">Chargement des journees...</p>
+              </div>
+
+              <table class="table table-bordered table-hover table-sm compact-table" [class.black-table]="isBlackMode" *ngIf="!loading">
+                <thead [class.table-light]="!isBlackMode" [class.compact-table-dark-head]="isBlackMode">
+                  <tr>
+                    <th class="sort-th compact-col-numero" (click)="onSort('numero')">Numero <i class="fas ms-1" [ngClass]="getSortIcon('numero')"></i></th>
+                    <th class="sort-th compact-col-date" (click)="onSort('date')">Date <i class="fas ms-1" [ngClass]="getSortIcon('date')"></i></th>
+                    <th class="sort-th compact-col-description" (click)="onSort('description')">Description <i class="fas ms-1" [ngClass]="getSortIcon('description')"></i></th>
+                    <th class="sort-th compact-col-fond text-end" (click)="onSort('fond')">Fond <i class="fas ms-1" [ngClass]="getSortIcon('fond')"></i></th>
+                    <th class="sort-th compact-col-net text-end" (click)="onSort('solde_net')">Net <i class="fas ms-1" [ngClass]="getSortIcon('solde_net')"></i></th>
+                    <th class="compact-col-status text-center">Statut</th>
+                    <th class="compact-col-action text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let doc of getPaginatedDocuments()" [ngClass]="getRowClass(doc)">
+                    <td class="fw-semibold" [class.text-white]="isBlackMode">
+                      <div>{{ doc.numero }}</div>
+                      <span *ngIf="shouldBeClotured(doc)" class="badge bg-danger mt-1">A cloturer</span>
+                    </td>
+                    <td [class.text-white]="isBlackMode">{{ doc.date | date:'dd/MM/yyyy' }}</td>
+                    <td [class.text-white]="isBlackMode">
+                      <div class="compact-description" [title]="doc.description || '-'">{{ doc.description || '-' }}</div>
+                    </td>
+                    <td class="text-end text-nowrap fw-bold recette-fond-value">{{ getDocumentFond(doc) | number:'1.2-2' }} DH</td>
+                    <td class="text-end text-nowrap fw-bold" [ngClass]="getDocumentSolde(doc) < 0 ? 'recette-net-negative' : 'recette-net-positive'">{{ getDocumentSolde(doc) | number:'1.2-2' }} DH</td>
+                    <td class="text-center">
+                      <span [ngClass]="getEtatClass(doc)">{{ getEtatLabel(doc) }}</span>
+                    </td>
+                    <td class="text-center">
+                      <div class="dropstart">
+                        <button class="btn btn-sm btn-primary dropdown-toggle compact-action-button" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                          Action
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                          <li>
+                            <button class="dropdown-item" type="button" (click)="openDocument(doc)">
+                              <i class="fas fa-folder-open me-2 text-primary"></i> Ouvrir
+                            </button>
+                          </li>
+                          <li>
+                            <button class="dropdown-item" type="button" (click)="printDocument(doc)">
+                              <i class="fas fa-print me-2 text-success"></i> Imprimer l'etat
+                            </button>
+                          </li>
+                          <li>
+                            <button class="dropdown-item" type="button" [disabled]="!isCaisseOuverte(doc)" (click)="cloturerCaisse(doc, $event)">
+                              <i class="fas fa-lock me-2 text-warning"></i> Cloturer
+                            </button>
+                          </li>
+                        </ul>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr *ngIf="filteredDocuments.length === 0">
+                    <td colspan="7" class="text-center text-muted py-4" [class.text-white]="isBlackMode">Aucune journee trouvee.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div *ngIf="!loading && totalPages > 1" class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+              <div class="text-muted small" [class.text-white]="isBlackMode">Affichage {{ getDisplayRange() }} sur {{ totalRecords }}</div>
+              <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-secondary" (click)="onPageChange(1)" [disabled]="currentPage === 1"><i class="fas fa-angle-double-left"></i></button>
+                <button class="btn btn-outline-secondary" (click)="onPageChange(currentPage - 1)" [disabled]="currentPage <= 1"><i class="fas fa-chevron-left"></i></button>
+                <button class="btn btn-outline-secondary" disabled>{{ currentPage }} / {{ totalPages }}</button>
+                <button class="btn btn-outline-secondary" (click)="onPageChange(currentPage + 1)" [disabled]="currentPage >= totalPages"><i class="fas fa-chevron-right"></i></button>
+                <button class="btn btn-outline-secondary" (click)="onPageChange(totalPages)" [disabled]="currentPage === totalPages"><i class="fas fa-angle-double-right"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="addJourneeModal" tabindex="-1" (shown.bs.modal)="onCreateModalShow()" [class.black-modal]="isBlackMode">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content" [class.black-modal-content]="isBlackMode">
+      <div class="modal-header" [class.bg-primary]="!isBlackMode" [class.bg-black-header]="isBlackMode" [class.text-white]="isBlackMode">
+        <h5 class="modal-title">
+          Creer une journee Recette/Depense
+          <span *ngIf="isBlackMode" class="badge bg-warning text-dark ms-2">CAISSE BLACK</span>
+        </h5>
+        <button type="button" class="btn-close" [class.btn-close-white]="isBlackMode" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" [class.bg-black-content]="isBlackMode" [class.text-white]="isBlackMode">
+        <form [formGroup]="journeeForm" (ngSubmit)="onSubmitJournee()">
+          <div class="row g-3">
+            <div class="col-md-6"><label class="form-label">Date *</label><input type="date" class="form-control" formControlName="date" (change)="onJourneeDateChange()" [class.black-input]="isBlackMode"></div>
+            <div class="col-md-6"><label class="form-label">Numero</label><input type="text" class="form-control" [value]="nextNumero" readonly [class.black-input]="isBlackMode"></div>
+            <div class="col-md-6"><label class="form-label">Fond de caisse *</label><input type="number" class="form-control" formControlName="fond" min="0" step="0.01" [class.black-input]="isBlackMode"></div>
+            <div class="col-md-6"><label class="form-label">Affectation *</label><input type="text" class="form-control" formControlName="affectation" readonly [class.black-input]="isBlackMode"></div>
+            <div class="col-12"><label class="form-label">Description automatique *</label><textarea class="form-control" rows="2" formControlName="description" readonly [class.black-input]="isBlackMode"></textarea></div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer" [class.bg-black-content]="isBlackMode">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" [disabled]="!journeeForm.valid" (click)="onSubmitJournee()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>

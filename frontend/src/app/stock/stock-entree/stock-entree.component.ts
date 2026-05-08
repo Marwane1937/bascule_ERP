@@ -3,6 +3,8 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { StockService } from 'src/app/service/stock.service';
 import { BaseService } from 'src/app/service/base.service';
+import { EmailService } from 'src/app/service/email.service';
+import { AchatsService } from 'src/app/service/achats.service';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -42,7 +44,9 @@ export class StockEntreeComponent implements OnInit {
     private stockService: StockService,
     private fb: FormBuilder,
     private router: Router,
-    private baseService: BaseService
+    private baseService: BaseService,
+    private emailService: EmailService,
+    private achatsService: AchatsService
   ) { }
 
   ngOnInit(): void {
@@ -64,11 +68,20 @@ export class StockEntreeComponent implements OnInit {
     });
   }
 
+  private isPartnerOfType(partner: any, expectedType: number): boolean {
+    const partnerType = Number(partner?.type ?? partner?.part_type ?? partner?.partenaire_type);
+    return !Number.isFinite(partnerType) || partnerType === expectedType;
+  }
+
+  private filterPartnersByType(partners: any[], expectedType: number): any[] {
+    return (Array.isArray(partners) ? partners : []).filter((partner: any) => this.isPartnerOfType(partner, expectedType));
+  }
+
   loadFournisseurs(): void {
     this.baseService.getFournisseur().subscribe({
       next: (response: any) => {
         const data = response?.data || response || [];
-        this.fournisseurs = Array.isArray(data) ? data : [];
+        this.fournisseurs = this.filterPartnersByType(data, 2);
         this.filteredFournisseurs = [...this.fournisseurs];
       },
       error: (error) => {
@@ -246,6 +259,40 @@ export class StockEntreeComponent implements OnInit {
     this.getEntreesStock();
   }
 
+  toggleEntreeRowExpansion(achat: any, index: number): void {
+    const documentId = Number(achat?.document_id || 0);
+    if (!documentId) {
+      return;
+    }
+
+    const shouldClose = !!this.expandedRows[index];
+    this.expandedRows = {};
+
+    if (shouldClose) {
+      return;
+    }
+
+    this.expandedRows[index] = true;
+
+    if (!this.achatDetails[documentId]) {
+      this.loadingDetails[documentId] = true;
+
+      this.stockService.getEntreeStockById(documentId).subscribe({
+        next: (response: any) => {
+          const data = response?.data || response || {};
+          this.achatDetails[documentId] = Array.isArray(data?.details) ? data.details : [];
+          this.loadingDetails[documentId] = false;
+          this.detailsLoaded[documentId] = true;
+        },
+        error: () => {
+          Swal.fire('Erreur', 'Erreur lors du chargement des dÃ©tails', 'error');
+          this.expandedRows = {};
+          this.loadingDetails[documentId] = false;
+        }
+      });
+    }
+  }
+
   toggleRowExpansion(achat: any, index: number): void {
     if (this.expandedRows[index]) {
       // Fermer la ligne
@@ -284,6 +331,86 @@ export class StockEntreeComponent implements OnInit {
 
   editEntreeStock(documentId: number): void {
     this.router.navigate(['/Edit-EntreeStock', documentId]);
+  }
+
+  isTransferredToReception(achat: any): boolean {
+    return Number(achat?.transferred_reception_id || 0) > 0;
+  }
+
+  getFournisseurDisplay(achat: any): string {
+    return achat?.fournisseur || achat?.client || achat?.client_nom || '-';
+  }
+
+  getTransferStatusLabel(achat: any): string {
+    return this.isTransferredToReception(achat) ? 'Transfere' : 'En attente';
+  }
+
+  getTransferStatusBadgeClass(achat: any): string {
+    return this.isTransferredToReception(achat) ? 'badge-success' : 'badge-warning';
+  }
+
+  viewReception(achat: any, event?: Event): void {
+    event?.stopPropagation();
+    const receptionId = Number(achat?.transferred_reception_id || 0);
+    if (receptionId > 0) {
+      this.router.navigate(['/Edit-Reception', receptionId]);
+    }
+  }
+
+  transfererVersReception(achat: any, event?: Event): void {
+    event?.stopPropagation();
+
+    const receptionId = Number(achat?.transferred_reception_id || 0);
+    if (receptionId > 0) {
+      return;
+    }
+
+    Swal.fire({
+      title: 'Confirmation',
+      text: `Creer une reception depuis l'entree de stock ${achat?.numero || ''} ?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Oui',
+      cancelButtonText: 'Annuler'
+    }).then((result) => {
+      if (!result.isConfirmed) {
+        return;
+      }
+
+      this.achatsService.createReceptionFromStockEntree(Number(achat?.document_id)).subscribe({
+        next: (response: any) => {
+          const createdReceptionId = Number(response?.data?.stock_id || response?.data?.document_id || response?.data?.id || 0);
+          Swal.fire('Succes', response?.message || 'Reception creee avec succes.', 'success').then(() => {
+            if (createdReceptionId > 0) {
+              this.router.navigate(['/Edit-Reception', createdReceptionId]);
+              return;
+            }
+
+            this.getEntreesStock();
+          });
+        },
+        error: (error) => {
+          Swal.fire('Erreur', error?.error?.message || 'Erreur lors du transfert vers la reception.', 'error');
+        }
+      });
+    });
+  }
+
+  imprimerEntreeStock(documentId: number, event?: Event): void {
+    event?.stopPropagation();
+    this.emailService.generateEntreeStockPDF(String(documentId)).subscribe({
+      next: (res: any) => {
+        const url = res?.pdfUrl;
+        if (url) {
+          window.open(url, '_blank');
+          return;
+        }
+        Swal.fire('Erreur', 'Lien PDF non reçu.', 'error');
+      },
+      error: (err) => {
+        Swal.fire('Erreur', err?.error?.message || "Erreur lors de la génération du PDF.", 'error');
+      }
+    });
   }
 
   isButtonDisabled(achatId: number): boolean {

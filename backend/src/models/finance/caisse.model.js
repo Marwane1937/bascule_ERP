@@ -1,6 +1,85 @@
 const { getConnection } = require('../../config/database');
 const { getCompteurFormate } = require('../../services/compteur.service');
 
+const normalizeNumericValue = (value, defaultValue = 0) => {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : defaultValue;
+};
+
+const normalizeDetailSens = (detail) => {
+  const sens = Number(detail?.sens);
+  return sens === -1 ? -1 : 1;
+};
+
+const normalizeCaisseDetails = (detailsData = []) => {
+  if (!Array.isArray(detailsData)) {
+    return [];
+  }
+
+  return detailsData.map((detail) => ({
+    ...detail,
+    quantite: normalizeNumericValue(detail?.quantite, 1),
+    montant: normalizeNumericValue(detail?.montant, 0),
+    sens: normalizeDetailSens(detail)
+  }));
+};
+
+const calculateCaisseTotals = (detailsData = [], fond = 0) => {
+  const safeFond = normalizeNumericValue(fond, 0);
+  let totalRecettes = 0;
+  let totalDepenses = 0;
+
+  for (const detail of normalizeCaisseDetails(detailsData)) {
+    const totalLigne = normalizeNumericValue(detail.quantite, 0) * normalizeNumericValue(detail.montant, 0);
+    if (detail.sens === -1) {
+      totalDepenses += totalLigne;
+    } else {
+      totalRecettes += totalLigne;
+    }
+  }
+
+  return {
+    fond: safeFond,
+    totalRecettes,
+    totalDepenses,
+    soldeNet: safeFond + totalRecettes - totalDepenses
+  };
+};
+
+const getTypePrefix = (type) => {
+  if (type === 1 || type === 2) {
+    return 'JCB';
+  }
+
+  return 'JC';
+};
+
+const applyTypeCondition = (conditions, replacements, type, hasExplicitTypeFilter, documentAlias = 'cd') => {
+  if (type !== null && type !== undefined) {
+    if (type === 1 || type === 2) {
+      conditions.push(`(${documentAlias}.type = 1 OR ${documentAlias}.type = 2)`);
+      return;
+    }
+    conditions.push(`${documentAlias}.type = :type`);
+    replacements.type = type;
+    return;
+  }
+
+  if (hasExplicitTypeFilter) {
+    conditions.push(`${documentAlias}.type IS NULL`);
+  }
+};
+
+const getDetailTotalSql = (detailAlias, sens) => `
+  ISNULL(SUM(
+    CASE
+      WHEN ${detailAlias}.sens = ${sens}
+      THEN ISNULL(${detailAlias}.quantite, 0) * ISNULL(${detailAlias}.montant, 0)
+      ELSE 0
+    END
+  ), 0)
+`;
+
 // Récupérer tous les documents de caisse avec pagination
 const getAllCaisseDocuments = async (options = {}, sequelizeConnection = null) => {
   const sequelize = sequelizeConnection || getConnection();
@@ -1355,18 +1434,1217 @@ const getCaisseDetailsForReportGroup2000_3000 = async (dateFrom, dateTo, sequeli
   }
 };
 
+const readStoredDetailTotals = async (sequelize, documentId, transaction = null) => {
+  const totalsQuery = `
+    SELECT
+      ${getDetailTotalSql('cdd', 1)} AS total_recettes,
+      ${getDetailTotalSql('cdd', -1)} AS total_depenses
+    FROM caisse_document_detail cdd
+    WHERE cdd.document_id = :documentId
+  `;
+
+  const totalsResult = await sequelize.query(totalsQuery, {
+    replacements: { documentId },
+    type: sequelize.QueryTypes.SELECT,
+    transaction
+  });
+
+  const totalsRow = Array.isArray(totalsResult) && totalsResult.length > 0
+    ? totalsResult[0]
+    : (totalsResult || {});
+
+  return {
+    totalRecettes: normalizeNumericValue(totalsRow?.total_recettes, 0),
+    totalDepenses: normalizeNumericValue(totalsRow?.total_depenses, 0)
+  };
+};
+
+const insertNormalizedCaisseDetails = async (sequelize, documentId, detailsData, userId, transaction) => {
+  const normalizedDetails = normalizeCaisseDetails(detailsData);
+
+  for (let index = 0; index < normalizedDetails.length; index++) {
+    const detail = normalizedDetails[index];
+
+    await sequelize.query(
+      `INSERT INTO caisse_document_detail (
+        document_id, ligne, rubrique_id, unite_id, quantite, montant,
+        description, parent, type, etat, cr_date, user_id, employe_id, sens
+      )
+      VALUES (
+        :document_id, :ligne, :rubrique_id, :unite_id, :quantite, :montant,
+        :description, :parent, :type, :etat, GETDATE(), :user_id, :employe_id, :sens
+      )`,
+      {
+        replacements: {
+          document_id: documentId,
+          ligne: index + 1,
+          rubrique_id: detail.rubrique_id || null,
+          unite_id: detail.unite_id || null,
+          quantite: normalizeNumericValue(detail.quantite, 1),
+          montant: normalizeNumericValue(detail.montant, 0),
+          description: detail.description || null,
+          parent: detail.parent || null,
+          type: detail.type || null,
+          etat: detail.etat || 1,
+          user_id: userId || null,
+          employe_id: detail.employe_id || null,
+          sens: normalizeDetailSens(detail)
+        },
+        type: sequelize.QueryTypes.INSERT,
+        transaction
+      }
+    );
+  }
+
+  return normalizedDetails;
+};
+
+const getAllCaisseDocumentsV2 = async (options = {}, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  const {
+    page = 1,
+    pageSize = 25,
+    orderBy = 'date',
+    orderDirection = 'DESC',
+    search = '',
+    sens = null,
+    type = null
+  } = options;
+
+  const safePage = parseInt(page, 10) || 1;
+  const safePageSize = parseInt(pageSize, 10) || 25;
+  const offset = (safePage - 1) * safePageSize;
+  const hasExplicitTypeFilter = Object.prototype.hasOwnProperty.call(options, 'type');
+
+  const validColumns = ['numero', 'date', 'montant', 'description', 'etat', 'partenaire_nom', 'fond', 'total_recettes', 'total_depenses', 'solde_net'];
+  const columnMapping = {
+    numero: 'numero',
+    date: '[date]',
+    montant: 'montant',
+    description: 'description',
+    etat: 'etat',
+    partenaire_nom: 'partenaire_nom',
+    fond: 'fond',
+    total_recettes: 'total_recettes',
+    total_depenses: 'total_depenses',
+    solde_net: 'solde_net'
+  };
+  const safeOrderBy = validColumns.includes(orderBy) ? columnMapping[orderBy] : '[date]';
+  const safeOrderDirection = orderDirection?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+  const documentConditions = [];
+  const aggregatedConditions = [];
+  const replacements = {};
+
+  applyTypeCondition(documentConditions, replacements, type, hasExplicitTypeFilter, 'cd');
+
+  if (search && search.trim()) {
+    const searchTerm = search.trim();
+    const searchConditions = [];
+    const datePattern1 = /^\d{4}-\d{2}-\d{2}$/;
+    const datePattern2 = /^\d{2}\/\d{2}\/\d{4}$/;
+
+    if (datePattern1.test(searchTerm)) {
+      searchConditions.push('CAST([date] AS DATE) = :searchDate');
+      replacements.searchDate = searchTerm;
+    } else if (datePattern2.test(searchTerm)) {
+      const [day, month, year] = searchTerm.split('/');
+      searchConditions.push('CAST([date] AS DATE) = :searchDate');
+      replacements.searchDate = `${year}-${month}-${day}`;
+    } else {
+      searchConditions.push('numero LIKE :search');
+      searchConditions.push('description LIKE :search');
+      searchConditions.push('ISNULL(partenaire_nom, \'\') LIKE :search');
+
+      if (!isNaN(parseFloat(searchTerm)) && isFinite(searchTerm)) {
+        const searchMontant = parseFloat(searchTerm);
+        searchConditions.push('ABS(montant - :searchMontant) < 0.01');
+        searchConditions.push('ABS(fond - :searchMontant) < 0.01');
+        searchConditions.push('ABS(total_recettes - :searchMontant) < 0.01');
+        searchConditions.push('ABS(total_depenses - :searchMontant) < 0.01');
+        searchConditions.push('ABS(solde_net - :searchMontant) < 0.01');
+        replacements.searchMontant = searchMontant;
+      }
+
+      replacements.search = `%${searchTerm}%`;
+    }
+
+    if (searchConditions.length > 0) {
+      aggregatedConditions.push(`(${searchConditions.join(' OR ')})`);
+    }
+  }
+
+  if (sens === 1) {
+    aggregatedConditions.push('total_recettes > 0');
+  } else if (sens === -1) {
+    aggregatedConditions.push('total_depenses > 0');
+  }
+
+  const documentWhereClause = documentConditions.length > 0
+    ? `WHERE ${documentConditions.join(' AND ')}`
+    : '';
+  const aggregatedWhereClause = aggregatedConditions.length > 0
+    ? `WHERE ${aggregatedConditions.join(' AND ')}`
+    : '';
+
+  const totalRecettesSql = getDetailTotalSql('cdd', 1);
+  const totalDepensesSql = getDetailTotalSql('cdd', -1);
+  const soldeNetSql = `ISNULL(cd.fond, 0) + ${totalRecettesSql} - ${totalDepensesSql}`;
+  const aggregatedCte = `
+    WITH aggregated AS (
+      SELECT
+        cd.id,
+        cd.numero,
+        cd.date,
+        cd.site_id,
+        cd.part_id,
+        cd.employe_id,
+        cd.departement_id,
+        cd.affectation,
+        ISNULL(cd.fond, 0) AS fond,
+        ${soldeNetSql} AS montant,
+        ${totalRecettesSql} AS total_recettes,
+        ${totalDepensesSql} AS total_depenses,
+        ${soldeNetSql} AS solde_net,
+        cd.description,
+        cd.etat,
+        cd.imprime,
+        cd.cr_date,
+        cd.user_id,
+        cd.type,
+        p.nom AS partenaire_nom
+      FROM caisse_document cd
+      LEFT JOIN partenaire p ON p.part_id = cd.part_id
+      LEFT JOIN caisse_document_detail cdd ON cdd.document_id = cd.id
+      ${documentWhereClause}
+      GROUP BY
+        cd.id,
+        cd.numero,
+        cd.date,
+        cd.site_id,
+        cd.part_id,
+        cd.employe_id,
+        cd.departement_id,
+        cd.affectation,
+        cd.fond,
+        cd.description,
+        cd.etat,
+        cd.imprime,
+        cd.cr_date,
+        cd.user_id,
+        cd.type,
+        p.nom
+    )
+  `;
+
+  const query = `
+    ${aggregatedCte}
+    SELECT
+      id,
+      numero,
+      date,
+      site_id,
+      part_id,
+      employe_id,
+      departement_id,
+      affectation,
+      fond,
+      montant,
+      total_recettes,
+      total_depenses,
+      solde_net,
+      description,
+      etat,
+      imprime,
+      cr_date,
+      user_id,
+      type,
+      partenaire_nom
+    FROM (
+      SELECT
+        aggregated.*,
+        ROW_NUMBER() OVER (ORDER BY ${safeOrderBy} ${safeOrderDirection}) AS RowNum
+      FROM aggregated
+      ${aggregatedWhereClause}
+    ) AS paginated
+    WHERE RowNum > ${offset} AND RowNum <= ${offset + safePageSize}
+    ORDER BY RowNum
+  `;
+
+  const countQuery = `
+    ${aggregatedCte}
+    SELECT COUNT(*) AS total
+    FROM aggregated
+    ${aggregatedWhereClause}
+  `;
+
+  const [countResult, queryResult] = await Promise.all([
+    sequelize.query(countQuery, {
+      replacements: Object.keys(replacements).length > 0 ? replacements : undefined,
+      type: sequelize.QueryTypes.SELECT
+    }),
+    sequelize.query(query, {
+      replacements: Object.keys(replacements).length > 0 ? replacements : undefined,
+      type: sequelize.QueryTypes.SELECT
+    })
+  ]);
+
+  const total = parseInt((Array.isArray(countResult) ? countResult[0] : countResult)?.total, 10) || 0;
+  const totalPages = Math.ceil(total / safePageSize);
+  const data = Array.isArray(queryResult) ? queryResult : (queryResult ? [queryResult] : []);
+
+  return {
+    data,
+    pagination: {
+      total,
+      page: safePage,
+      pageSize: safePageSize,
+      totalPages
+    }
+  };
+};
+
+const getCaisseDocumentByIdV2 = async (id, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+
+  const documentQuery = `
+    SELECT
+      cd.id,
+      cd.numero,
+      cd.date,
+      cd.site_id,
+      cd.part_id,
+      cd.employe_id,
+      cd.departement_id,
+      cd.affectation,
+      cd.montant,
+      ISNULL(cd.fond, 0) AS fond,
+      cd.description,
+      cd.etat,
+      cd.imprime,
+      cd.cr_date,
+      cd.user_id,
+      cd.type,
+      p.nom AS partenaire_nom
+    FROM caisse_document cd
+    LEFT JOIN partenaire p ON p.part_id = cd.part_id
+    WHERE cd.id = :id
+  `;
+
+  const detailQuery = `
+    SELECT
+      ROW_NUMBER() OVER (
+        ORDER BY
+          CASE WHEN cdd.sens = 1 THEN 0 ELSE 1 END,
+          cdd.ligne ASC,
+          ISNULL(cdd.rubrique_id, 0) ASC,
+          ISNULL(cdd.employe_id, 0) ASC,
+          ISNULL(cdd.description, '') ASC
+      ) AS detail_id,
+      l.nom AS rubrique,
+      l.group_id,
+      cdd.rubrique_id,
+      cdd.unite_id,
+      cdd.description,
+      cdd.quantite,
+      cdd.montant,
+      cdd.ligne,
+      cdd.etat,
+      cdd.employe_id,
+      CASE
+        WHEN cdd.sens IN (1, -1) THEN cdd.sens
+        WHEN l.group_id = 3000 THEN -1
+        ELSE 1
+      END AS sens,
+      UPPER(e.prenom + ' ' + e.nom) AS employe_nom_complet
+    FROM caisse_document_detail cdd
+    LEFT JOIN listes l ON l.id = cdd.rubrique_id
+      AND l.group_id = CASE
+        WHEN cdd.sens = -1 THEN 3000
+        WHEN cdd.sens = 1 THEN 2000
+        WHEN EXISTS (
+          SELECT 1
+          FROM listes l_desc
+          WHERE l_desc.id = cdd.rubrique_id
+            AND l_desc.nom = cdd.description
+            AND l_desc.group_id = 3000
+        ) THEN 3000
+        ELSE 2000
+      END
+    LEFT JOIN employe e ON e.id = cdd.employe_id
+    WHERE cdd.document_id = :id
+    ORDER BY
+      CASE WHEN cdd.sens = 1 THEN 0 ELSE 1 END,
+      cdd.ligne ASC,
+      ISNULL(cdd.rubrique_id, 0) ASC,
+      ISNULL(cdd.employe_id, 0) ASC,
+      ISNULL(cdd.description, '') ASC
+  `;
+
+  const [documentResults, detailResults] = await Promise.all([
+    sequelize.query(documentQuery, {
+      replacements: { id },
+      type: sequelize.QueryTypes.SELECT
+    }),
+    sequelize.query(detailQuery, {
+      replacements: { id },
+      type: sequelize.QueryTypes.SELECT
+    })
+  ]);
+
+  const document = Array.isArray(documentResults) && documentResults.length > 0
+    ? documentResults[0]
+    : null;
+
+  if (!document) {
+    return null;
+  }
+
+  const details = (Array.isArray(detailResults) ? detailResults : []).map((detail) => ({
+    id: detail.detail_id || null,
+    detail_id: detail.detail_id || null,
+    rubrique_id: detail.rubrique_id || null,
+    rubrique: detail.rubrique || null,
+    group_id: detail.group_id || null,
+    description: detail.description || '',
+    quantite: normalizeNumericValue(detail.quantite, 1),
+    montant: normalizeNumericValue(detail.montant, 0),
+    ligne: detail.ligne || 0,
+    etat: detail.etat !== undefined ? detail.etat : 1,
+    unite_id: detail.unite_id || null,
+    employe_id: detail.employe_id || null,
+    employe_nom_complet: detail.employe_nom_complet || null,
+    sens: normalizeDetailSens(detail)
+  }));
+
+  const totals = calculateCaisseTotals(details, document.fond);
+
+  return {
+    ...document,
+    fond: totals.fond,
+    montant: totals.soldeNet,
+    total_recettes: totals.totalRecettes,
+    total_depenses: totals.totalDepenses,
+    solde_net: totals.soldeNet,
+    details
+  };
+};
+
+const createCaisseDocumentV2 = async (documentData, detailsData) => {
+  const sequelize = getConnection();
+  let transaction = null;
+
+  try {
+    transaction = await sequelize.transaction();
+
+    const normalizedDetails = normalizeCaisseDetails(detailsData);
+    const totals = calculateCaisseTotals(normalizedDetails, documentData?.fond);
+
+    let numero = documentData?.numero;
+    if (!numero) {
+      const prefix = getTypePrefix(documentData?.type);
+      numero = await getCompteurFormate(prefix, prefix);
+    }
+
+    const insertQuery = `
+      INSERT INTO caisse_document (
+        numero, date, site_id, part_id, employe_id, departement_id,
+        affectation, montant, fond, description,
+        etat, imprime, cr_date, user_id, type
+      )
+      OUTPUT INSERTED.id
+      VALUES (
+        :numero, :date, :site_id, :part_id, :employe_id, :departement_id,
+        :affectation, :montant, :fond, :description,
+        :etat, :imprime, GETDATE(), :user_id, :type
+      )
+    `;
+
+    const insertResults = await sequelize.query(insertQuery, {
+      replacements: {
+        numero,
+        date: documentData.date,
+        site_id: documentData.site_id || null,
+        part_id: documentData.part_id || null,
+        employe_id: documentData.employe_id || null,
+        departement_id: documentData.departement_id || null,
+        affectation: documentData.affectation || null,
+        montant: totals.soldeNet,
+        fond: totals.fond,
+        description: documentData.description || null,
+        etat: documentData.etat !== null && documentData.etat !== undefined ? String(documentData.etat) : null,
+        imprime: documentData.imprime || 0,
+        user_id: documentData.user_id || null,
+        type: documentData.type !== null && documentData.type !== undefined ? documentData.type : null
+      },
+      type: sequelize.QueryTypes.INSERT,
+      transaction
+    });
+
+    let documentId = null;
+    if (Array.isArray(insertResults) && insertResults.length > 0) {
+      const firstResult = insertResults[0];
+      if (Array.isArray(firstResult) && firstResult.length > 0) {
+        documentId = firstResult[0].id;
+      } else if (firstResult?.id) {
+        documentId = firstResult.id;
+      }
+    } else if (insertResults?.id) {
+      documentId = insertResults.id;
+    }
+
+    if (!documentId) {
+      throw new Error('Impossible de récupérer l\'ID du document créé');
+    }
+
+    await insertNormalizedCaisseDetails(sequelize, documentId, normalizedDetails, documentData.user_id, transaction);
+
+    const storedTotals = await readStoredDetailTotals(sequelize, documentId, transaction);
+    const soldeNet = totals.fond + storedTotals.totalRecettes - storedTotals.totalDepenses;
+
+    await sequelize.query(
+      `UPDATE caisse_document SET montant = :montant WHERE id = :id`,
+      {
+        replacements: { id: documentId, montant: soldeNet },
+        type: sequelize.QueryTypes.UPDATE,
+        transaction
+      }
+    );
+
+    await transaction.commit();
+
+    return {
+      id: documentId,
+      numero,
+      fond: totals.fond,
+      total_recettes: storedTotals.totalRecettes,
+      total_depenses: storedTotals.totalDepenses,
+      montant: soldeNet,
+      solde_net: soldeNet
+    };
+  } catch (error) {
+    if (transaction && !transaction.finished) {
+      await transaction.rollback();
+    }
+    throw error;
+  }
+};
+
+const updateCaisseDocumentV2 = async (id, documentData = {}, detailsData = [], sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  const transaction = await sequelize.transaction();
+
+  try {
+    const docResults = await sequelize.query(
+      `SELECT etat, fond FROM caisse_document WHERE id = :id`,
+      {
+        replacements: { id },
+        type: sequelize.QueryTypes.SELECT,
+        transaction
+      }
+    );
+
+    const doc = Array.isArray(docResults) && docResults.length > 0 ? docResults[0] : null;
+    if (!doc) {
+      throw new Error('Document non trouvé');
+    }
+
+    const etatValue = doc.etat !== null && doc.etat !== undefined ? String(doc.etat).toUpperCase() : null;
+    const isCloture = etatValue === '1' || etatValue === 'CLOTURE' || doc.etat === 1;
+    if (isCloture) {
+      throw new Error('Impossible de modifier un document clôturé');
+    }
+
+    const normalizedDetails = normalizeCaisseDetails(detailsData);
+    const fond = documentData.fond !== undefined
+      ? normalizeNumericValue(documentData.fond, 0)
+      : normalizeNumericValue(doc.fond, 0);
+
+    await sequelize.query(
+      `DELETE FROM caisse_document_detail WHERE document_id = :id`,
+      {
+        replacements: { id },
+        type: sequelize.QueryTypes.DELETE,
+        transaction
+      }
+    );
+
+    await insertNormalizedCaisseDetails(sequelize, id, normalizedDetails, documentData.user_id, transaction);
+
+    const storedTotals = await readStoredDetailTotals(sequelize, id, transaction);
+    const soldeNet = fond + storedTotals.totalRecettes - storedTotals.totalDepenses;
+
+    const updateFields = [
+      'montant = :montant',
+      'fond = :fond'
+    ];
+    const replacements = {
+      id,
+      montant: soldeNet,
+      fond
+    };
+
+    if (documentData.date !== undefined) {
+      updateFields.push('date = :date');
+      replacements.date = documentData.date;
+    }
+
+    if (documentData.description !== undefined) {
+      updateFields.push('description = :description');
+      replacements.description = documentData.description;
+    }
+
+    if (documentData.affectation !== undefined) {
+      updateFields.push('affectation = :affectation');
+      replacements.affectation = documentData.affectation;
+    }
+
+    await sequelize.query(
+      `UPDATE caisse_document SET ${updateFields.join(', ')} WHERE id = :id`,
+      {
+        replacements,
+        type: sequelize.QueryTypes.UPDATE,
+        transaction
+      }
+    );
+
+    await transaction.commit();
+
+    return {
+      id,
+      fond,
+      total_recettes: storedTotals.totalRecettes,
+      total_depenses: storedTotals.totalDepenses,
+      montant: soldeNet,
+      solde_net: soldeNet
+    };
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const updateCaisseDocumentBySensV2 = async (id, sens, documentData = {}, detailsData = [], sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  const transaction = await sequelize.transaction();
+
+  try {
+    const finalSens = Number(sens) === -1 ? -1 : 1;
+    const docResults = await sequelize.query(
+      `SELECT etat, fond FROM caisse_document WHERE id = :id`,
+      {
+        replacements: { id },
+        type: sequelize.QueryTypes.SELECT,
+        transaction
+      }
+    );
+
+    const doc = Array.isArray(docResults) && docResults.length > 0 ? docResults[0] : null;
+    if (!doc) {
+      throw new Error('Document non trouvé');
+    }
+
+    const etatValue = doc.etat !== null && doc.etat !== undefined ? String(doc.etat).toUpperCase() : null;
+    const isCloture = etatValue === '1' || etatValue === 'CLOTURE' || doc.etat === 1;
+    if (isCloture) {
+      throw new Error('Impossible de modifier un document clôturé');
+    }
+
+    const normalizedDetails = normalizeCaisseDetails(detailsData)
+      .filter((detail) => normalizeDetailSens(detail) === finalSens)
+      .map((detail) => ({
+        ...detail,
+        sens: finalSens
+      }));
+
+    const fond = documentData.fond !== undefined
+      ? normalizeNumericValue(documentData.fond, 0)
+      : normalizeNumericValue(doc.fond, 0);
+
+    await sequelize.query(
+      `UPDATE cdd
+       SET cdd.sens = CASE
+         WHEN cdd.sens IN (1, -1) THEN cdd.sens
+         WHEN l.group_id = 3000 THEN -1
+         ELSE 1
+       END
+       FROM caisse_document_detail cdd
+       LEFT JOIN listes l ON l.id = cdd.rubrique_id
+       WHERE cdd.document_id = :id
+         AND (cdd.sens IS NULL OR cdd.sens NOT IN (1, -1))`,
+      {
+        replacements: { id },
+        type: sequelize.QueryTypes.UPDATE,
+        transaction
+      }
+    );
+
+    await sequelize.query(
+      `DELETE FROM caisse_document_detail WHERE document_id = :id AND sens = :sens`,
+      {
+        replacements: { id, sens: finalSens },
+        type: sequelize.QueryTypes.DELETE,
+        transaction
+      }
+    );
+
+    await insertNormalizedCaisseDetails(sequelize, id, normalizedDetails, documentData.user_id, transaction);
+
+    const storedTotals = await readStoredDetailTotals(sequelize, id, transaction);
+    const soldeNet = fond + storedTotals.totalRecettes - storedTotals.totalDepenses;
+
+    const updateFields = [
+      'montant = :montant',
+      'fond = :fond'
+    ];
+    const replacements = {
+      id,
+      montant: soldeNet,
+      fond
+    };
+
+    if (documentData.date !== undefined) {
+      updateFields.push('date = :date');
+      replacements.date = documentData.date;
+    }
+
+    if (documentData.description !== undefined) {
+      updateFields.push('description = :description');
+      replacements.description = documentData.description;
+    }
+
+    if (documentData.affectation !== undefined) {
+      updateFields.push('affectation = :affectation');
+      replacements.affectation = documentData.affectation;
+    }
+
+    await sequelize.query(
+      `UPDATE caisse_document SET ${updateFields.join(', ')} WHERE id = :id`,
+      {
+        replacements,
+        type: sequelize.QueryTypes.UPDATE,
+        transaction
+      }
+    );
+
+    await transaction.commit();
+
+    return {
+      id,
+      sens: finalSens,
+      fond,
+      total_recettes: storedTotals.totalRecettes,
+      total_depenses: storedTotals.totalDepenses,
+      montant: soldeNet,
+      solde_net: soldeNet
+    };
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const cloturerCaisseDocumentV2 = async (id) => {
+  const sequelize = getConnection();
+  const transaction = await sequelize.transaction();
+
+  try {
+    const docResults = await sequelize.query(
+      `SELECT ISNULL(fond, 0) AS fond FROM caisse_document WHERE id = :id`,
+      {
+        replacements: { id },
+        type: sequelize.QueryTypes.SELECT,
+        transaction
+      }
+    );
+
+    const doc = Array.isArray(docResults) && docResults.length > 0 ? docResults[0] : null;
+    if (!doc) {
+      throw new Error('Document non trouvé');
+    }
+
+    const storedTotals = await readStoredDetailTotals(sequelize, id, transaction);
+    const soldeNet = normalizeNumericValue(doc.fond, 0) + storedTotals.totalRecettes - storedTotals.totalDepenses;
+
+    await sequelize.query(
+      `UPDATE caisse_document SET etat = '1', montant = :montant WHERE id = :id`,
+      {
+        replacements: { id, montant: soldeNet },
+        type: sequelize.QueryTypes.UPDATE,
+        transaction
+      }
+    );
+
+    await transaction.commit();
+
+    return {
+      success: true,
+      montant: soldeNet,
+      total_recettes: storedTotals.totalRecettes,
+      total_depenses: storedTotals.totalDepenses
+    };
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
+const getSoldeCaisseV2 = async (date, sequelizeConnection = null, caisseType = null, onlyNonCloturees = false) => {
+  const sequelize = sequelizeConnection || getConnection();
+  let dateValue = date;
+
+  if (typeof dateValue === 'string' && dateValue.includes('/')) {
+    const [day, month, year] = dateValue.split('/');
+    dateValue = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+
+  if (!dateValue) {
+    dateValue = new Date().toISOString().split('T')[0];
+  }
+
+  const docConditions = [`CONVERT(DATE, cd.[date]) ${onlyNonCloturees ? '=' : '<='} CONVERT(DATE, :date)`];
+  const replacements = { date: dateValue };
+
+  if (caisseType === 'black') {
+    docConditions.push('(cd.type = 1 OR cd.type = 2)');
+  } else {
+    docConditions.push('cd.type IS NULL');
+  }
+
+  if (onlyNonCloturees) {
+    docConditions.push('cd.etat IS NULL');
+  }
+
+  const query = `
+    WITH filtered_docs AS (
+      SELECT
+        cd.id,
+        ISNULL(cd.fond, 0) AS fond
+      FROM caisse_document cd
+      WHERE ${docConditions.join(' AND ')}
+    )
+    SELECT
+      (SELECT ISNULL(SUM(fond), 0) FROM filtered_docs) AS total_fond,
+      ISNULL(SUM(CASE WHEN cdd.sens = 1 THEN ISNULL(cdd.quantite, 0) * ISNULL(cdd.montant, 0) ELSE 0 END), 0) AS total_entrees,
+      ISNULL(SUM(CASE WHEN cdd.sens = -1 THEN ISNULL(cdd.quantite, 0) * ISNULL(cdd.montant, 0) ELSE 0 END), 0) AS total_sorties
+    FROM filtered_docs fd
+    LEFT JOIN caisse_document_detail cdd ON cdd.document_id = fd.id
+  `;
+
+  const resultData = await sequelize.query(query, {
+    replacements,
+    type: sequelize.QueryTypes.SELECT
+  });
+
+  const result = Array.isArray(resultData) && resultData.length > 0 ? resultData[0] : {};
+  const totalFond = normalizeNumericValue(result?.total_fond, 0);
+  const totalEntrees = normalizeNumericValue(result?.total_entrees, 0);
+  const totalSorties = normalizeNumericValue(result?.total_sorties, 0);
+
+  return {
+    total_fond: totalFond,
+    total_entrees: totalEntrees,
+    total_sorties: totalSorties,
+    solde: totalFond + totalEntrees - totalSorties
+  };
+};
+
+const checkReglementExistsV2 = async (reglementId) => {
+  const sequelize = getConnection();
+  const query = `
+    SELECT TOP 1 cd.id
+    FROM caisse_document cd
+    INNER JOIN caisse_document_detail cdd ON cdd.document_id = cd.id
+    WHERE CAST(cdd.parent AS NVARCHAR(50)) = :reglementId
+    ORDER BY cd.id DESC
+  `;
+
+  const results = await sequelize.query(query, {
+    replacements: { reglementId: String(reglementId) },
+    type: sequelize.QueryTypes.SELECT
+  });
+
+  const result = Array.isArray(results) && results.length > 0 ? results[0] : null;
+  return result ? result.id : null;
+};
+
+const findOpenCaisseDocumentByDate = async (date, type = null, sequelizeConnection = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  const conditions = [
+    'CONVERT(DATE, [date]) = CONVERT(DATE, :date)',
+    'etat IS NULL'
+  ];
+  const replacements = { date };
+
+  if (type === 1 || type === 2) {
+    conditions.push('(type = 1 OR type = 2)');
+  } else if (type !== null && type !== undefined) {
+    conditions.push('type = :type');
+    replacements.type = type;
+  } else {
+    conditions.push('type IS NULL');
+  }
+
+  const results = await sequelize.query(
+    `SELECT TOP 1 id
+     FROM caisse_document
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY id DESC`,
+    {
+      replacements,
+      type: sequelize.QueryTypes.SELECT
+    }
+  );
+
+  const result = Array.isArray(results) && results.length > 0 ? results[0] : null;
+  return result ? result.id : null;
+};
+
+const getCaisseDocumentsForReportV2 = async (dateFrom, dateTo, sequelizeConnection = null, caisseType = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  const conditions = [];
+  const replacements = {};
+
+  if (dateFrom) {
+    conditions.push('CONVERT(DATE, cd.[date]) >= CONVERT(DATE, :dateFrom)');
+    replacements.dateFrom = dateFrom;
+  }
+
+  if (dateTo) {
+    conditions.push('CONVERT(DATE, cd.[date]) <= CONVERT(DATE, :dateTo)');
+    replacements.dateTo = dateTo;
+  }
+
+  if (caisseType === 'black') {
+    conditions.push('(cd.type = 1 OR cd.type = 2)');
+  } else {
+    conditions.push('cd.type IS NULL');
+  }
+
+  const totalRecettesSql = getDetailTotalSql('cdd', 1);
+  const totalDepensesSql = getDetailTotalSql('cdd', -1);
+  const soldeNetSql = `ISNULL(cd.fond, 0) + ${totalRecettesSql} - ${totalDepensesSql}`;
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const query = `
+    SELECT
+      cd.id,
+      cd.numero,
+      cd.date,
+      cd.site_id,
+      cd.part_id,
+      cd.employe_id,
+      cd.departement_id,
+      cd.affectation,
+      ISNULL(cd.fond, 0) AS fond,
+      ${soldeNetSql} AS montant,
+      ${totalRecettesSql} AS total_recettes,
+      ${totalDepensesSql} AS total_depenses,
+      ${soldeNetSql} AS solde_net,
+      cd.description,
+      cd.etat,
+      cd.imprime,
+      cd.cr_date,
+      cd.user_id,
+      cd.type,
+      p.nom AS partenaire_nom
+    FROM caisse_document cd
+    LEFT JOIN partenaire p ON p.part_id = cd.part_id
+    LEFT JOIN caisse_document_detail cdd ON cdd.document_id = cd.id
+    ${whereClause}
+    GROUP BY
+      cd.id,
+      cd.numero,
+      cd.date,
+      cd.site_id,
+      cd.part_id,
+      cd.employe_id,
+      cd.departement_id,
+      cd.affectation,
+      cd.fond,
+      cd.description,
+      cd.etat,
+      cd.imprime,
+      cd.cr_date,
+      cd.user_id,
+      cd.type,
+      p.nom
+    ORDER BY cd.date ASC, cd.numero ASC
+  `;
+
+  const results = await sequelize.query(query, {
+    replacements: Object.keys(replacements).length > 0 ? replacements : undefined,
+    type: sequelize.QueryTypes.SELECT
+  });
+
+  return Array.isArray(results) ? results : (results ? [results] : []);
+};
+
+const getCaisseDocumentsForReportByEmployeV2 = async (dateFrom, dateTo, employeId, sequelizeConnection = null, caisseType = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  const conditions = ['EXISTS (SELECT 1 FROM caisse_document_detail cdd_filter WHERE cdd_filter.document_id = cd.id AND cdd_filter.employe_id = :employeId)'];
+  const replacements = { employeId };
+
+  if (dateFrom) {
+    conditions.push('CONVERT(DATE, cd.[date]) >= CONVERT(DATE, :dateFrom)');
+    replacements.dateFrom = dateFrom;
+  }
+
+  if (dateTo) {
+    conditions.push('CONVERT(DATE, cd.[date]) <= CONVERT(DATE, :dateTo)');
+    replacements.dateTo = dateTo;
+  }
+
+  if (caisseType === 'black') {
+    conditions.push('(cd.type = 1 OR cd.type = 2)');
+  } else {
+    conditions.push('cd.type IS NULL');
+  }
+
+  const totalRecettesSql = getDetailTotalSql('cdd', 1);
+  const totalDepensesSql = getDetailTotalSql('cdd', -1);
+  const soldeNetSql = `ISNULL(cd.fond, 0) + ${totalRecettesSql} - ${totalDepensesSql}`;
+  const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+  const query = `
+    SELECT
+      cd.id,
+      cd.numero,
+      cd.date,
+      cd.site_id,
+      cd.part_id,
+      cd.employe_id,
+      cd.departement_id,
+      cd.affectation,
+      ISNULL(cd.fond, 0) AS fond,
+      ${soldeNetSql} AS montant,
+      ${totalRecettesSql} AS total_recettes,
+      ${totalDepensesSql} AS total_depenses,
+      ${soldeNetSql} AS solde_net,
+      cd.description,
+      cd.etat,
+      cd.imprime,
+      cd.cr_date,
+      cd.user_id,
+      cd.type,
+      p.nom AS partenaire_nom
+    FROM caisse_document cd
+    LEFT JOIN partenaire p ON p.part_id = cd.part_id
+    LEFT JOIN caisse_document_detail cdd ON cdd.document_id = cd.id
+    ${whereClause}
+    GROUP BY
+      cd.id,
+      cd.numero,
+      cd.date,
+      cd.site_id,
+      cd.part_id,
+      cd.employe_id,
+      cd.departement_id,
+      cd.affectation,
+      cd.fond,
+      cd.description,
+      cd.etat,
+      cd.imprime,
+      cd.cr_date,
+      cd.user_id,
+      cd.type,
+      p.nom
+    ORDER BY cd.date ASC, cd.numero ASC
+  `;
+
+  const results = await sequelize.query(query, {
+    replacements,
+    type: sequelize.QueryTypes.SELECT
+  });
+
+  return Array.isArray(results) ? results : (results ? [results] : []);
+};
+
+const getBonDeCaisseByEmployeV2 = async (documentId, employeId, sequelizeConnection = null, detailSens = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  const document = await getCaisseDocumentByIdV2(documentId, sequelize);
+
+  if (!document) {
+    throw new Error('Document de caisse introuvable');
+  }
+
+  const availableDetails = Array.isArray(document.details)
+    ? document.details.filter((detail) => Number(detail.employe_id) === Number(employeId))
+    : [];
+
+  if (availableDetails.length === 0) {
+    const employeCheck = await sequelize.query(
+      `SELECT id, nom, prenom FROM employe WHERE id = :employeId`,
+      {
+        replacements: { employeId },
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+
+    const employe = Array.isArray(employeCheck) && employeCheck.length > 0 ? employeCheck[0] : null;
+    if (!employe) {
+      throw new Error(`Employé avec ID ${employeId} introuvable`);
+    }
+
+    throw new Error(`Aucun détail trouvé pour l'employé ${employe.nom || employeId} dans ce document.`);
+  }
+
+  const distinctSens = [...new Set(availableDetails.map((detail) => normalizeDetailSens(detail)))];
+  let finalSens = detailSens === 1 || detailSens === -1 ? detailSens : null;
+
+  if (finalSens === null) {
+    if (distinctSens.length > 1) {
+      throw new Error('Ce document contient à la fois des recettes et des dépenses pour cet employé. Le sens doit être précisé.');
+    }
+    finalSens = distinctSens[0];
+  }
+
+  const query = `
+    SELECT
+      c.numero,
+      c.date,
+      e.nom + ' ' + e.prenom AS employe,
+      e.telephone,
+      c.affectation AS operateur,
+      ISNULL(l.nom, cdd.description) AS rubrique,
+      cdd.quantite,
+      cdd.montant,
+      cdd.description,
+      cdd.sens,
+      CASE WHEN cdd.sens = 1 THEN 'recette' ELSE 'depense' END AS type_caisse,
+      CASE
+        WHEN c.type IN (1, 2) AND cdd.sens = 1 THEN 'recette black'
+        WHEN c.type IN (1, 2) AND cdd.sens = -1 THEN 'depense black'
+        WHEN cdd.sens = 1 THEN 'recette déclarée'
+        ELSE 'depense déclarée'
+      END AS type,
+      c.type AS document_type
+    FROM caisse_document_detail cdd
+    INNER JOIN caisse_document c ON c.id = cdd.document_id
+    LEFT JOIN listes l ON l.id = cdd.rubrique_id
+      AND l.group_id = CASE
+        WHEN cdd.sens = -1 THEN 3000
+        WHEN cdd.sens = 1 THEN 2000
+        WHEN EXISTS (
+          SELECT 1
+          FROM listes l_desc
+          WHERE l_desc.id = cdd.rubrique_id
+            AND l_desc.nom = cdd.description
+            AND l_desc.group_id = 3000
+        ) THEN 3000
+        ELSE 2000
+      END
+    INNER JOIN employe e ON e.id = cdd.employe_id
+    WHERE cdd.document_id = :documentId
+      AND cdd.employe_id = :employeId
+      AND cdd.sens = :sens
+    ORDER BY
+      cdd.ligne ASC,
+      ISNULL(cdd.rubrique_id, 0) ASC,
+      ISNULL(cdd.description, '') ASC
+  `;
+
+  const detailRows = await sequelize.query(query, {
+    replacements: { documentId, employeId, sens: finalSens },
+    type: sequelize.QueryTypes.SELECT
+  });
+
+  const details = Array.isArray(detailRows) ? detailRows : (detailRows ? [detailRows] : []);
+  if (details.length === 0) {
+    throw new Error('Aucun détail trouvé pour ce filtre.');
+  }
+
+  const total = details.reduce((sum, detail) => {
+    return sum + (normalizeNumericValue(detail.quantite, 0) * normalizeNumericValue(detail.montant, 0));
+  }, 0);
+
+  return {
+    document: {
+      numero: document.numero,
+      date: document.date,
+      affectation: document.affectation,
+      description: document.description,
+      type_caisse: details[0].type_caisse,
+      type: details[0].type,
+      etat: document.etat,
+      type_document: document.type
+    },
+    employe: {
+      nom_complet: details[0].employe,
+      telephone: details[0].telephone
+    },
+    details,
+    total
+  };
+};
+
+const getCaisseDetailsForReportGroup2000_3000V2 = async (dateFrom, dateTo, sequelizeConnection = null, caisseType = null, rubriqueIds = null) => {
+  const sequelize = sequelizeConnection || getConnection();
+  const replacements = {};
+  const conditions = ['l.group_id IN (2000, 3000)'];
+
+  if (dateFrom) {
+    conditions.push('CONVERT(DATE, cd.[date]) >= CONVERT(DATE, :dateFrom)');
+    replacements.dateFrom = dateFrom;
+  }
+
+  if (dateTo) {
+    conditions.push('CONVERT(DATE, cd.[date]) <= CONVERT(DATE, :dateTo)');
+    replacements.dateTo = dateTo;
+  }
+
+  if (caisseType === 'black') {
+    conditions.push('(cd.type = 1 OR cd.type = 2)');
+  } else {
+    conditions.push('cd.type IS NULL');
+  }
+
+  if (rubriqueIds && Array.isArray(rubriqueIds) && rubriqueIds.length > 0) {
+    conditions.push('cdd.rubrique_id IN (:rubriqueIds)');
+    replacements.rubriqueIds = rubriqueIds;
+  }
+
+  const whereClause = `WHERE ${conditions.join(' AND ')}`;
+  const query = `
+    SELECT
+      cd.numero,
+      cd.date,
+      cdd.sens,
+      l.nom AS rubrique,
+      l.group_id,
+      cdd.quantite,
+      cdd.montant,
+      cdd.description,
+      UPPER(e.prenom + ' ' + e.nom) AS employe_nom_complet
+    FROM caisse_document_detail cdd
+    INNER JOIN caisse_document cd ON cd.id = cdd.document_id
+    INNER JOIN listes l ON l.id = cdd.rubrique_id
+    LEFT JOIN employe e ON e.id = cdd.employe_id
+    ${whereClause}
+    ORDER BY cd.date ASC, cd.numero ASC
+  `;
+
+  const results = await sequelize.query(query, {
+    replacements,
+    type: sequelize.QueryTypes.SELECT
+  });
+
+  return Array.isArray(results) ? results : (results ? [results] : []);
+};
 
 module.exports = {
-  getAllCaisseDocuments,
-  getCaisseDocumentById,
-  createCaisseDocument,
-  updateCaisseDocument,
-  cloturerCaisseDocument,
+  getAllCaisseDocuments: getAllCaisseDocumentsV2,
+  getCaisseDocumentById: getCaisseDocumentByIdV2,
+  createCaisseDocument: createCaisseDocumentV2,
+  updateCaisseDocument: updateCaisseDocumentV2,
+  updateCaisseDocumentBySens: updateCaisseDocumentBySensV2,
+  cloturerCaisseDocument: cloturerCaisseDocumentV2,
   deleteCaisseDocument,
-  getSoldeCaisse,
-  checkReglementExists,
-  getCaisseDocumentsForReport,
-  getCaisseDocumentsForReportByEmploye,
-  getBonDeCaisseByEmploye,
-  getCaisseDetailsForReportGroup2000_3000
+  getSoldeCaisse: getSoldeCaisseV2,
+  checkReglementExists: checkReglementExistsV2,
+  getCaisseDocumentsForReport: getCaisseDocumentsForReportV2,
+  getCaisseDocumentsForReportByEmploye: getCaisseDocumentsForReportByEmployeV2,
+  getBonDeCaisseByEmploye: getBonDeCaisseByEmployeV2,
+  getCaisseDetailsForReportGroup2000_3000: getCaisseDetailsForReportGroup2000_3000V2,
+  findOpenCaisseDocumentByDate
 };

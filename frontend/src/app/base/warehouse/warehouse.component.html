@@ -1,0 +1,129 @@
+<div class="container py-4">
+  <div class="page-inner">
+    <div class="page-header mb-4">
+      <h3 class="fw-bold text-dark">Base</h3>
+      <ul class="breadcrumbs d-flex align-items-center">
+        <li class="nav-home me-2"><a href="#"><i class="fas fa-home text-primary"></i></a></li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item me-2"><a href="#" class="text-muted">Warehouse</a></li>
+        <li class="separator mx-1 text-muted"><i class="fas fa-chevron-right small"></i></li>
+        <li class="nav-item fw-semibold text-muted">Liste Warehouse</li>
+      </ul>
+    </div>
+
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-search"></i></span>
+          <input
+            type="text"
+            class="form-control"
+            placeholder="Rechercher par id, code, nom, status..."
+            [(ngModel)]="searchTerm"
+            (keyup.enter)="onSearch()"
+          />
+          <button class="btn btn-primary" type="button" (click)="onSearch()">
+            <i class="fas fa-search"></i> Rechercher
+          </button>
+        </div>
+      </div>
+      <div class="col-md-2">
+        <select class="form-select" (change)="onPageSizeChange($event)">
+          <option [value]="10" [selected]="pageSize === 10">10 par page</option>
+          <option [value]="25" [selected]="pageSize === 25">25 par page</option>
+          <option [value]="50" [selected]="pageSize === 50">50 par page</option>
+          <option [value]="100" [selected]="pageSize === 100">100 par page</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card border-0 shadow-sm rounded-3">
+          <div class="card-body">
+            <div class="table-responsive" style="position: relative; min-height: 300px;">
+              <div
+                *ngIf="loading"
+                class="text-center my-4"
+                style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 10px;"
+              >
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                  <span class="visually-hidden">Chargement...</span>
+                </div>
+                <p class="mt-3 mb-0 text-muted fw-semibold">Chargement des warehouses...</p>
+              </div>
+
+              <table class="table table-bordered table-striped table-hover" [style.opacity]="loading ? '0.5' : '1'">
+                <thead class="table-light">
+                  <tr>
+                    <th (click)="onSort('id')" class="sortable" style="cursor: pointer; width: 90px;">
+                      ID <i class="fas ms-1" [ngClass]="getSortIcon('id')"></i>
+                    </th>
+                    <th (click)="onSort('code')" class="sortable" style="cursor: pointer;">
+                      Code <i class="fas ms-1" [ngClass]="getSortIcon('code')"></i>
+                    </th>
+                    <th (click)="onSort('nom')" class="sortable" style="cursor: pointer;">
+                      Nom <i class="fas ms-1" [ngClass]="getSortIcon('nom')"></i>
+                    </th>
+                    <th (click)="onSort('status')" class="sortable" style="cursor: pointer;">
+                      Status <i class="fas ms-1" [ngClass]="getSortIcon('status')"></i>
+                    </th>
+                    <th style="width: 100px;" class="text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngIf="!loading && warehouses.length === 0">
+                    <td colspan="5" class="text-center py-4">Aucun warehouse trouvé</td>
+                  </tr>
+                  <tr *ngFor="let warehouse of warehouses">
+                    <td class="fw-semibold">{{ warehouse.id }}</td>
+                    <td>{{ warehouse.code || '-' }}</td>
+                    <td>{{ warehouse.nom || '-' }}</td>
+                    <td>
+                      <span class="badge" [ngClass]="isFonctionnel(warehouse.status) ? 'bg-success' : 'bg-danger'">
+                        {{ warehouse.status || '-' }}
+                      </span>
+                    </td>
+                    <td class="text-center">
+                      <button class="btn btn-sm btn-outline-info" (click)="goToEditWarehouse(warehouse.id)" title="Modifier">
+                        <i class="fas fa-edit"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row mt-3" *ngIf="!loading && totalPages > 0">
+      <div class="col-md-6">
+        <p class="text-muted mb-0">
+          Affichage de <strong>{{ getDisplayRange() }}</strong> sur <strong>{{ totalRecords }}</strong> warehouse(s)
+        </p>
+      </div>
+      <div class="col-md-6">
+        <nav aria-label="Pagination">
+          <ul class="pagination justify-content-end mb-0">
+            <li class="page-item" [class.disabled]="currentPage === 1">
+              <a class="page-link" (click)="onPageChange(currentPage - 1)" style="cursor: pointer;">
+                <i class="fas fa-chevron-left"></i>
+              </a>
+            </li>
+            <li class="page-item" *ngFor="let page of getPageNumbers()" [class.active]="page === currentPage">
+              <a class="page-link" (click)="onPageChange(page)" style="cursor: pointer;">{{ page }}</a>
+            </li>
+            <li class="page-item" [class.disabled]="currentPage === totalPages">
+              <a class="page-link" (click)="onPageChange(currentPage + 1)" style="cursor: pointer;">
+                <i class="fas fa-chevron-right"></i>
+              </a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+  </div>
+</div>
+

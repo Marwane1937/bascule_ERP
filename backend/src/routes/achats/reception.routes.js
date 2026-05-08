@@ -12,6 +12,7 @@ router.get('/commandes-non-receptionnees', receptionController.getCommandesNonRe
 
 // Créer une réception depuis une commande
 router.post('/from-commande', receptionController.createReceptionFromCommande);
+router.post('/from-stock-entree', receptionController.createReceptionFromStockEntree);
 
 // Supprimer une réception
 router.post('/delete', receptionController.deleteReception);
@@ -33,5 +34,4 @@ router.get('/:id', receptionController.getReceptionById);
 router.put('/:id', receptionController.updateReception);
 
 module.exports = router;
-
 

@@ -3,6 +3,7 @@ import { RouterModule, Routes } from '@angular/router';
 import { DashbordComponent } from './dashbord/dashbord.component';
 import { FamilleComponent } from './base/famille/famille.component';
 import { ProduitComponent } from './base/produit/produit.component';
+import { WarehouseComponent } from './base/warehouse/warehouse.component';
 import { CommercialComponent } from './base/commercial/commercial.component';
 import { FournisseurComponent } from './base/fournisseur/fournisseur.component';
 import { ClientComponent } from './base/client/client.component';
@@ -11,6 +12,7 @@ import { EditClientComponent } from './base/edit/edit-client/edit-client.compone
 import { EditFournisseurComponent } from './base/edit/edit-fournisseur/edit-fournisseur.component';
 import { EditProduitComponent } from './base/edit/edit-produit/edit-produit.component';
 import { EditProduitArticleComponent } from './base/edit/edit-produit-article/edit-produit-article.component';
+import { EditWarehouseComponent } from './base/edit/edit-warehouse/edit-warehouse.component';
 import { VehiculeComponent } from './base/vehicule/vehicule.component';
 import { EditVehiculeComponent } from './base/edit/edit-vehicule/edit-vehicule.component';
 import { DevisComponent } from './vente/devis/devis.component';
@@ -22,6 +24,7 @@ import { EditlivraisonComponent } from './vente/edit/editlivraison/editlivraison
 import { EditEntreeStockComponent } from './stock/edit-entree-stock/edit-entree-stock.component';
 import { EditSortieStockComponent } from './stock/edit-sortie-stock/edit-sortie-stock.component';
 import { EditInventaireComponent } from './stock/edit-inventaire/edit-inventaire.component';
+import { EditPreparationComponent } from './stock/edit-preparation/edit-preparation.component';
 import { EditContratComponent } from './vente/edit/edit-contrat/edit-contrat.component';
 import { FacturationComponent } from './vente/facturation/facturation.component';
 import { ReglementComponent } from './vente/reglement/reglement.component';
@@ -37,8 +40,8 @@ import { UsersComponent } from './users/users.component';
 import { UserPermissionsComponent } from './users/user-permissions/user-permissions.component';
 import { ListesComponent } from './security/listes/listes.component';
 import { CaisseComponent } from './vente/caisse/caisse.component';
-import { CaisseRecettesComponent } from './vente/caisse/caisse-recettes.component';
-import { CaisseDepensesComponent } from './vente/caisse/caisse-depenses.component';
+import { CaisseRecetteDepenseComponent } from './vente/caisse/caisse-recette-depense.component';
+import { EditCaisseRecetteDepenseComponent } from './vente/edit/edit-caisse-recette-depense/edit-caisse-recette-depense.component';
 import { BonCommandeComponent } from './achat/bon-commande/bon-commande.component';
 import { EditBonCommandeComponent } from './achat/edit/edit-bon-commande/edit-bon-commande.component';
 import { DemandeAchatComponent } from './achat/demande-achat/demande-achat.component';
@@ -47,6 +50,8 @@ import { NotificationComponent } from './notification/notification.component';
 import { FactureFournisseurComponent } from './achat/facture-fournisseur/facture-fournisseur.component';
 import { ReceptionComponent } from './achat/reception/reception.component';
 import { EditReceptionComponent } from './achat/edit/edit-reception/edit-reception.component';
+import { EditFactureFournisseurComponent } from './achat/edit/edit-facture-fournisseur/edit-facture-fournisseur.component';
+import { AchatReportingComponent } from './achat/achat-reporting/achat-reporting.component';
 
 // Import des composants Stock
 import { StockEntreeComponent } from './stock/stock-entree/stock-entree.component';
@@ -54,6 +59,8 @@ import { StockSortieComponent } from './stock/stock-sortie/stock-sortie.componen
 import { StockInventaireComponent } from './stock/stock-inventaire/stock-inventaire.component';
 import { StockHistoriqueComponent } from './stock/stock-historique/stock-historique.component';
 import { StockReportingComponent } from './stock/stock-reporting/stock-reporting.component';
+import { StockPreparationComponent } from './stock/stock-preparation/stock-preparation.component';
+import { StockEntrepotComponent } from './stock/stock-entrepot/stock-entrepot.component';
 import { VenteReportingComponent } from './vente/vente-reporting/vente-reporting.component';
 import { FinanceReportingComponent } from './finance/finance-reporting/finance-reporting.component';
 import { InterventionListComponent } from './interventions/intervention-list.component';
@@ -64,6 +71,7 @@ import { BeneficiaireComponent } from './base/beneficiaire/beneficiaire.componen
 import { DepartementComponent } from './base/departement/departement.component';
 import { CompteurComponent } from './base/compteur/compteur.component';
 import { UniteComponent } from './base/unite/unite.component';
+import { ProfileComponent } from './security/profile/profile.component';
 
 const routes: Routes = [
   {
@@ -97,6 +105,10 @@ const routes: Routes = [
   {
     path: 'Produit',
     component: ProduitComponent,
+  },
+  {
+    path: 'Warehouse',
+    component: WarehouseComponent,
   },
   {
     path: 'Famille',
@@ -139,12 +151,26 @@ const routes: Routes = [
     component: CaisseComponent,
   },
   {
+    path: 'Caisse-Recette-Depense',
+    component: CaisseRecetteDepenseComponent,
+  },
+  {
+    path: 'Edit-Depense-Recette/:document_id',
+    component: EditCaisseRecetteDepenseComponent,
+  },
+  {
+    path: 'edit-depense-recette/:document_id',
+    component: EditCaisseRecetteDepenseComponent,
+  },
+  {
     path: 'Caisse-Recettes',
-    component: CaisseRecettesComponent,
+    redirectTo: 'Caisse-Recette-Depense',
+    pathMatch: 'full'
   },
   {
     path: 'Caisse-Depenses',
-    component: CaisseDepensesComponent,
+    redirectTo: 'Caisse-Recette-Depense',
+    pathMatch: 'full'
   },
   {
     path: 'Bon-Commande',
@@ -163,6 +189,10 @@ const routes: Routes = [
     component: ReceptionComponent,
   },
   {
+    path: 'Achat/Reporting',
+    component: AchatReportingComponent,
+  },
+  {
     path: 'Users',
     component: UsersComponent,
   },
@@ -173,6 +203,10 @@ const routes: Routes = [
   {
     path: 'Listes',
     component: ListesComponent,
+  },
+  {
+    path: 'Profile',
+    component: ProfileComponent,
   },
   {
     path: 'Notifications',
@@ -193,6 +227,10 @@ const routes: Routes = [
   {
     path: 'Edit-Produit/:article_id',
     component: EditProduitArticleComponent,
+  },
+  {
+    path: 'Edit-Warehouse/:id',
+    component: EditWarehouseComponent,
   },
   {
     path: 'Edit-Devis/:document_id',
@@ -219,6 +257,10 @@ const routes: Routes = [
     component: EditInventaireComponent,
   },
   {
+    path: 'Edit-Preparation/:id',
+    component: EditPreparationComponent,
+  },
+  {
     path: 'Edit-Contrat/:id',
     component: EditContratComponent,
   },
@@ -243,8 +285,24 @@ const routes: Routes = [
     component: EditReceptionComponent,
   },
   {
+    path: 'Ajout-Facture-Fournisseur',
+    component: EditFactureFournisseurComponent,
+  },
+  {
+    path: 'Edit-Facture-Fournisseur/:facture_id',
+    component: EditFactureFournisseurComponent,
+  },
+  {
     path: 'generation',
     loadChildren: () => import('./generation/generation.module').then(m => m.GenerationModule)
+  },
+  {
+    path: 'Stock/Preparation',
+    component: StockPreparationComponent
+  },
+  {
+    path: 'Stock/Entrepot',
+    component: StockEntrepotComponent
   },
   {
     path: 'Stock/Entree',
@@ -330,4 +388,3 @@ const routes: Routes = [
   exports: [RouterModule]
 })
 export class AppRoutingModule { }
-

@@ -1,6 +1,8 @@
 const User = require('../models/user.model');
 const bcrypt = require('bcryptjs');
 
+const passwordPolicyRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+
 exports.getAllUsers = async (sequelizeConnection = null) => {
   // Si une connexion est fournie, utiliser une requête SQL directe
   if (sequelizeConnection) {
@@ -149,4 +151,59 @@ exports.resetPassword = async (id, password, sequelizeConnection = null) => {
   if (!user) throw new Error('Utilisateur non trouvé');
   user.pass = hashedPassword;
   return await user.save();
+};
+
+exports.changePassword = async (userId, currentPassword, newPassword, sequelizeConnection = null) => {
+  if (!userId) throw new Error('Utilisateur invalide');
+  if (!currentPassword || !newPassword) throw new Error('Mot de passe actuel et nouveau mot de passe requis');
+  if (!passwordPolicyRegex.test(newPassword)) {
+    throw new Error('Le nouveau mot de passe ne respecte pas les normes de securite');
+  }
+
+  const connection = sequelizeConnection;
+
+  if (connection) {
+    const user = await connection.query(`
+      SELECT id, pass
+      FROM users
+      WHERE id = :id
+    `, {
+      replacements: { id: userId },
+      type: connection.QueryTypes.SELECT
+    });
+
+    const currentUser = Array.isArray(user) ? user[0] : user;
+    if (!currentUser) throw new Error('Utilisateur non trouve');
+    if (!currentUser.pass) throw new Error('Mot de passe introuvable');
+
+    const isValid = await bcrypt.compare(currentPassword, currentUser.pass);
+    if (!isValid) throw new Error('Mot de passe actuel incorrect');
+    const isSamePassword = await bcrypt.compare(newPassword, currentUser.pass);
+    if (isSamePassword) throw new Error('Ce mot de passe existe deja');
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await connection.query(`
+      UPDATE users
+      SET pass = :password
+      WHERE id = :id
+    `, {
+      replacements: { id: userId, password: hashedPassword },
+      type: connection.QueryTypes.UPDATE
+    });
+
+    return { success: true };
+  }
+
+  const user = await User.findByPk(userId);
+  if (!user) throw new Error('Utilisateur non trouve');
+  if (!user.pass) throw new Error('Mot de passe introuvable');
+
+  const isValid = await bcrypt.compare(currentPassword, user.pass);
+  if (!isValid) throw new Error('Mot de passe actuel incorrect');
+  const isSamePassword = await bcrypt.compare(newPassword, user.pass);
+  if (isSamePassword) throw new Error('Ce mot de passe existe deja');
+
+  user.pass = await bcrypt.hash(newPassword, 10);
+  await user.save();
+  return { success: true };
 };

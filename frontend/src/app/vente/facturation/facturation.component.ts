@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { AfterViewInit, ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { VentesService } from 'src/app/service/ventes.service';
 import { EmailService } from 'src/app/service/email.service';
@@ -11,7 +11,24 @@ import Swal from 'sweetalert2';
   templateUrl: './facturation.component.html',
   styleUrls: ['./facturation.component.css']
 })
-export class FacturationComponent implements OnInit, AfterViewInit {
+export class FacturationComponent implements OnInit, AfterViewInit, OnDestroy {
+  readonly defaultColumnWidths: Record<string, string> = {
+    facture_num: '120px',
+    facture_dat: '150px',
+    client: '200px',
+    total_ht: '100px',
+    total_tva: '100px',
+    total_ttc: '110px',
+    status: '95px',
+    date_echeance: '150px',
+    jours_restants_echeance: '95px',
+    numero_livraison: '150px'
+  };
+  readonly detailColumns: string[] = [
+    'date_echeance',
+    'jours_restants_echeance',
+    'numero_livraison'
+  ];
   factures: any[] = [];
   allFactures: any[] = []; // Stocker toutes les factures pour le filtrage
   loading: boolean = true;
@@ -51,7 +68,11 @@ export class FacturationComponent implements OnInit, AfterViewInit {
     total_ht: '',
     total_tva: '',
     total_ttc: '',
-    status: ''
+    status: '',
+    condition_paiement: '',
+    date_echeance: '',
+    jours_restants_echeance: '',
+    numero_livraison: ''
   };
 
   // Options pour le filtre Etat
@@ -72,17 +93,37 @@ export class FacturationComponent implements OnInit, AfterViewInit {
     total_ht: true,
     total_tva: true,
     total_ttc: true,
-    status: true
+    status: true,
+    date_echeance: false,
+    jours_restants_echeance: false,
+    numero_livraison: false
   };
 
   pinnedColumns: string[] = [];
-  columnWidths: any = {};
+  columnWidths: any = { ...this.defaultColumnWidths };
   showColumnMenu: boolean = false;
   activeColumnMenu: string = '';
   menuPosition: any = { x: 0, y: 0 };
+  resizingColumn: string | null = null;
+  resizeStartX = 0;
+  resizeStartWidth = 0;
+
+  showParcoursModal: boolean = false;
+  parcoursLoading: boolean = false;
+  parcoursError: string = '';
+  factureParcours: any = null;
+  showLivraisonDetailsModal: boolean = false;
+  livraisonDetailsLoading: boolean = false;
+  livraisonDetailsError: string = '';
+  factureLivraisonDetails: any = null;
+  selectedFacture: any = null;
 
   // Vérifier si l'utilisateur a accès à l'interface contrat
   hasContratAccess: boolean = false;
+  detailMode: boolean = false;
+  private sidebarStateBeforeDetailMode: boolean | null = null;
+  private readonly livraisonFocusStorageKey = 'facturation-focus-livraison';
+  private sidebarObserver: MutationObserver | null = null;
 
   constructor(
     private ventesService: VentesService,
@@ -111,6 +152,186 @@ export class FacturationComponent implements OnInit, AfterViewInit {
         }
       }
     });
+
+    this.startSidebarObserver();
+  }
+
+  ngOnDestroy(): void {
+    this.onDocumentMouseUp();
+    this.sidebarObserver?.disconnect();
+    this.sidebarObserver = null;
+    if (this.detailMode && this.sidebarStateBeforeDetailMode === false) {
+      this.setSidebarHidden(false);
+    }
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscapeKey(): void {
+    if (this.showLivraisonDetailsModal) {
+      this.closeFactureLivraisonDetails();
+      return;
+    }
+
+    if (this.showParcoursModal) {
+      this.closeFactureParcours();
+    }
+  }
+
+  toggleDetailMode(): void {
+    if (!this.detailMode) {
+      this.sidebarStateBeforeDetailMode = this.isSidebarHidden();
+    }
+
+    this.detailMode = !this.detailMode;
+    this.applyDetailMode();
+  }
+
+  private applyDetailMode(): void {
+    this.detailColumns.forEach((column) => {
+      this.columnVisibility[column] = this.detailMode;
+    });
+
+    if (this.detailMode) {
+      this.setSidebarHidden(true);
+      return;
+    }
+
+    if (this.sidebarStateBeforeDetailMode === false) {
+      this.setSidebarHidden(false);
+    }
+    this.sidebarStateBeforeDetailMode = null;
+  }
+
+  private isSidebarHidden(): boolean {
+    return !!document.querySelector('.wrapper.sidebar-hidden-desktop');
+  }
+
+  private setSidebarHidden(hidden: boolean): void {
+    const currentlyHidden = this.isSidebarHidden();
+    if (currentlyHidden === hidden) {
+      return;
+    }
+
+    const selector = hidden ? '.toggle-sidebar' : '.btn-sidebar-toggle-float, .toggle-sidebar';
+    const toggleButton = document.querySelector(selector) as HTMLElement | null;
+    toggleButton?.click();
+  }
+
+  private startSidebarObserver(): void {
+    const wrapper = document.querySelector('.wrapper');
+    if (!wrapper) {
+      return;
+    }
+
+    this.sidebarObserver?.disconnect();
+    this.sidebarObserver = new MutationObserver(() => {
+      if (this.detailMode && !this.isSidebarHidden()) {
+        this.detailMode = false;
+        this.applyDetailMode();
+        this.cdr.detectChanges();
+      }
+    });
+
+    this.sidebarObserver.observe(wrapper, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+  }
+
+  getJoursRestantsLabel(value: any): string {
+    if (value === null || value === undefined || value === '') {
+      return '-';
+    }
+
+    const days = Number(value);
+    if (!Number.isFinite(days)) {
+      return '-';
+    }
+
+    if (days === 0) {
+      return 'Aujourd’hui';
+    }
+
+    if (days < 0) {
+      return `${Math.abs(days)} jour${Math.abs(days) > 1 ? 's' : ''} de retard`;
+    }
+
+    return `${days} jour${days > 1 ? 's' : ''}`;
+  }
+
+  isFactureReglee(status: any): boolean {
+    const normalizedStatus = String(status || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+
+    return normalizedStatus === 'regle' || normalizedStatus === 'reglee' || normalizedStatus === 'payee';
+  }
+
+  formatTableDate(value: any): string {
+    if (!value) {
+      return '-';
+    }
+
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const formatParts = (day: number, month: number, year: string | number): string =>
+      `${pad(day)}/${pad(month)}/${year}`;
+
+    if (value instanceof Date && !isNaN(value.getTime())) {
+      return formatParts(
+        value.getDate(),
+        value.getMonth() + 1,
+        value.getFullYear()
+      );
+    }
+
+    const rawValue = String(value).trim();
+    const isoDateMatch = rawValue.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (isoDateMatch) {
+      return formatParts(
+        Number(isoDateMatch[3]),
+        Number(isoDateMatch[2]),
+        isoDateMatch[1]
+      );
+    }
+
+    const frenchDateMatch = rawValue.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (frenchDateMatch) {
+      return formatParts(
+        Number(frenchDateMatch[1]),
+        Number(frenchDateMatch[2]),
+        frenchDateMatch[3]
+      );
+    }
+
+    const parsedDate = new Date(rawValue.replace(' ', 'T'));
+    if (isNaN(parsedDate.getTime())) {
+      return '-';
+    }
+
+    return formatParts(
+      parsedDate.getDate(),
+      parsedDate.getMonth() + 1,
+      parsedDate.getFullYear()
+    );
+  }
+
+  getJoursRestantsBadgeClass(value: any): string {
+    const days = Number(value);
+    if (!Number.isFinite(days)) {
+      return 'jours-badge jours-badge--muted';
+    }
+
+    if (days < 0) {
+      return 'jours-badge jours-badge--danger';
+    }
+
+    if (days <= 7) {
+      return 'jours-badge jours-badge--warning';
+    }
+
+    return 'jours-badge jours-badge--success';
   }
 
   loadFactures(page: number = 1, search: string = '', resetFilters: boolean = false): void {
@@ -132,7 +353,11 @@ export class FacturationComponent implements OnInit, AfterViewInit {
         total_ht: '',
         total_tva: '',
         total_ttc: '',
-        status: ''
+        status: '',
+        condition_paiement: '',
+        date_echeance: '',
+        jours_restants_echeance: '',
+        numero_livraison: ''
       };
     }
 
@@ -157,7 +382,7 @@ export class FacturationComponent implements OnInit, AfterViewInit {
         const pagination = response.pagination || {};
         
         // Les données sont déjà filtrées et paginées par le serveur
-        let factures = Array.isArray(result) ? result : [];
+        let factures = (Array.isArray(result) ? result : []).filter(f => !this.isAvoirFacture(f));
         
         // Stocker toutes les factures pour le filtrage
         this.allFactures = factures;
@@ -182,6 +407,10 @@ export class FacturationComponent implements OnInit, AfterViewInit {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  private isAvoirFacture(facture: any): boolean {
+    return String(facture?.facture_num || '').trim().toUpperCase().startsWith('AV');
   }
 
   onPageChange(page: number): void {
@@ -300,16 +529,16 @@ export class FacturationComponent implements OnInit, AfterViewInit {
     
     if (this.filterClient) {
       filtered = filtered.filter(f => 
-        f.nom?.toLowerCase().includes(this.filterClient.toLowerCase())
+        f.client?.toLowerCase().includes(this.filterClient.toLowerCase())
       );
     }
     
     if (this.filterMontantMin !== null && this.filterMontantMin !== undefined) {
-      filtered = filtered.filter(f => (f.facture_ttc || 0) >= this.filterMontantMin!);
+      filtered = filtered.filter(f => (f.total_ttc || 0) >= this.filterMontantMin!);
     }
     
     if (this.filterMontantMax !== null && this.filterMontantMax !== undefined) {
-      filtered = filtered.filter(f => (f.facture_ttc || 0) <= this.filterMontantMax!);
+      filtered = filtered.filter(f => (f.total_ttc || 0) <= this.filterMontantMax!);
     }
     
     return filtered;
@@ -398,6 +627,34 @@ export class FacturationComponent implements OnInit, AfterViewInit {
       );
     }
 
+    if (this.columnFilters.condition_paiement) {
+      filtered = filtered.filter(f =>
+        f.condition_paiement?.toLowerCase().includes(this.columnFilters.condition_paiement.toLowerCase())
+      );
+    }
+
+    if (this.columnFilters.date_echeance) {
+      const filterDate = new Date(this.columnFilters.date_echeance);
+      filtered = filtered.filter(f => {
+        if (!f.date_echeance) return false;
+        const echeanceDate = new Date(f.date_echeance);
+        return echeanceDate.toDateString() === filterDate.toDateString();
+      });
+    }
+
+    if (this.columnFilters.jours_restants_echeance !== '' && this.columnFilters.jours_restants_echeance !== null) {
+      const days = Number(this.columnFilters.jours_restants_echeance);
+      if (!Number.isNaN(days)) {
+        filtered = filtered.filter(f => Number(f.jours_restants_echeance) <= days);
+      }
+    }
+
+    if (this.columnFilters.numero_livraison) {
+      filtered = filtered.filter(f =>
+        f.numero_livraison?.toLowerCase().includes(this.columnFilters.numero_livraison.toLowerCase())
+      );
+    }
+
     return filtered;
   }
 
@@ -442,7 +699,11 @@ export class FacturationComponent implements OnInit, AfterViewInit {
       total_ht: '',
       total_tva: '',
       total_ttc: '',
-      status: ''
+      status: '',
+      condition_paiement: '',
+      date_echeance: '',
+      jours_restants_echeance: '',
+      numero_livraison: ''
     };
     this.loadFactures(1, this.searchTerm);
   }
@@ -484,6 +745,11 @@ export class FacturationComponent implements OnInit, AfterViewInit {
     this.activeColumnMenu = '';
   }
 
+  openColumnMenu(event: MouseEvent, column: string): void {
+    event.stopPropagation();
+    this.showColumnContextMenu(event, column);
+  }
+
   // Toggle visibilité d'une colonne
   toggleColumnVisibility(column: string): void {
     this.columnVisibility[column] = !this.columnVisibility[column];
@@ -505,6 +771,64 @@ export class FacturationComponent implements OnInit, AfterViewInit {
 
   isColumnPinned(column: string): boolean {
     return this.pinnedColumns.includes(column);
+  }
+
+  startColumnResize(event: MouseEvent, column: string, headerEl: HTMLElement): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.resizingColumn = column;
+    this.resizeStartX = event.clientX;
+    this.resizeStartWidth = headerEl?.offsetWidth || parseInt(String(this.getColumnWidth(column) || ''), 10) || 150;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  @HostListener('document:mousemove', ['$event'])
+  onDocumentMouseMove(event: MouseEvent): void {
+    if (!this.resizingColumn) {
+      return;
+    }
+
+    const delta = event.clientX - this.resizeStartX;
+    const minByColumn: any = {
+      facture_num: 120,
+      facture_dat: 150,
+      client: 190,
+      total_ht: 90,
+      total_tva: 90,
+      total_ttc: 90,
+      status: 100,
+      date_echeance: 150,
+      jours_restants_echeance: 120,
+      numero_livraison: 190
+    };
+    const maxByColumn: any = {
+      facture_num: 260,
+      facture_dat: 220,
+      client: 420,
+      total_ht: 180,
+      total_tva: 180,
+      total_ttc: 180,
+      status: 180,
+      date_echeance: 280,
+      jours_restants_echeance: 220,
+      numero_livraison: 420
+    };
+    const minWidth = minByColumn[this.resizingColumn] ?? 80;
+    const maxWidth = maxByColumn[this.resizingColumn] ?? 600;
+    const nextWidth = Math.max(minWidth, Math.min(maxWidth, this.resizeStartWidth + delta));
+    this.columnWidths[this.resizingColumn] = `${nextWidth}px`;
+  }
+
+  @HostListener('document:mouseup')
+  onDocumentMouseUp(): void {
+    if (!this.resizingColumn) {
+      return;
+    }
+
+    this.resizingColumn = null;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
   }
 
   // Ajuster automatiquement la taille d'une colonne
@@ -546,7 +870,7 @@ export class FacturationComponent implements OnInit, AfterViewInit {
 
   // Ajuster automatiquement toutes les colonnes
   autoSizeAllColumns(): void {
-    const columns = ['facture_num', 'facture_dat', 'nom', 'facture_ht', 'facture_tva', 'facture_ttc'];
+    const columns = this.getAllColumns();
     columns.forEach(col => {
       if (this.columnVisibility[col]) {
         this.autoSizeColumn(col);
@@ -559,20 +883,28 @@ export class FacturationComponent implements OnInit, AfterViewInit {
     this.columnVisibility = {
       facture_num: true,
       facture_dat: true,
-      nom: true,
-      facture_ht: true,
-      facture_tva: true,
-      facture_ttc: true
+      client: true,
+      total_ht: true,
+      total_tva: true,
+      total_ttc: true,
+      status: true,
+      date_echeance: this.detailMode,
+      jours_restants_echeance: this.detailMode,
+      numero_livraison: this.detailMode
     };
     this.pinnedColumns = [];
-    this.columnWidths = {};
+    this.columnWidths = { ...this.defaultColumnWidths };
     this.hideColumnContextMenu();
     this.cdr.detectChanges();
   }
 
+  getColumnWidth(column: string): string {
+    return this.columnWidths[column] || this.defaultColumnWidths[column] || 'auto';
+  }
+
   // Obtenir l'index d'une colonne
   getColumnIndex(column: string): number {
-    const columnOrder = ['facture_num', 'facture_dat', 'client', 'total_ht', 'total_tva', 'total_ttc', 'status'];
+    const columnOrder = this.getAllColumns();
     return columnOrder.indexOf(column);
   }
 
@@ -585,14 +917,28 @@ export class FacturationComponent implements OnInit, AfterViewInit {
       total_ht: 'HT',
       total_tva: 'TVA',
       total_ttc: 'TTC',
-      status: 'Statut'
+      status: 'Statut',
+      date_echeance: 'Echeance',
+      jours_restants_echeance: 'Reste/J',
+      numero_livraison: 'BL affectes'
     };
     return names[column] || column;
   }
 
   // Obtenir toutes les colonnes disponibles
   getAllColumns(): string[] {
-    return ['facture_num', 'facture_dat', 'client', 'total_ht', 'total_tva', 'total_ttc', 'status'];
+    return [
+      'facture_num',
+      'facture_dat',
+      'client',
+      'total_ht',
+      'total_tva',
+      'total_ttc',
+      'status',
+      'date_echeance',
+      'jours_restants_echeance',
+      'numero_livraison'
+    ];
   }
 
   // Obtenir la classe CSS pour le badge de statut
@@ -628,11 +974,11 @@ export class FacturationComponent implements OnInit, AfterViewInit {
     const headers = ['Numéro', 'Date', 'Client', 'HT', 'TVA', 'TTC'];
     const rows = this.factures.map(f => [
       f.facture_num || '',
-      f.facture_dat ? new Date(f.facture_dat).toLocaleDateString('fr-FR') : '',
-      f.nom || '',
-      (f.facture_ht || 0).toFixed(2),
-      (f.facture_tva || 0).toFixed(2),
-      (f.facture_ttc || 0).toFixed(2)
+      this.formatTableDate(f.facture_dat),
+      f.client || '',
+      (f.total_ht || 0).toFixed(2),
+      (f.total_tva || 0).toFixed(2),
+      (f.total_ttc || 0).toFixed(2)
     ]);
 
     const csvContent = [
@@ -653,7 +999,7 @@ export class FacturationComponent implements OnInit, AfterViewInit {
     this.showNotification('✅ Export CSV réussi !', false);
   }
 
-  onPrintFacture(facture_id: any, type: 'standard' | 'contrat' = 'standard') {
+  onPrintFacture(facture_id: any, type: 'standard' | 'simple' | 'contrat' = 'standard') {
     if (!facture_id) {
       Swal.fire({ icon: 'error', title: 'Erreur', text: 'ID de facture introuvable.' });
       return;
@@ -667,9 +1013,9 @@ export class FacturationComponent implements OnInit, AfterViewInit {
       }
     });
     
-    const serviceCall = type === 'contrat' 
+    const serviceCall = type === 'contrat'
       ? this.emailService.generateFactureContratPDF(facture_id.toString())
-      : this.emailService.generateFacturePDF(facture_id.toString());
+      : this.emailService.generateFacturePDF(facture_id.toString(), { simple: type === 'simple' });
     
     serviceCall.subscribe({
       next: (res: any) => {
@@ -686,5 +1032,132 @@ export class FacturationComponent implements OnInit, AfterViewInit {
         Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors de la génération du PDF." });
       }
     });
+  }
+
+  openFactureParcours(facture: any): void {
+    const factureId = Number(facture?.facture_id || 0);
+    if (!factureId) {
+      return;
+    }
+
+    this.selectedFacture = facture;
+    this.showParcoursModal = true;
+    this.parcoursLoading = true;
+    this.parcoursError = '';
+    this.factureParcours = null;
+
+    this.ventesService.getFactureParcours(factureId).subscribe({
+      next: (response: any) => {
+        this.factureParcours = response?.data || response || null;
+        this.parcoursLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: (error: any) => {
+        this.parcoursLoading = false;
+        this.parcoursError = error?.error?.message || 'Erreur lors du chargement du parcours de facture.';
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  closeFactureParcours(): void {
+    this.showParcoursModal = false;
+    this.parcoursLoading = false;
+    this.parcoursError = '';
+    this.factureParcours = null;
+    if (!this.showLivraisonDetailsModal) {
+      this.selectedFacture = null;
+    }
+  }
+
+  getParcoursDocuments(key: 'commandes' | 'preparations' | 'livraisons'): any[] {
+    const documents = this.factureParcours?.[key];
+    return Array.isArray(documents) ? documents : [];
+  }
+
+  getParcoursStepSubtitle(step: any): string {
+    const count = Number(step?.count || 0);
+    const status = String(step?.status || '');
+
+    if (status === 'direct') {
+      return 'Transfert direct';
+    }
+
+    if (count === 0) {
+      return 'Aucun document';
+    }
+
+    return count === 1 ? '1 document' : `${count} documents`;
+  }
+
+  getParcoursStepClass(step: any): string {
+    const status = String(step?.status || 'pending');
+    return `is-${status}`;
+  }
+
+  getLivraisonSourceLabel(livraison: any): string {
+    const sourceNumero = String(livraison?.source_numero || '').trim();
+    if (!sourceNumero) {
+      return '';
+    }
+
+    return livraison?.source_type === 'preparation'
+      ? `Depuis préparation ${sourceNumero}`
+      : `Depuis commande ${sourceNumero}`;
+  }
+  openFactureLivraisonDetails(facture: any): void {
+    const factureId = Number(facture?.facture_id || 0);
+    if (!factureId) {
+      return;
+    }
+
+    this.selectedFacture = facture;
+    this.showLivraisonDetailsModal = true;
+    this.livraisonDetailsLoading = true;
+    this.livraisonDetailsError = '';
+    this.factureLivraisonDetails = null;
+
+    this.ventesService.getFactureLivraisonDetails(factureId).subscribe({
+      next: (response: any) => {
+        this.factureLivraisonDetails = response?.data || response || null;
+        this.livraisonDetailsLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: (error: any) => {
+        this.livraisonDetailsLoading = false;
+        this.livraisonDetailsError = error?.error?.message || 'Erreur lors du chargement du détail des bons de livraison.';
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  closeFactureLivraisonDetails(): void {
+    this.showLivraisonDetailsModal = false;
+    this.livraisonDetailsLoading = false;
+    this.livraisonDetailsError = '';
+    this.factureLivraisonDetails = null;
+    if (!this.showParcoursModal) {
+      this.selectedFacture = null;
+    }
+  }
+
+  getFactureLivraisonDocuments(): any[] {
+    const livraisons = this.factureLivraisonDetails?.livraisons;
+    return Array.isArray(livraisons) ? livraisons : [];
+  }
+
+  openLivraisonFromFacture(livraison: any): void {
+    const numero = String(livraison?.numero || '').trim();
+    if (!numero) {
+      return;
+    }
+
+    localStorage.setItem(this.livraisonFocusStorageKey, JSON.stringify({
+      numero,
+      timestamp: Date.now()
+    }));
+
+    this.closeFactureLivraisonDetails();
+    this.router.navigate(['/Livraison']);
   }
 }

@@ -14,6 +14,36 @@ function stripHtmlTags(str) {
   return str.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
 }
 
+function formatPdfNumber(value, digits = 2) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return '0';
+  return n.toFixed(digits).replace('.', ',');
+}
+
+function buildNomenclatureInlineHtml(nodes, depth = 0) {
+  const safeNodes = Array.isArray(nodes) ? nodes : [];
+  if (safeNodes.length === 0) return '';
+
+  const items = safeNodes.map((node) => {
+    const label = [
+      node?.code || '',
+      node?.designation || 'Composant'
+    ].filter(Boolean).join(' - ');
+    const quantity = node?.quantiteTotale ?? node?.quantite ?? 0;
+    const line = `${label} | Qté ${formatPdfNumber(quantity)}`;
+    const children = buildNomenclatureInlineHtml(node?.children, depth + 1);
+    return `<li>${line}${children}</li>`;
+  }).join('');
+
+  return `<ul>${items}</ul>`;
+}
+
+function appendNomenclatureToDesignation(designationHtml, nodes) {
+  const treeHtml = buildNomenclatureInlineHtml(nodes);
+  if (!treeHtml) return designationHtml || '';
+  return `${designationHtml || ''}<br><strong>Composition</strong>${treeHtml}`;
+}
+
 function parseColor(value) {
   if (!value) return '#000000';
   value = value.trim();
@@ -152,6 +182,9 @@ class CommandePdfService {
         // === ENTÊTE ENTREPRISE ===
         // Récupérer la taille du logo depuis la configuration
         const logoSize = options.documentSociete?.logoSize || { width: 100, height: null };
+        const configuredLogoTop = Number(options.documentSociete?.logoTop);
+        const logoTop = Number.isFinite(configuredLogoTop) ? configuredLogoTop : 14;
+        const headerShift = Math.max(0, 14 - logoTop);
         const imageOptions = { width: logoSize.width };
         if (logoSize.height) {
           imageOptions.height = logoSize.height;
@@ -162,7 +195,7 @@ class CommandePdfService {
         if (options.documentSociete && options.documentSociete.logo) {
           try {
             const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-            doc.image(logoBuffer, 50, 20, imageOptions);
+            doc.image(logoBuffer, 50, logoTop, imageOptions);
             logoDrawn = true;
           } catch (error) {
             console.warn('[commande-pdf] Erreur affichage logo base64, tentative avec chemin:', error.message);
@@ -172,9 +205,9 @@ class CommandePdfService {
         // Si le logo n'a pas pu être chargé depuis base64, essayer depuis le chemin de configuration
         if (!logoDrawn) {
           try {
-            const logoPath = pdfConfigService.getLogoPath();
+            const logoPath = options.documentSociete?.logoPath || pdfConfigService.getLogoPath();
             if (logoPath && fs.existsSync(logoPath)) {
-              doc.image(logoPath, 50, 20, imageOptions);
+              doc.image(logoPath, 50, logoTop, imageOptions);
               logoDrawn = true;
             }
           } catch (error) {
@@ -186,7 +219,7 @@ class CommandePdfService {
         if (!logoDrawn) {
           const defaultLogoPath = path.join(__dirname, '..', 'public', 'Cactus.png');
           if (fs.existsSync(defaultLogoPath)) {
-            doc.image(defaultLogoPath, 50, 20, imageOptions);
+            doc.image(defaultLogoPath, 50, logoTop, imageOptions);
           }
         }
 
@@ -197,7 +230,7 @@ class CommandePdfService {
           if (typeof entete === 'object' || (typeof entete === 'string' && entete.trim())) {
             renderFormattedText(doc, entete, {
               startX: 160,
-              startY: 20,
+              startY: Math.max(8, 20 - headerShift),
               defaultFontSize: 10,
               defaultColor: '#046ba7',
               defaultFont: 'Helvetica-Bold',
@@ -209,28 +242,53 @@ class CommandePdfService {
         }
 
         // Ligne de séparation horizontale
-        doc.rect(40, 100, 520, 1).fill('#000');
+        const separatorY = Math.max(48, 100 - headerShift);
+        doc.rect(40, separatorY, 520, 1).fill('#000');
 
         // === TITRE BON DE COMMANDE (en haut à gauche) ===
-        doc.fontSize(20).font('Helvetica-Bold').fillColor('#000').text('BON DE COMMANDE', 50, 120);
+        const titleY = separatorY + 20;
+        doc.fontSize(20).font('Helvetica-Bold').fillColor('#000').text('BON DE COMMANDE', 50, titleY);
 
         // === BLOC CLIENT (en haut à droite avec bordure arrondie) ===
-        const clientTop = 110;
+        const clientTop = Math.max(separatorY + 10, 110 - headerShift);
         const clientBoxWidth = 260;
-        const clientBoxHeight = 60;
         const clientBoxX = 300;
         const borderRadius = 5;
+        const clientLabelX = clientBoxX + 10;
+        const clientValueX = clientBoxX + 52;
+        const clientTextWidth = clientBoxWidth - (clientValueX - clientBoxX) - 10;
+        const clientDisplayName = String(commandeData[0].client || '');
+        const clientAdresseDisplay = String(commandeData[0].adresse || '');
+        const clientVilleDisplay = String(commandeData[0].ville || '');
+        const clientIceDisplay = String(commandeData[0].ice || '');
+
+        doc.fontSize(10).font('Helvetica');
+        const clientNameHeight = Math.max(12, doc.heightOfString(clientDisplayName, { width: clientTextWidth, align: 'left' }));
+        const addressHeight = Math.max(12, doc.heightOfString(clientAdresseDisplay, { width: clientTextWidth, align: 'left' }));
+        const clientBoxHeight = Math.max(82, Math.min(96, 18 + clientNameHeight + 4 + addressHeight + 4 + 12 + (clientVilleDisplay ? 16 : 0)));
 
         // Dessiner un rectangle avec coins arrondis
         doc.roundedRect(clientBoxX, clientTop, clientBoxWidth, clientBoxHeight, borderRadius).stroke('#000');
 
-        doc.fontSize(10).font('Helvetica');
-        doc.text(`Client : ${commandeData[0].client}`, clientBoxX + 10, clientTop + 10);
-        doc.text(`Adresse : ${commandeData[0].adresse || ''}`, clientBoxX + 10, clientTop + 25);
-        doc.text(`${commandeData[0].ville || ''}`, clientBoxX + 10, clientTop + 40);
+        doc.fontSize(10).fillColor('#000');
+        let clientInfoY = clientTop + 10;
+        doc.font('Helvetica-Bold').text('Client :', clientLabelX, clientInfoY, { width: 40, align: 'left' });
+        doc.font('Helvetica').text(clientDisplayName, clientValueX, clientInfoY, { width: clientTextWidth, align: 'left' });
+        clientInfoY += clientNameHeight + 4;
+        doc.font('Helvetica-Bold').text('Adresse :', clientLabelX, clientInfoY, { width: 40, align: 'left' });
+        doc.font('Helvetica').text(clientAdresseDisplay, clientValueX, clientInfoY, { width: clientTextWidth, align: 'left' });
+        clientInfoY += addressHeight + 4;
+        doc.font('Helvetica-Bold').text('ICE :', clientLabelX, clientInfoY, { width: 40, align: 'left' });
+        doc.font('Helvetica').text(clientIceDisplay, clientValueX, clientInfoY, { width: clientTextWidth, align: 'left' });
+        if (clientVilleDisplay) {
+          const cityY = Math.min(clientTop + clientBoxHeight - 14, clientInfoY + 14);
+          if (cityY > clientInfoY + 8) {
+            doc.font('Helvetica').text(clientVilleDisplay, clientLabelX, cityY, { width: clientBoxWidth - 20, align: 'left' });
+          }
+        }
 
         // === TABLEAU D'EN-TÊTE (Bon de Commande N° | Date | Vos Réf) avec bordures arrondies ===
-        const infoTableY = 210;
+        const infoTableY = Math.max(clientTop + clientBoxHeight + 12, titleY + 40);
         const infoTableHeaderHeight = 25;
         const infoTableRowHeight = 20;
         const infoTableTotalHeight = infoTableHeaderHeight + infoTableRowHeight;
@@ -262,28 +320,31 @@ class CommandePdfService {
         let y = infoTableY + infoTableTotalHeight + 10;
         const tableStartY = y;
         const articlesTableHeaderHeight = 20;
+        const fixedDetailsTableHeight = 250; // Comme BL normal: reserve un espace visuel constant
 
         // En-tête du tableau avec fond gris ciel et bordures arrondies (avec bordure visible)
         const lightGrayColor = '#E0E0E0'; // Gris ciel
-        doc.roundedRect(50, y, 510, articlesTableHeaderHeight, tableBorderRadius).fill(lightGrayColor).stroke('#000');
+        const tableStartX = 40;
+        const tableWidth = 525;
+        doc.roundedRect(tableStartX, y, tableWidth, articlesTableHeaderHeight, tableBorderRadius).fill(lightGrayColor).stroke('#000');
         // Ajouter une bordure supplémentaire pour plus de visibilité
-        doc.lineWidth(1).roundedRect(50, y, 510, articlesTableHeaderHeight, tableBorderRadius).stroke('#000');
+        doc.lineWidth(1).roundedRect(tableStartX, y, tableWidth, articlesTableHeaderHeight, tableBorderRadius).stroke('#000');
         doc.font('Helvetica-Bold').fontSize(9).fillColor('#000'); // Texte en noir sur fond gris
 
         // Positions des colonnes selon le devis - ajustées pour plus d'espace pour la désignation
-        const colRefX = 50;
-        const colDesignationX = 100;
-        const colQteX = 350;
-        const colPUX = 410;
+        const colRefX = 40;
+        const colDesignationX = 110;
+        const colQteX = 370;
+        const colPUX = 415;
         const colRX = 460;
-        const colHTX = 510;
+        const colHTX = 500;
 
-        const colRefWidth = 50;
-        const colDesignationWidth = 250;
+        const colRefWidth = 70;
+        const colDesignationWidth = 260;
         const colDesignationPadding = 8;
-        const colQteWidth = 60;
-        const colPUWidth = 50;
-        const colRWidth = 50;
+        const colQteWidth = 45;
+        const colPUWidth = 45;
+        const colRWidth = 35;
         const colHTWidth = 50;
 
         // Centraliser les headers avec leurs colonnes
@@ -295,13 +356,18 @@ class CommandePdfService {
         doc.text('H.T.', colHTX, y + 6, { width: colHTWidth, align: 'center' });
 
         y += articlesTableHeaderHeight;
+        const detailsBodyY = y;
+        doc.rect(tableStartX, detailsBodyY, tableWidth, fixedDetailsTableHeight).stroke('#000');
+        [110, colQteX, colPUX, colRX, colHTX].forEach((x) => doc.moveTo(x, detailsBodyY).lineTo(x, detailsBodyY + fixedDetailsTableHeight).stroke('#000'));
 
         doc.font('Helvetica').fillColor('#000000').stroke('#000');
 
         if (commandeData && commandeData.length > 0) {
           commandeData.forEach(line => {
             const ref = line.article_cod || '';
-            const designationHtml = line.article || '';
+            const designationHtml = options.showNomenclatureComponents
+              ? appendNomenclatureToDesignation(line.article || '', line.nomenclatureComponents)
+              : (line.article || '');
             const pu = isNaN(Number(line.prix)) ? 0 : Number(line.prix);
             const qte = isNaN(Number(line.quantite)) ? 0 : Number(line.quantite);
             // Dans le SQL, 'remise' contient déjà le HT après remise
@@ -400,35 +466,35 @@ class CommandePdfService {
             const centerY = validY + (validRowHeight / 2) - 3; // Centre vertical de la ligne
 
             // Draw row container avec bordures arrondies
-            doc.roundedRect(50, validY, 510, validRowHeight, tableBorderRadius).stroke('#000');
+
 
             // Réf : colonne 55-100
             doc.font('Helvetica').fontSize(9).fillColor('#000000');
-            doc.text(ref || '', colRefX, validY + 6, { width: colRefWidth, align: 'left' });
+            doc.text(ref || '', colRefX, centerY, { width: colRefWidth, align: 'center' });
 
             // Qté : colonne 320-375 (centré verticalement - affichage clair)
-            const qteText = qte.toFixed(2).replace('.', ',');
+            const qteText = `${Math.round(qte)}`;
             doc.font('Helvetica').fontSize(9).fillColor('#000000');
-            doc.text(qteText, colQteX, centerY, { width: colQteWidth, align: 'right' });
+            doc.text(qteText, colQteX, centerY, { width: colQteWidth, align: 'center' });
 
             // P.U. : colonne 380-425 (centré verticalement - affichage clair)
             const puText = pu.toFixed(2).replace('.', ',');
             doc.font('Helvetica').fontSize(9).fillColor('#000000');
-            doc.text(puText, colPUX, centerY, { width: colPUWidth, align: 'right' });
+            doc.text(puText, colPUX, centerY, { width: colPUWidth, align: 'center' });
 
             // R. (Remise) : colonne 430-485 (centré verticalement - affichage clair)
             const remiseValue = (typeof montantRemise === 'number' && montantRemise !== null && montantRemise !== undefined)
               ? montantRemise.toFixed(2).replace('.', ',')
               : '0,00';
             doc.font('Helvetica').fontSize(9).fillColor('#000000');
-            doc.text(remiseValue, colRX, centerY, { width: colRWidth, align: 'right' });
+            doc.text(remiseValue, colRX, centerY, { width: colRWidth, align: 'center' });
 
             // H.T. : colonne 490-540 (centré verticalement - affichage clair)
             const htValue = (typeof ht === 'number' && ht !== null && ht !== undefined)
               ? ht.toFixed(2).replace('.', ',')
               : '0,00';
             doc.font('Helvetica').fontSize(9).fillColor('#000000');
-            doc.text(htValue, colHTX, centerY, { width: colHTWidth, align: 'right' });
+            doc.text(htValue, colHTX, centerY, { width: colHTWidth, align: 'center' });
 
             // Désignation : colonne 105-305 (avec couleurs HTML) - affichage clair amélioré
             renderInlineHtml(doc, designationHtml, colDesignationX, validY + 6, effectiveDesignationWidth, validRowHeight - 8);
@@ -437,14 +503,19 @@ class CommandePdfService {
             doc.font('Helvetica').fontSize(9).fillColor('#000000');
 
             // Vertical separators - ajustées pour les nouvelles positions
-            const xPositions = [100, colQteX, colPUX, colRX, colHTX, 560];
-            xPositions.forEach(x => doc.moveTo(x, validY).lineTo(x, validY + validRowHeight).stroke('#000'));
+
 
             y = validY + validRowHeight;
           });
         } else {
           doc.text('Aucune ligne disponible.', 60, y + 10);
           y += 30;
+        }
+
+        // Réserver un espace minimum pour le tableau de détails (rendu plus professionnel, comme BL)
+        const minDetailsBottomY = tableStartY + articlesTableHeaderHeight + fixedDetailsTableHeight;
+        if (y < minDetailsBottomY) {
+          y = minDetailsBottomY;
         }
 
         // === PAS DE TOTAUX POUR LES COMMANDES ===
@@ -584,4 +655,3 @@ class CommandePdfService {
 }
 
 module.exports = new CommandePdfService();
-

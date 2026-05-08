@@ -1,7 +1,5 @@
 <div class="container py-4">
   <div class="page-inner">
-
-    <!-- En-tête -->
     <div class="page-header mb-4">
       <h3 class="fw-bold text-dark">Base</h3>
       <ul class="breadcrumbs d-flex align-items-center">
@@ -13,7 +11,6 @@
       </ul>
     </div>
 
-    <!-- Bouton Ajouter Client -->
     <div class="row mb-4">
       <div class="col-12 text-end">
         <button
@@ -27,7 +24,6 @@
       </div>
     </div>
 
-    <!-- Modal Formulaire d'ajout client -->
     <div
       class="modal fade"
       id="addClientModal"
@@ -38,7 +34,7 @@
       <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content modal-elegant shadow">
           <div class="modal-header modal-header-custom">
-            <h5 class="modal-title text-white" id="addClientModalLabel">➕ Nouveau client</h5>
+            <h5 class="modal-title text-white" id="addClientModalLabel">Nouveau client</h5>
             <button
               type="button"
               class="btn-close btn-close-white"
@@ -49,18 +45,22 @@
           <div class="modal-body">
             <form [formGroup]="clientForm" (ngSubmit)="onSubmit()">
               <div class="row">
-                   <div class="col-md-4 mb-3">
+                <div class="col-md-4 mb-3">
                   <label for="Code" class="form-label">Code</label>
-                  <input type="text" class="form-control" id="Code" placeholder="Ex: C0001" formControlName="code"/>
+                  <input type="text" class="form-control" id="Code" placeholder="Ex: C0001" formControlName="code" [class.is-invalid]="clientForm.get('code')?.invalid && (clientForm.get('code')?.dirty || clientForm.get('code')?.touched)" />
+                  <div class="invalid-feedback d-block" *ngIf="clientForm.get('code')?.hasError('required') && (clientForm.get('code')?.dirty || clientForm.get('code')?.touched)">Le code est obligatoire.</div>
+                  <div class="invalid-feedback d-block" *ngIf="clientForm.get('code')?.hasError('duplicate')">Ce code existe deja.</div>
                 </div>
                 <div class="col-md-4 mb-3">
                   <label for="name" class="form-label">Nom</label>
-                  <input type="text" class="form-control" id="name" placeholder="Ex: Nom & Prenom" formControlName="nom" />
+                  <input type="text" class="form-control" id="name" placeholder="Ex: Nom & Prenom" formControlName="nom" [class.is-invalid]="clientForm.get('nom')?.invalid && (clientForm.get('nom')?.dirty || clientForm.get('nom')?.touched)" />
+                  <div class="invalid-feedback d-block" *ngIf="clientForm.get('nom')?.hasError('required') && (clientForm.get('nom')?.dirty || clientForm.get('nom')?.touched)">Le nom est obligatoire.</div>
+                  <div class="invalid-feedback d-block" *ngIf="clientForm.get('nom')?.hasError('duplicate')">Ce nom existe deja.</div>
                 </div>
               </div>
               <div class="modal-footer bg-light border-top">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="submit" class="btn btn-success" [disabled]="clientForm.invalid">✅ Enregistrer</button>
+                <button type="submit" class="btn btn-success" [disabled]="clientForm.invalid || checkingUnique">Enregistrer</button>
               </div>
             </form>
           </div>
@@ -68,7 +68,6 @@
       </div>
     </div>
 
-    <!-- Barre de recherche et taille page -->
     <div class="row mb-3">
       <div class="col-md-6">
         <div class="input-group">
@@ -77,9 +76,13 @@
             type="text"
             class="form-control"
             placeholder="Rechercher par code, nom..."
+            list="client-search-suggestions"
             [(ngModel)]="searchTerm"
             (keyup.enter)="onSearch()"
           />
+          <datalist id="client-search-suggestions">
+            <option *ngFor="let suggestion of clientSearchSuggestions" [value]="suggestion"></option>
+          </datalist>
           <button class="btn btn-primary" type="button" (click)="onSearch()">
             <i class="fas fa-search"></i> Rechercher
           </button>
@@ -95,14 +98,11 @@
       </div>
     </div>
 
-    <!-- Tableau Client -->
     <div class="row">
       <div class="col-md-12">
         <div class="card border-0 shadow-sm rounded-3">
-         
           <div class="card-body">
             <div class="table-responsive" style="position: relative; min-height: 300px;">
-              <!-- Loader overlay -->
               <div
                 *ngIf="loading"
                 class="text-center my-4"
@@ -127,36 +127,45 @@
                     <th (click)="onSort('nom')" class="sortable" style="cursor: pointer;">
                       Nom <i class="fas ms-1" [ngClass]="getSortIcon('nom')"></i>
                     </th>
-                    <th style="width: 150px;" class="text-center">Actions</th>
+                    <th style="width: 210px;" class="text-center">Actions</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   <tr *ngIf="!loading && clients.length === 0">
                     <td colspan="3" class="text-center py-4">
-                      <p class="text-muted mb-0">Aucun client trouvé</p>
+                      <p class="text-muted mb-0">Aucun client trouve</p>
                     </td>
                   </tr>
 
                   <tr *ngFor="let client of clients">
-                    <td>{{ client.code }}</td>
+                    <td class="fw-semibold">{{ client.code }}</td>
                     <td>{{ client.nom }}</td>
 
                     <td class="text-center">
-                      <button class="btn btn-sm btn-outline-info me-1" (click)="OnEdit(client.part_id)" title="Modifier">
-                        <i class="fas fa-edit"></i>
-                      </button>
-                      <button class="btn btn-sm btn-outline-danger me-1" (click)="removeClient(client)" title="Supprimer">
-                        <i class="fas fa-trash-alt"></i>
-                      </button>
+                      <div class="stats-action-group">
+                        <button
+                          class="btn btn-sm btn-outline-primary"
+                          (click)="openStatsModal(client)"
+                          title="Statistiques"
+                          [disabled]="statsLoadingClientId === client.part_id"
+                        >
+                          <span *ngIf="statsLoadingClientId === client.part_id" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                          <i *ngIf="statsLoadingClientId !== client.part_id" class="fas fa-chart-line"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-info" (click)="OnEdit(client.part_id)" title="Modifier">
+                          <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" (click)="removeClient(client)" title="Supprimer">
+                          <i class="fas fa-trash-alt"></i>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
               </table>
-
             </div>
 
-            <!-- Pagination -->
             <div *ngIf="!loading && totalPages > 1" class="d-flex justify-content-between align-items-center mt-3">
               <div class="text-muted">
                 Affichage de {{ getDisplayRange() }} sur {{ totalRecords }} clients
@@ -193,7 +202,160 @@
         </div>
       </div>
     </div>
+  </div>
 
+  <div *ngIf="showStatsModal" class="stats-modal-backdrop" (click)="closeStatsModal()">
+    <div class="stats-modal-card" (click)="$event.stopPropagation()">
+      <div class="stats-modal-header">
+        <div>
+          <div class="stats-modal-kicker">Analyse client</div>
+          <h4 class="stats-modal-title mb-1">{{ statsData?.partner?.nom || selectedStatsClient?.nom }}</h4>
+          <div class="stats-modal-subtitle">{{ statsData?.partner?.code || selectedStatsClient?.code }}</div>
+        </div>
+        <button type="button" class="stats-close-btn" (click)="closeStatsModal()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <div *ngIf="statsLoading" class="stats-loading-state">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Chargement...</span>
+        </div>
+        <p class="mb-0">Chargement du releve client...</p>
+      </div>
+
+      <div *ngIf="!statsLoading && statsData" class="stats-modal-body">
+        <div class="stats-kpi-grid">
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">Debit cumule</span>
+            <strong>{{ statsData.situation.debit_total | number:'1.2-2' }} dh</strong>
+          </div>
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">Credit cumule</span>
+            <strong>{{ statsData.situation.credit_total | number:'1.2-2' }} dh</strong>
+          </div>
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">Solde actuel</span>
+            <strong [class.text-danger]="statsData.situation.solde > 0" [class.text-success]="statsData.situation.solde <= 0">
+              {{ statsData.situation.solde | number:'1.2-2' }} dh
+            </strong>
+          </div>
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">Taux encaissement</span>
+            <strong>{{ statsData.situation.settlement_rate | number:'1.0-2' }} %</strong>
+          </div>
+        </div>
+
+        <div class="stats-summary-grid">
+          <section class="stats-panel">
+            <div class="stats-panel-head">
+              <h5>Situation client</h5>
+              <span>{{ statsData.situation.mouvements_count || 0 }} mouvement(s)</span>
+            </div>
+            <div class="facts-grid">
+              <div class="fact-row">
+                <span>Statut</span>
+                <strong [class.text-danger]="statsData.situation.solde > 0" [class.text-success]="statsData.situation.solde <= 0">
+                  {{ statsData.situation.solde > 0 ? 'Encours' : 'A jour' }}
+                </strong>
+              </div>
+              <div class="fact-row">
+                <span>Dernier mouvement</span>
+                <strong>{{ statsData.situation.last_movement_date ? (statsData.situation.last_movement_date | date:'dd/MM/yyyy') : '-' }}</strong>
+              </div>
+              <div class="fact-row">
+                <span>Reste a encaisser</span>
+                <strong>{{ statsData.situation.outstanding_total | number:'1.2-2' }} dh</strong>
+              </div>
+              <div class="fact-row">
+                <span>Mouvements comptables</span>
+                <strong>{{ statsData.situation.mouvements_count || 0 }}</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="stats-panel">
+            <div class="stats-panel-head">
+              <h5>Releve de compte</h5>
+              <span>{{ statsData.statement?.length || 0 }} ligne(s)</span>
+            </div>
+            <div class="statement-table-wrap" *ngIf="statsData.statement?.length; else noStatementState">
+              <table class="statement-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Numero</th>
+                    <th>Libelle</th>
+                    <th class="text-end">Debit</th>
+                    <th class="text-end">Credit</th>
+                    <th class="text-end">Solde</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let row of statsData.statement">
+                    <td>{{ row.date | date:'dd/MM/yyyy' }}</td>
+                    <td>{{ row.numero || '-' }}</td>
+                    <td>{{ row.libelle || '-' }}</td>
+                    <td class="text-end">{{ row.debit | number:'1.2-2' }}</td>
+                    <td class="text-end">{{ row.credit | number:'1.2-2' }}</td>
+                    <td class="text-end" [class.text-danger]="row.solde > 0" [class.text-success]="row.solde <= 0">{{ row.solde | number:'1.2-2' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <ng-template #noStatementState>
+              <div class="stats-empty-state stats-empty-state--small">Aucun mouvement a afficher pour ce client.</div>
+            </ng-template>
+          </section>
+        </div>
+
+        <div class="stats-chart-grid">
+          <section class="stats-panel">
+            <div class="stats-panel-head">
+              <h5>Evolution mensuelle</h5>
+              <span>{{ statsData.charts?.monthly_activity?.length || 0 }} mois</span>
+            </div>
+            <div class="chart-shell" *ngIf="statsData.charts?.monthly_activity?.length; else noActivityChart">
+              <canvas id="clientStatsActivityChart"></canvas>
+            </div>
+            <ng-template #noActivityChart>
+              <div class="stats-empty-state">Aucune activite disponible pour generer le graphique.</div>
+            </ng-template>
+          </section>
+
+          <section class="stats-panel">
+            <div class="stats-panel-head">
+              <h5>Repartition encaissement</h5>
+              <span>{{ statsData.charts?.breakdown?.length || 0 }} indicateur(s)</span>
+            </div>
+            <div class="chart-shell chart-shell--donut" *ngIf="statsData.charts?.breakdown?.length; else noBreakdownChart">
+              <canvas id="clientStatsBreakdownChart"></canvas>
+            </div>
+            <ng-template #noBreakdownChart>
+              <div class="stats-empty-state">Pas assez de donnees pour afficher le donut.</div>
+            </ng-template>
+          </section>
+        </div>
+
+        <section class="stats-panel">
+          <div class="stats-panel-head">
+            <h5>Recommandations AI</h5>
+            <span>{{ statsData.recommendations?.length || 0 }} insight(s)</span>
+          </div>
+          <div class="recommendation-list">
+            <article class="recommendation-card" *ngFor="let recommendation of statsData.recommendations" [attr.data-tone]="recommendation.tone || 'info'">
+              <div class="recommendation-icon">
+                <i [class]="getRecommendationIcon(recommendation.tone)"></i>
+              </div>
+              <div>
+                <div class="recommendation-title">{{ recommendation.title }}</div>
+                <div class="recommendation-text">{{ recommendation.message }}</div>
+              </div>
+            </article>
+          </div>
+        </section>
+      </div>
+    </div>
   </div>
 
   <router-outlet></router-outlet>

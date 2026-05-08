@@ -4,6 +4,11 @@ const fs = require('fs');
 const path = require('path');
 const { getEmailDataByDocumentId } = require('../models/email.model');
 const { renderFormattedText } = require('./pdf-format-helper');
+const { sortPdfLinesByDisplayOrder } = require('../utils/pdf-line-order.helper');
+const {
+  enrichRowsWithNomenclature,
+  removeNomenclatureComponentRows
+} = require('../utils/nomenclature.helper');
 
 
 function stripHtmlTags(str) {
@@ -21,7 +26,7 @@ function htmlToPlainText(html) {
   text = text.replace(/<\s*p[^>]*>/gi, '\n');
   text = text.replace(/<\s*\/p\s*>/gi, '\n');
 
-  // Gras, italique, souligné (en pseudo-notation)
+  // Gras, italique, soulignÃ© (en pseudo-notation)
   text = text.replace(/<\s*(strong|b)[^>]*>(.*?)<\s*\/\1\s*>/gi, (_, __, inner) => `**${inner}**`);
   text = text.replace(/<\s*(em|i)[^>]*>(.*?)<\s*\/\1\s*>/gi, (_, __, inner) => `_${inner}_`);
   text = text.replace(/<\s*u[^>]*>(.*?)<\s*\/u\s*>/gi, (_, inner) => `__${inner}__`);
@@ -29,15 +34,85 @@ function htmlToPlainText(html) {
   // Supprime toutes les autres balises HTML
   text = text.replace(/<[^>]+>/g, '');
 
-  // Supprime les espaces multiples (mais préserve les sauts de ligne) et nettoie
+  // Supprime les espaces multiples (mais prÃ©serve les sauts de ligne) et nettoie
   text = text.replace(/[ \t]+/g, ' ').trim();
 
   return text;
 }
 
-// Fonctions pour convertir les nombres en lettres (français)
-const units = ['zéro', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize'];
+function normalizePdfText(value) {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const looksMisencoded = /[ÃÂâð]/.test(value);
+  if (!looksMisencoded) {
+    return value;
+  }
+
+  try {
+    const normalized = Buffer.from(value, 'latin1').toString('utf8');
+    return normalized || value;
+  } catch (error) {
+    return value;
+  }
+}
+
+function normalizeCompositionPdfLines(lines) {
+  const safeLines = Array.isArray(lines) ? lines.filter(Boolean) : [];
+  if (safeLines.length === 0) {
+    return [];
+  }
+
+  const firstCommercialLine = safeLines.find((line) => {
+    return Number.isFinite(Number(line?.quantite))
+      || Number.isFinite(Number(line?.prix))
+      || Number.isFinite(Number(line?.remise));
+  }) || safeLines[0];
+
+  const normalizedQuantite = Number(firstCommercialLine?.quantite);
+  const normalizedPrix = Number(firstCommercialLine?.prix);
+  const normalizedRemise = Number(firstCommercialLine?.remise);
+  const normalizedTauxTva = Number(firstCommercialLine?.taux_tva);
+
+  return [{
+    ...firstCommercialLine,
+    article: firstCommercialLine?.article || firstCommercialLine?.designation || '',
+    designation: firstCommercialLine?.designation || firstCommercialLine?.article || '',
+    quantite: Number.isFinite(normalizedQuantite) ? normalizedQuantite : null,
+    prix: Number.isFinite(normalizedPrix) ? normalizedPrix : null,
+    remise: Number.isFinite(normalizedRemise) ? normalizedRemise : null,
+    taux_tva: Number.isFinite(normalizedTauxTva) ? normalizedTauxTva : 0
+  }];
+}
+
+// Fonctions pour convertir les nombres en lettres (franÃ§ais)
+const units = ['zÃ©ro', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize'];
 const tens = ['', 'dix', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'soixante', 'quatre-vingt', 'quatre-vingt'];
+
+function shouldHideNomenclatureComponentRows(rows = []) {
+  const firstLine = Array.isArray(rows) ? (rows[0] || {}) : {};
+  const documentKind = String(firstLine.document_kind || '').trim().toUpperCase();
+
+  return documentKind === 'COMMANDE'
+    || documentKind === 'LIVRAISON'
+    || documentKind === 'BON DE LIVRAISON'
+    || Number(firstLine.type) === 2;
+}
+
+async function hideNomenclatureComponentRowsForPdf(rows, sequelizeConnection = null) {
+  if (!Array.isArray(rows) || rows.length === 0 || !shouldHideNomenclatureComponentRows(rows)) {
+    return rows;
+  }
+
+  const sequelizeConn = sequelizeConnection || require('../config/database');
+  const enrichedRows = await enrichRowsWithNomenclature(rows, sequelizeConn);
+  return removeNomenclatureComponentRows(enrichedRows);
+}
 
 function underHundredFR(n) {
   if (n < 17) return units[n];
@@ -83,7 +158,7 @@ function underThousandFR(n) {
 }
 
 function numberToWordsFR(n) {
-  if (n === 0) return 'zéro';
+  if (n === 0) return 'zÃ©ro';
   if (n < 0) return 'moins ' + numberToWordsFR(-n);
 
   const billions = Math.floor(n / 1_000_000_000);
@@ -146,39 +221,39 @@ class EmailService {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
       },
-      // Options pour gérer les timeouts et les erreurs réseau
+      // Options pour gÃ©rer les timeouts et les erreurs rÃ©seau
       connectionTimeout: 60000, // 60 secondes pour la connexion
       greetingTimeout: 30000, // 30 secondes pour le greeting
-      socketTimeout: 60000, // 60 secondes pour les opérations socket
+      socketTimeout: 60000, // 60 secondes pour les opÃ©rations socket
       // Retry logic
       pool: true,
       maxConnections: 1,
       maxMessages: 3,
       // DNS options
       dns: {
-        timeout: 10000, // 10 secondes pour la résolution DNS
-        tries: 3 // 3 tentatives pour la résolution DNS
+        timeout: 10000, // 10 secondes pour la rÃ©solution DNS
+        tries: 3 // 3 tentatives pour la rÃ©solution DNS
       }
     });
   }
 
-  // 🧾 Génère un PDF professionnel du devis
+  // ðŸ§¾ GÃ©nÃ¨re un PDF professionnel du devis
   async genererPDF(devisData, options = {}) {
-    console.log('[EmailService] 📄 Début genererPDF');
+    console.log('[EmailService] ðŸ“„ DÃ©but genererPDF');
     if (!devisData || devisData.length === 0) {
-      console.error('[EmailService] ❌ devisData est vide ou indéfini');
-      throw new Error('Données du document manquantes pour la génération du PDF');
+      console.error('[EmailService] âŒ devisData est vide ou indÃ©fini');
+      throw new Error('DonnÃ©es du document manquantes pour la gÃ©nÃ©ration du PDF');
     }
     return new Promise(async (resolve, reject) => {
       try {
         // === MODE D'IMPRESSION (NORMAL / NOMENCLATURE / NON_VALORISE) ===
-        // printMode = 'normal' (par défaut) -> comportement existant (BL normal)
-        // printMode = 'nomenclature' -> PDF basé sur le même modèle, mais avec 1 seule ligne "article composé"
-        // printMode = 'non_valorise' -> BL non valorisé (même mise en page que normal mais sans les totaux HT/TVA/TTC)
+        // printMode = 'normal' (par dÃ©faut) -> comportement existant (BL normal)
+        // printMode = 'nomenclature' -> PDF basÃ© sur le mÃªme modÃ¨le, mais avec 1 seule ligne "article composÃ©"
+        // printMode = 'non_valorise' -> BL non valorisÃ© (mÃªme mise en page que normal mais sans les totaux HT/TVA/TTC)
         const printMode = (options.printMode || 'normal').toLowerCase();
         const isNonValorise = printMode === 'non_valorise';
 
-        // === EXONÉRATION TVA (DEVIS + BON DE LIVRAISON) ===
+        // === EXONÃ‰RATION TVA (DEVIS + BON DE LIVRAISON) ===
         let isClientExonerated = false;
         const part_id = devisData?.[0]?.part_id;
         const documentType0 = devisData?.[0]?.type;
@@ -186,16 +261,37 @@ class EmailService {
         const isRetour0 = documentKind0 === 'RETOUR CLIENT' || documentType0 === 5;
         const isLivraison0 = documentKind0 === 'LIVRAISON' || documentType0 === 2;
         const isDevis0 = !isRetour0 && !isLivraison0;
+        const isSimpleDevis = printMode === 'simple' && isDevis0;
 
-        // === Impression NOMENCLATURE (DEVIS uniquement, sans popup côté UI) ===
-        // On garde exactement le même template, mais on remplace les lignes par une seule ligne basée sur l'article composé.
-        if (printMode === 'nomenclature' && isDevis0) {
+        if (printMode === 'composition' && isLivraison0 && options.document_id) {
+          try {
+            const sequelizeConn = options.sequelize || require('../config/database');
+            const exactCompositionData = await getEmailDataByDocumentId(options.document_id, sequelizeConn, {
+              forceDocumentType: options.forceDocumentType || 'LIVRAISON',
+              printMode: 'composition'
+            });
+
+            if (Array.isArray(exactCompositionData) && exactCompositionData.length > 0) {
+              devisData = exactCompositionData;
+            }
+          } catch (compositionError) {
+            console.warn('[EmailService] Composition exacte non rechargee:', compositionError.message);
+          }
+        }
+
+        if (printMode === 'composition' && isLivraison0) {
+          devisData = normalizeCompositionPdfLines(devisData);
+        }
+
+        // === Impression NOMENCLATURE (DEVIS uniquement, sans popup cÃ´tÃ© UI) ===
+        // On garde exactement le mÃªme template, mais on remplace les lignes par une seule ligne basÃ©e sur l'article composÃ©.
+        if (printMode === 'nomenclature' && isDevis0 && !options.skipNomenclatureBuild) {
           const sequelizeConn = options.sequelize || require('../config/database');
           const compose = options.composeArticle || {};
           let composeId = compose.article_id ? parseInt(compose.article_id, 10) : null;
           let nomLines = [];
 
-          // Auto-détection: trouver le Compose_id le plus probable à partir des lignes composants du devis
+          // Auto-dÃ©tection: trouver le Compose_id le plus probable Ã  partir des lignes composants du devis
           if (!composeId) {
             const componentIds = Array.from(new Set((devisData || [])
               .map(l => l.article_id)
@@ -228,7 +324,7 @@ class EmailService {
             }
           }
 
-          // Charger les infos de l'article composé
+          // Charger les infos de l'article composÃ©
           let composeArticleDb = null;
           if (composeId) {
             const rows = await sequelizeConn.query(
@@ -245,39 +341,25 @@ class EmailService {
             composeArticleDb = rows?.[0] || null;
           }
 
-          // ============================================================
-          // MODIFICATION: Récupérer les composants avec leurs quantités
-          // ============================================================
-          let composantsData = [];
-          if (composeId) {
-            composantsData = await sequelizeConn.query(
-              `
-                SELECT 
-                  n.Composant_id,
-                  n.Quantite AS composant_qte,
-                  a.article_cod AS composant_cod,
-                  a.article_nom AS composant_nom
-                FROM article_Nomenclature n
-                LEFT JOIN article a ON a.article_id = n.Composant_id
-                WHERE n.Compose_id = :composeId
-                ORDER BY a.article_nom ASC
-              `,
-              {
-                replacements: { composeId },
-                type: sequelizeConn.QueryTypes.SELECT
-              }
-            );
-            console.log('[PDF Nomenclature] Composants récupérés:', composantsData.length);
-          }
+          // Source composants = lignes du devis (mÃªme ordre / mÃªmes donnÃ©es)
+          const composantsData = (devisData || []).map((line) => {
+            const rawNom = line.designation || line.article_nom || line.article || '';
+            const composantNom = String(rawNom).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+            return {
+              composant_cod: line.article_cod || '',
+              composant_nom: composantNom || 'Composant'
+            };
+          });
+          console.log('[PDF Nomenclature] Composants depuis devis:', composantsData.length);
 
           // ============================================================
-          // PRIX: Priorité au prix du composé depuis le devis (edit-devis)
+          // PRIX: PrioritÃ© au prix du composÃ© depuis le devis (edit-devis)
           // ============================================================
           const composePrix = !isNaN(Number(compose.prix)) && Number(compose.prix) > 0
             ? Number(compose.prix)
             : (!isNaN(Number(composeArticleDb?.prix_vente)) ? Number(composeArticleDb?.prix_vente) : 0);
 
-          // Quantité du composé depuis le devis
+          // QuantitÃ© du composÃ© depuis le devis
           const composeQte = !isNaN(Number(compose.quantite)) && Number(compose.quantite) > 0
             ? Number(compose.quantite)
             : (!isNaN(Number(composeArticleDb?.quantite)) && Number(composeArticleDb?.quantite) > 0
@@ -292,29 +374,29 @@ class EmailService {
           const ht = composePrix * composeQte;
 
           // ============================================================
-          // DÉSIGNATION: Construire avec les composants et leurs quantités
+          // DÃ‰SIGNATION: Construire avec les composants et leurs quantitÃ©s
           // ============================================================
           let designationHtml = '';
           
-          // Titre du composé
-          designationHtml = `<h3 style="color: #046ba7;"><strong>Composé</strong></h3>`;
+          // Titre du composÃ©
+          designationHtml = `<h3 style="color: #046ba7;"><strong>ComposÃ©</strong></h3>`;
           designationHtml += `<p><strong>- ${composeNom}</strong></p>`;
           
-          // Ajouter la section Composants avec quantités
+          // Ajouter la section Composants avec quantitÃ©s
           if (composantsData && composantsData.length > 0) {
             designationHtml += `<h3 style="color: #046ba7;"><strong>Composants</strong></h3>`;
             designationHtml += '<ul>';
             composantsData.forEach((comp) => {
-              const qte = !isNaN(Number(comp.composant_qte)) ? Number(comp.composant_qte) : 1;
               const nom = comp.composant_nom || comp.composant_cod || 'Composant';
               const cod = comp.composant_cod || '';
-              // Afficher: Code - Nom (Qté: X)
-              designationHtml += `<li><strong style="color: #c00000;">${cod}</strong> - ${nom} <span style="color: #7030a0;">(Qté: ${qte})</span></li>`;
+              designationHtml += cod
+                ? `<li><strong style="color: #c00000;">${cod}</strong> - ${nom}</li>`
+                : `<li>${nom}</li>`;
             });
             designationHtml += '</ul>';
           }
           
-          console.log('[EmailService][PDF Nomenclature] Désignation construite:', {
+          console.log('[EmailService][PDF Nomenclature] DÃ©signation construite:', {
             composeId,
             composeNom,
             composantsCount: composantsData.length,
@@ -356,18 +438,18 @@ class EmailService {
             });
 
             isClientExonerated = !!validExoneration;
-            console.log('[EmailService] 📋 Exonération TVA:', {
+            console.log('[EmailService] ðŸ“‹ ExonÃ©ration TVA:', {
               isClientExonerated: isClientExonerated ? 'Oui' : 'Non',
               document_kind: documentKind0,
               type: documentType0
             });
           } catch (e) {
-            console.warn('[EmailService] ⚠️ Erreur vérification exonération TVA:', e);
+            console.warn('[EmailService] âš ï¸ Erreur vÃ©rification exonÃ©ration TVA:', e);
             isClientExonerated = false;
           }
         }
 
-        // Détecter le type de document
+        // DÃ©tecter le type de document
         // Si forceDocumentType est fourni dans les options, l'utiliser (pour forcer DEVIS depuis l'interface des devis)
         const forceDocumentType = options.forceDocumentType ? options.forceDocumentType.toString().toUpperCase().trim() : null;
         
@@ -376,14 +458,14 @@ class EmailService {
 
         let saveDir = path.join(__dirname, '..', 'public', 'devis');
         let documentTitle = 'DEVIS';
-        let headerLabel = 'Devis N°';
+        let headerLabel = 'Devis NÂ°';
 
-        // 1. Vérifier si c'est un RETOUR CLIENT
-        // IMPORTANT: Si forceDocumentType est fourni, l'utiliser en priorité
-        // Sinon, vérifier d'abord documentKind (string) puis documentType (number) comme fallback
-        // documentType peut être 1=DEVIS, 2=LIVRAISON, 3=COMMANDE, 4=FACTURE, 5=RETOUR
-        // Mais documentKind est plus fiable car il vient directement de la base de données
-        // Définir documentKindUpper avant le bloc conditionnel pour le log
+        // 1. VÃ©rifier si c'est un RETOUR CLIENT
+        // IMPORTANT: Si forceDocumentType est fourni, l'utiliser en prioritÃ©
+        // Sinon, vÃ©rifier d'abord documentKind (string) puis documentType (number) comme fallback
+        // documentType peut Ãªtre 1=DEVIS, 2=LIVRAISON, 3=COMMANDE, 4=FACTURE, 5=RETOUR
+        // Mais documentKind est plus fiable car il vient directement de la base de donnÃ©es
+        // DÃ©finir documentKindUpper avant le bloc conditionnel pour le log
         const documentKindUpper = documentKind ? documentKind.toString().toUpperCase().trim() : '';
         
         let isRetour = false;
@@ -406,14 +488,14 @@ class EmailService {
             isLivraison = false;
           }
         } else {
-          // Détection automatique (comportement par défaut)
+          // DÃ©tection automatique (comportement par dÃ©faut)
           isRetour = documentKindUpper === 'RETOUR CLIENT' || (!documentKind && documentType === 5);
           isLivraison = documentKindUpper === 'LIVRAISON' || (!documentKind && documentType === 2);
           isDevis = !isRetour && !isLivraison;
         }
         
-        // Log pour diagnostiquer le problème de détection (après initialisation de documentTitle)
-        console.log(`[PDF] Détection type document:`, {
+        // Log pour diagnostiquer le problÃ¨me de dÃ©tection (aprÃ¨s initialisation de documentTitle)
+        console.log(`[PDF] DÃ©tection type document:`, {
           documentType,
           documentKind,
           documentKindUpper,
@@ -428,26 +510,33 @@ class EmailService {
         if (isRetour) {
           saveDir = path.join(__dirname, '..', 'public', 'retours');
           documentTitle = 'BON DE RETOUR';
-          headerLabel = 'Retour N°';
+          headerLabel = 'Retour NÂ°';
         }
-        // 2. Vérifier si c'est une LIVRAISON
+        // 2. VÃ©rifier si c'est une LIVRAISON
         else if (isLivraison) {
           saveDir = path.join(__dirname, '..', 'public', 'livraisons');
           documentTitle = 'BON DE LIVRAISON';
-          headerLabel = 'Livraison N°';
+          headerLabel = 'Livraison NÂ°';
         }
-        // 3. Par défaut c'est un DEVIS (ou COMMANDE si détecté plus tard, mais ici on initialise)
+        // 3. Par dÃ©faut c'est un DEVIS (ou COMMANDE si dÃ©tectÃ© plus tard, mais ici on initialise)
         else {
           documentTitle = 'DEVIS';
-          headerLabel = 'Devis N°';
+          headerLabel = 'Devis NÂ°';
           saveDir = path.join(__dirname, '..', 'public', 'devis');
+        }
+
+        if (options.overrideDocumentTitle) {
+          documentTitle = String(options.overrideDocumentTitle);
+        }
+        if (options.overrideHeaderLabel) {
+          headerLabel = String(options.overrideHeaderLabel);
         }
 
         if (!fs.existsSync(saveDir)) {
           fs.mkdirSync(saveDir, { recursive: true });
         }
 
-        // Créer un nom de fichier avec le numéro du document et le nom du client
+        // CrÃ©er un nom de fichier avec le numÃ©ro du document et le nom du client
         const numeroDoc = devisData && devisData[0] && devisData[0].numero ? devisData[0].numero : documentTitle;
         const nomClient = devisData && devisData[0] && devisData[0].client ? devisData[0].client : 'CLIENT';
 
@@ -459,8 +548,12 @@ class EmailService {
           .replace(/\s+/g, '_')
           .substring(0, 50);
 
-        // Créer le nom de fichier : numero-client_nom.pdf
-        const fileName = `${numeroDoc}_${nomClientNettoye}.pdf`;
+        // CrÃ©er le nom de fichier : numero-client_nom.pdf
+        const customFileBaseName = typeof options.overrideFileBaseName === 'string' && options.overrideFileBaseName.trim()
+          ? options.overrideFileBaseName.trim()
+          : null;
+        const fileBaseName = customFileBaseName || `${numeroDoc}_${nomClientNettoye}`;
+        const fileName = `${fileBaseName}.pdf`;
         const pdfPath = path.join(saveDir, fileName);
 
         // Stocker les variables pour utilisation dans le reste de la fonction
@@ -468,15 +561,24 @@ class EmailService {
         const headerText = headerLabel;
 
         const doc = new PDFDocument({ margin: 40, size: 'A4' });
+        const originalText = doc.text.bind(doc);
+        doc.text = (text, ...args) => originalText(normalizePdfText(text), ...args);
+        const pdfTitle = typeof options.overridePdfTitle === 'string' && options.overridePdfTitle.trim()
+          ? normalizePdfText(options.overridePdfTitle.trim())
+          : docTitle;
+        doc.info = {
+          ...doc.info,
+          Title: normalizePdfText(pdfTitle)
+        };
         const writeStream = fs.createWriteStream(pdfPath);
 
-        // 🧩 Gestion fiable des événements
+        // ðŸ§© Gestion fiable des Ã©vÃ©nements
         writeStream.on('finish', () => {
-          console.log(`✅ PDF enregistré : ${pdfPath}`);
+          console.log(`âœ… PDF enregistrÃ© : ${pdfPath}`);
           resolve(pdfPath);
         });
         writeStream.on('error', (err) => {
-          console.error('❌ Erreur écriture PDF :', err);
+          console.error('âŒ Erreur Ã©criture PDF :', err);
           reject(err);
         });
 
@@ -485,40 +587,42 @@ class EmailService {
         // === CONSTANTES POUR LA PAGINATION ===
         const tableBorderRadius = 5;
         const articlesTableHeaderHeight = 20;
-        const maxYBeforeNewPage = 700; // Position Y maximale avant de passer à une nouvelle page
+        const maxYBeforeNewPage = 700; // Position Y maximale avant de passer Ã  une nouvelle page
         const pageHeight = 842; // Hauteur A4 en points
         
-        // Compteur de pages pour la numérotation
+        // Compteur de pages pour la numÃ©rotation
         let currentPageNumber = 1;
         let totalPagesNumber = 1;
 
-        // === FONCTION: Dessiner l'en-tête du document (logo, titre, client) ===
+        // === FONCTION: Dessiner l'en-tÃªte du document (logo, titre, client) ===
         const drawDocumentHeader = (isFirstPage = false) => {
-          // Récupérer la taille du logo depuis la configuration
+          // RÃ©cupÃ©rer la taille du logo depuis la configuration
           const logoSize = options.documentSociete?.logoSize || { width: 100, height: null };
+          const configuredLogoTop = Number(options.documentSociete?.logoTop);
+          const logoTop = Number.isFinite(configuredLogoTop) ? configuredLogoTop : 14;
           const imageOptions = { width: logoSize.width };
           if (logoSize.height) {
             imageOptions.height = logoSize.height;
           }
           
           // Logo
-          if (options.documentSociete && options.documentSociete.logo) {
+          if (!isSimpleDevis && options.documentSociete && options.documentSociete.logo) {
             try {
               const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-              doc.image(logoBuffer, 50, 20, imageOptions);
+              doc.image(logoBuffer, 50, logoTop, imageOptions);
             } catch (error) {
-              const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-              if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
+              const logoPath = options.documentSociete?.logoPath;
+              if (logoPath && fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop, imageOptions);
             }
-          } else {
-            const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-            if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
+          } else if (!isSimpleDevis) {
+            const logoPath = options.documentSociete?.logoPath;
+            if (logoPath && fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop, imageOptions);
           }
 
-          // En-tête entreprise - à côté du logo (x=160, y aligné avec le logo)
-          if (options.documentSociete && options.documentSociete.entete) {
+          // En-tÃªte entreprise - Ã  cÃ´tÃ© du logo (x=160, y alignÃ© avec le logo)
+          if (!isSimpleDevis && options.documentSociete && options.documentSociete.entete) {
             const entete = options.documentSociete.entete;
-            // Vérifier si c'est un objet JSON ou du texte brut
+            // VÃ©rifier si c'est un objet JSON ou du texte brut
             if (typeof entete === 'object' || (typeof entete === 'string' && entete.trim())) {
               renderFormattedText(doc, entete, {
                 startX: 160,
@@ -533,7 +637,7 @@ class EmailService {
             }
           }
 
-          // Ligne de séparation
+          // Ligne de sÃ©paration
           doc.rect(40, 100, 520, 1).fill('#000');
 
           // Titre du document
@@ -542,18 +646,46 @@ class EmailService {
           // Bloc client
           const clientTop = 110;
           const clientBoxWidth = 260;
-          const clientBoxHeight = 60;
+          const clientOnlyBox = !!options.clientOnlyBox;
           const clientBoxX = 300;
+          const clientPaddingX = 10;
+          const clientPaddingY = 10;
+          const clientInnerWidth = clientBoxWidth - (clientPaddingX * 2);
+          const clientGap = 3;
+          const secondLineLabel = options.clientSecondLineLabel || 'Adresse';
+          const clientLines = [
+            `Client : ${devisData[0].client || ''}`,
+            ...(!clientOnlyBox ? [
+              `${secondLineLabel} : ${devisData[0].adresse || ''}`,
+              `ICE : ${devisData[0].ice || ''}`,
+              `${devisData[0].ville || ''}`
+            ] : [])
+          ].filter((line, idx) => idx < 3 || String(line || '').trim().length > 0);
+
+          doc.fontSize(10).font('Helvetica').fillColor('#000');
+          const lineHeights = clientLines.map((line) => {
+            const h = doc.heightOfString(String(line || ''), { width: clientInnerWidth, align: 'left' });
+            return Math.max(12, Number.isFinite(h) ? h : 12);
+          });
+          const linesTotalHeight = lineHeights.reduce((sum, h) => sum + h, 0);
+          const gapsTotalHeight = Math.max(0, clientLines.length - 1) * clientGap;
+          const clientBoxHeight = Math.max(clientOnlyBox ? 40 : 82, Math.ceil((clientPaddingY * 2) + linesTotalHeight + gapsTotalHeight));
+          const headerContentBottomY = Math.max(180, clientTop + clientBoxHeight + 12);
 
           doc.roundedRect(clientBoxX, clientTop, clientBoxWidth, clientBoxHeight, tableBorderRadius).stroke('#000');
-          doc.fontSize(10).font('Helvetica').fillColor('#000');
-          doc.text(`Client : ${devisData[0].client}`, clientBoxX + 10, clientTop + 10 ,{width: clientBoxWidth - 50, lineBreak: false , ellipsis: true});
-          doc.text(`Adresse : ${devisData[0].adresse || ''}`, clientBoxX + 10, clientTop + 35);
-          doc.text(`${devisData[0].ville || ''}`, clientBoxX + 10, clientTop + 46);
+          let clientLineY = clientTop + clientPaddingY;
+          clientLines.forEach((line, idx) => {
+            doc.text(String(line || ''), clientBoxX + clientPaddingX, clientLineY, { width: clientInnerWidth, align: 'left' });
+            clientLineY += lineHeights[idx] + clientGap;
+          });
 
-          // Tableau d'info (Numéro, Date, Réf) - uniquement sur la première page
+          // Tableau d'info (NumÃ©ro, Date, RÃ©f) - uniquement sur la premiÃ¨re page
+          const hideInfoTable = !!options.hideInfoTable;
           if (isFirstPage) {
-            const infoTableY = 210;
+            if (hideInfoTable) {
+              return headerContentBottomY;
+            }
+            const infoTableY = Math.max(210, headerContentBottomY + 8);
             const infoTableHeaderHeight = 25;
             const infoTableRowHeight = 20;
             const infoTableTotalHeight = infoTableHeaderHeight + infoTableRowHeight;
@@ -566,73 +698,83 @@ class EmailService {
             doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
             doc.text(headerText, 55, infoTableY + 8, { width: 180, align: 'center' });
             doc.text('Date', 235, infoTableY + 8, { width: 180, align: 'center' });
-            doc.text('Vos Réf', 415, infoTableY + 8, { width: 145, align: 'center' });
+            doc.text('Vos RÃ©f', 415, infoTableY + 8, { width: 145, align: 'center' });
 
             doc.font('Helvetica').fontSize(9);
             doc.text(`${devisData[0].numero}`, 55, infoTableY + infoTableHeaderHeight + 6, { width: 180, align: 'center' });
             doc.text(`${new Date(devisData[0].date).toLocaleDateString('fr-FR')}`, 235, infoTableY + infoTableHeaderHeight + 6, { width: 180, align: 'center' });
-            doc.text(`${devisData[0].client_ref || ''}`, 415, infoTableY + infoTableHeaderHeight + 6, { width: 145, align: 'center' });
+            const vosRefValue = devisData[0].commande_numero || devisData[0].client_ref || '';
+            doc.text(`${vosRefValue}`, 415, infoTableY + infoTableHeaderHeight + 6, { width: 145, align: 'center' });
 
             return infoTableY + infoTableTotalHeight + 10;
           } else {
-            // Pages suivantes : retourner position après l'en-tête client
-            return 180;
+            // Pages suivantes : retourner position aprÃ¨s l'en-tÃªte client
+            return headerContentBottomY;
           }
         };
 
-        // === FONCTION: Dessiner l'en-tête du tableau des articles ===
+        // === FONCTION: Dessiner l'en-tÃªte du tableau des articles ===
         // EXACTEMENT COMME FACTURE CONTRAT
         const drawTableHeader = (y) => {
           const lightGrayColor = '#E0E0E0';
-          const tableStartX = 40; // Tableau commence à X=40 (marge gauche)
+          const tableStartX = 40; // Tableau commence Ã  X=40 (marge gauche)
           const tableWidth = 525; // Largeur totale du tableau (595 - 40 marge gauche) - EXACTEMENT COMME FACTURE CONTRAT
           doc.roundedRect(tableStartX, y, tableWidth, articlesTableHeaderHeight, tableBorderRadius).fill(lightGrayColor).stroke('#000');
           doc.lineWidth(1).roundedRect(tableStartX, y, tableWidth, articlesTableHeaderHeight, tableBorderRadius).stroke('#000');
-          doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
-
-          // Colonnes EXACTEMENT COMME FACTURE CONTRAT
+          doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');          // Colonnes EXACTEMENT COMME FACTURE CONTRAT
           const colRefX = 40;
-          const colRefWidth = 70; // Agrandi de 50 à 70
+          const colRefWidth = 70; // Agrandi de 50 ?? 70
           const colDesignationX = 110; // 40 + 70
-          const colDesignationWidth = 260; // Réduit de 280 à 260 pour compenser l'agrandissement de Réf
-          const colQteX = 370; // 110 + 260
-          const colQteWidth = 45; // Légèrement réduit
-          const colPUX = 415; // 370 + 45
-          const colPUWidth = 45; // Légèrement réduit
-          const colRX = 460; // 415 + 45
-          const colRWidth = 35; // Réduit
+          const usePreparationColumns = !!options.usePreparationColumns;
+          const colDesignationWidth = isNonValorise ? 410 : (usePreparationColumns ? 190 : 260);
+          const colQteX = isNonValorise ? 520 : (usePreparationColumns ? 300 : 370); // 110 + largeur designation
+          const colQteWidth = 45;
+          const colPUX = usePreparationColumns ? 345 : 415; // 370 + 45
+          const colPUWidth = usePreparationColumns ? 50 : 45;
+          const colRX = usePreparationColumns ? 395 : 460;
+          const colRWidth = usePreparationColumns ? 45 : 35;
+          const colPrepBoxesX = usePreparationColumns ? 440 : null;
+          const colPrepBoxesWidth = usePreparationColumns ? 45 : 0;
+          const colPrepRemainX = usePreparationColumns ? 485 : null;
+          const colPrepRemainWidth = usePreparationColumns ? 80 : 0;
           const colHTX = 500; // 460 + 35 + 5 (marge)
-          const colHTWidth = 40; // Réduit pour tenir dans la page
-
-          doc.text('Réf', colRefX, y + 10, { width: colRefWidth, align: 'center' });
-          doc.text('Désignation', colDesignationX, y + 10, { width: colDesignationWidth, align: 'center' });
-          doc.text('Qté', colQteX, y + 10, { width: colQteWidth, align: 'center' });
-          doc.text('P.U.', colPUX, y + 10, { width: colPUWidth, align: 'center' });
-          doc.text('R.', colRX, y + 10, { width: colRWidth, align: 'center' });
-          doc.text('H.T.', colHTX, y + 10, { width: colHTWidth, align: 'center' });
-
+          const colHTWidth = 40;
+          doc.text('Ref', colRefX, y + 10, { width: colRefWidth, align: 'center' });
+          doc.text('D\u00e9signation', colDesignationX, y + 10, { width: colDesignationWidth, align: 'center' });
+          doc.text('Qt\u00e9', colQteX, y + 10, { width: colQteWidth, align: 'center' });
+          if (!isNonValorise) {
+            if (usePreparationColumns) {
+              doc.text('Unité', colPUX, y + 10, { width: colPUWidth, align: 'center' });
+              doc.text('cdt', colRX, y + 10, { width: colRWidth, align: 'center' });
+              doc.text('Nombre', colPrepBoxesX, y + 10, { width: colPrepBoxesWidth, align: 'center' });
+              doc.text('Unité', colPrepRemainX, y + 10, { width: colPrepRemainWidth, align: 'center' });
+            } else {
+              doc.text('P.U.', colPUX, y + 10, { width: colPUWidth, align: 'center' });
+              doc.text('R.', colRX, y + 10, { width: colRWidth, align: 'center' });
+              doc.text('H.T.', colHTX, y + 10, { width: colHTWidth, align: 'center' });
+            }
+          }
           return y + articlesTableHeaderHeight;
         };
 
-        // === FONCTION: Dessiner le pied de page (appelée sur CHAQUE page) ===
         const drawPageFooter = (pageNum = null) => {
+          if (isSimpleDevis) {
+            return;
+          }
+
           const footerBgColor = '#E8F4F8';
           const footerPageHeight = 842;
           const bottomMargin = 40;
-          const footerHeight = 32;
+          const footerHeight = isSimpleDevis ? 0 : 32;
           const footerY = footerPageHeight - bottomMargin - footerHeight;
-          const footerLineSpacing = 5;
           const footerStartY = footerY + 2;
 
-          // Fond du pied de page
           doc.save();
           doc.rect(0, footerY, 595, footerHeight).fill(footerBgColor);
           doc.restore();
 
-          // Contenu du pied de page
           if (options.documentSociete && options.documentSociete.pied_page) {
             const piedPage = options.documentSociete.pied_page;
-            // Vérifier si c'est un objet JSON ou du texte brut
             if (typeof piedPage === 'object' || (typeof piedPage === 'string' && piedPage.trim())) {
               renderFormattedText(doc, piedPage, {
                 startX: 50,
@@ -647,15 +789,12 @@ class EmailService {
             }
           }
 
-          // Numérotation des pages (au centre, directement en haut du pied de page)
-          // On utilise le numéro de page passé en paramètre et le total pré-calculé
           const pageNumToDisplay =
             pageNum !== null && pageNum !== undefined ? pageNum : currentPageNumber;
           const totalPagesToDisplay =
             totalPagesNumber && totalPagesNumber > 0 ? totalPagesNumber : currentPageNumber;
 
           doc.font('Helvetica').fontSize(8).fillColor('#000000');
-          // Positionner au centre, directement en haut du pied de page (5px au-dessus de la bande bleue)
           doc.text(
             `Page ${pageNumToDisplay} / ${totalPagesToDisplay}`,
             50,
@@ -663,44 +802,6 @@ class EmailService {
             { width: 495, align: 'center' }
           );
         };
-
-        // === DESSINER L'EN-TÊTE DE LA PREMIÈRE PAGE ===
-        let y = drawDocumentHeader(true);
-        y = drawTableHeader(y);
-        const tableStartY = y; // Position de départ du tableau (après l'en-tête)
-        
-        // Dessiner le footer sur la première page (le total sera mis à jour à la fin)
-        drawPageFooter(1);
-        
-        // === DÉFINIR LA HAUTEUR FIXE DU TABLEAU ===
-        // Le tableau principal a une hauteur fixe raisonnable qui ne dépasse pas la page
-        // pageHeight est déjà défini plus haut (ligne 442)
-        const bottomMargin = 40;
-        const footerHeight = 32;
-        const footerY = pageHeight - bottomMargin - footerHeight;
-        
-        // Hauteur fixe du tableau (environ 250px pour une taille raisonnable)
-        const fixedTableHeight = 250; // Hauteur fixe du tableau des détails
-        const maxTableHeight = fixedTableHeight; // Utiliser la hauteur fixe
-
-        // Positions des colonnes (utilisées dans la boucle de rendu des lignes)
-        // EXACTEMENT COMME FACTURE CONTRAT
-        const tableStartX = 40; // Tableau commence à X=40 (marge gauche)
-        const tableWidth = 525; // Largeur totale du tableau (595 - 40 marge gauche)
-        const colRefX = 40;
-        const colRefWidth = 70; // Agrandi de 50 à 70
-        const colDesignationX = 110; // 40 + 70
-        const colDesignationWidth = 260; // Réduit de 280 à 260 pour compenser l'agrandissement de Réf
-        const colDesignationPadding = 20; // Padding réduit pour un rendu plus compact et professionnel
-        const colQteX = 370; // 110 + 260
-        const colQteWidth = 45; // Légèrement réduit
-        const colPUX = 415; // 370 + 45
-        const colPUWidth = 45; // Légèrement réduit
-        const colRX = 460; // 415 + 45
-        const colRWidth = 35; // Réduit
-        const colHTX = 500; // 460 + 35 + 5 (marge)
-        const colHTWidth = 50; // Réduit pour tenir dans la page - COMME FACTURE CONTRAT
-        const colHTMargin = 5;
 
         doc.font('Helvetica').fillColor('#000').stroke('#000');
         let totalHT = 0, totalTVA = 0, totalTTC = 0, totalReduction = 0;
@@ -729,11 +830,11 @@ class EmailService {
 
         function renderInlineHtml(doc, html, x, y, width, maxHeight, align = 'left') {
           if (!html || !String(html).trim()) {
-            // Retourner une hauteur minimale même si le HTML est vide
+            // Retourner une hauteur minimale mÃªme si le HTML est vide
             return 9; // Hauteur minimale d'une ligne
           }
 
-          // Structure pour stocker les lignes avec leurs segments de texte stylisés
+          // Structure pour stocker les lignes avec leurs segments de texte stylisÃ©s
           const lines = [];
 
           // Fonction pour parser le HTML et extraire les segments de texte avec leurs styles
@@ -742,7 +843,7 @@ class EmailService {
             let workingHtml = String(htmlStr || '');
             const processedRanges = [];
 
-            // Trouver tous les éléments structurés dans l'ordre d'apparition
+            // Trouver tous les Ã©lÃ©ments structurÃ©s dans l'ordre d'apparition
             const allMatches = [];
             
             // Trouver tous les titres
@@ -788,10 +889,10 @@ class EmailService {
             // Trier par index pour traiter dans l'ordre d'apparition
             allMatches.sort((a, b) => a.index - b.index);
             
-            // Traiter chaque élément dans l'ordre
+            // Traiter chaque Ã©lÃ©ment dans l'ordre
             let lastProcessedEnd = 0;
             allMatches.forEach((match) => {
-              // Traiter le texte entre les éléments
+              // Traiter le texte entre les Ã©lÃ©ments
               if (match.index > lastProcessedEnd) {
                 const textBetween = workingHtml.substring(lastProcessedEnd, match.index);
                 const textWithoutTags = textBetween.replace(/<[^>]+>/g, '').trim();
@@ -803,7 +904,7 @@ class EmailService {
                 }
               }
               
-              // Traiter l'élément structuré
+              // Traiter l'Ã©lÃ©ment structurÃ©
               if (match.type === 'heading') {
                 const contentSegments = parseInlineHtml(match.content);
                 if (contentSegments.length > 0) {
@@ -818,7 +919,7 @@ class EmailService {
                   if (liContent && liContent.trim()) {
                     const contentSegments = parseInlineHtml(liContent);
                     if (contentSegments.length > 0) {
-                      segments.push({ type: 'listitem', segments: contentSegments, prefix: '  • ' });
+                      segments.push({ type: 'listitem', segments: contentSegments, prefix: '  â€¢ ' });
                     }
                   }
                 }
@@ -832,7 +933,7 @@ class EmailService {
               lastProcessedEnd = match.index + match.length;
             });
             
-            // Traiter le texte après le dernier élément
+            // Traiter le texte aprÃ¨s le dernier Ã©lÃ©ment
             if (lastProcessedEnd < workingHtml.length) {
               const textAfter = workingHtml.substring(lastProcessedEnd);
               const textWithoutTags = textAfter.replace(/<[^>]+>/g, '').trim();
@@ -860,16 +961,16 @@ class EmailService {
               if (tok.startsWith('<')) {
                 const tag = String(tok).toLowerCase();
                 
-                // Si on a du texte accumulé, l'ajouter avant de changer l'état
+                // Si on a du texte accumulÃ©, l'ajouter avant de changer l'Ã©tat
                 if (currentText.trim()) {
                   result.push({ text: currentText.trim(), bold: currentState.bold, italic: currentState.italic, color: currentState.color });
                   currentText = '';
                 }
 
-                // Gérer les balises de style
+                // GÃ©rer les balises de style
                 if (tag.startsWith('<strong') || tag.startsWith('<b')) {
                   currentState.bold = true;
-                  // Extraire la couleur du style si présente dans <strong>
+                  // Extraire la couleur du style si prÃ©sente dans <strong>
                   const colorMatch = tag.match(/style=["'][^"']*color\s*:\s*([^;"']+)/i);
                   if (colorMatch && colorMatch[1]) {
                     try {
@@ -880,7 +981,7 @@ class EmailService {
                   }
                 } else if (tag.startsWith('</strong') || tag.startsWith('</b')) {
                   currentState.bold = false;
-                  // Réinitialiser la couleur si elle était définie dans <strong>
+                  // RÃ©initialiser la couleur si elle Ã©tait dÃ©finie dans <strong>
                   currentState.color = '#000000';
                 } else if (tag.startsWith('<em') || tag.startsWith('<i')) {
                   currentState.italic = true;
@@ -899,7 +1000,7 @@ class EmailService {
                 } else if (tag.startsWith('</span')) {
                   currentState.color = '#000000';
                 } else if (tag === '<br>' || tag.startsWith('<br')) {
-                  // Saut de ligne: ajouter le texte actuel et créer une nouvelle ligne
+                  // Saut de ligne: ajouter le texte actuel et crÃ©er une nouvelle ligne
                   if (currentText.trim()) {
                     result.push({ text: currentText.trim(), bold: currentState.bold, italic: currentState.italic, color: currentState.color });
                     currentText = '';
@@ -933,12 +1034,12 @@ class EmailService {
                 lines.push({ text: lineText.trim(), bold: true, italic: false, color: '#000000' });
               }
             } else if (block.type === 'listitem') {
-              // Élément de liste: préfixe + segments avec leurs styles
+              // Ã‰lÃ©ment de liste: prÃ©fixe + segments avec leurs styles
               const prefix = block.prefix || '';
               // Pour les listes, on doit rendre chaque segment avec son style
               lines.push({ type: 'listitem', prefix: prefix, segments: block.segments });
             } else if (block.type === 'paragraph') {
-              // Paragraphe: préserver les segments avec leurs styles (couleur, gras, etc.)
+              // Paragraphe: prÃ©server les segments avec leurs styles (couleur, gras, etc.)
               if (block.segments && block.segments.length > 0) {
                 lines.push({ type: 'text', segments: block.segments });
               }
@@ -950,15 +1051,15 @@ class EmailService {
             }
           });
 
-          // Si aucune ligne à rendre, retourner une hauteur minimale
+          // Si aucune ligne Ã  rendre, retourner une hauteur minimale
           if (lines.length === 0) {
-            // Extraire le texte brut pour le rendre même s'il n'y a pas de structure HTML
+            // Extraire le texte brut pour le rendre mÃªme s'il n'y a pas de structure HTML
             const plainText = String(html || '').replace(/<[^>]+>/g, '').trim();
             if (plainText) {
               // Ajouter une ligne simple avec le texte brut
               lines.push({ text: plainText, bold: false, italic: false, color: '#000000' });
             } else {
-              // Même si vide, retourner une hauteur minimale pour que la ligne s'affiche
+              // MÃªme si vide, retourner une hauteur minimale pour que la ligne s'affiche
               return 9; // Hauteur minimale d'une ligne
             }
           }
@@ -966,19 +1067,19 @@ class EmailService {
           // Rendre dans le PDF
           doc.save();
 
-          const padding = 2; // Réduit encore plus pour un espacement très compact comme livraison
+          const padding = 2; // RÃ©duit encore plus pour un espacement trÃ¨s compact comme livraison
           const drawX = x + padding;
           const drawY = y + padding;
           const drawWidth = width - (padding * 2);
-          const baseLineHeight = 9; // Réduit encore plus pour un espacement très compact comme livraison
+          const baseLineHeight = 9; // RÃ©duit encore plus pour un espacement trÃ¨s compact comme livraison
 
           // Ne pas utiliser de clipping pour permettre au texte de s'afficher en entier
-          // Le clipping sera géré par la pagination au niveau supérieur
+          // Le clipping sera gÃ©rÃ© par la pagination au niveau supÃ©rieur
           // if (maxHeight) doc.rect(x, y, width, maxHeight).clip();
 
           let currentY = drawY;
 
-          // Fonction pour calculer la hauteur réelle d'un texte
+          // Fonction pour calculer la hauteur rÃ©elle d'un texte
           function calculateTextHeight(text, availableWidth, fontSize = 9) {
             try {
               const currentFont = doc._font;
@@ -991,23 +1092,23 @@ class EmailService {
             }
           }
 
-          // Fonction pour obtenir la position Y réelle après un rendu
+          // Fonction pour obtenir la position Y rÃ©elle aprÃ¨s un rendu
           function getActualY() {
             return doc.y || currentY;
           }
 
           lines.forEach((line, idx) => {
-            // Note: Le clipping gère visuellement les dépassements
-            // La pagination pour les contenus longs est gérée au niveau supérieur (mode nomenclature)
+            // Note: Le clipping gÃ¨re visuellement les dÃ©passements
+            // La pagination pour les contenus longs est gÃ©rÃ©e au niveau supÃ©rieur (mode nomenclature)
             try {
               if (line.type === 'listitem' && line.segments) {
-                // Rendre une liste avec segments stylisés
+                // Rendre une liste avec segments stylisÃ©s
                 const prefixText = line.prefix || '';
                 const prefixWidth = doc.widthOfString(prefixText, { fontSize: 9 });
                 const contentWidth = drawWidth - prefixWidth;
                 const yBefore = currentY;
 
-                // Rendre le préfixe
+                // Rendre le prÃ©fixe
                 setFont(doc, false, false);
                 doc.fontSize(9);
                 doc.fillColor('#000000');
@@ -1017,12 +1118,12 @@ class EmailService {
                 let isFirstContentSegment = true;
                 line.segments.forEach((segment, segIdx) => {
                   if (segment.text === '\n') {
-                    // Saut de ligne explicite: terminer le texte actuel et passer à la ligne suivante
+                    // Saut de ligne explicite: terminer le texte actuel et passer Ã  la ligne suivante
                     if (!isFirstContentSegment) {
                       doc.text('', { width: contentWidth, continued: false });
                     }
                     currentY += baseLineHeight;
-                    // Redessiner le préfixe sur la nouvelle ligne
+                    // Redessiner le prÃ©fixe sur la nouvelle ligne
                     setFont(doc, false, false);
                     doc.fontSize(9);
                     doc.fillColor('#000000');
@@ -1041,7 +1142,7 @@ class EmailService {
                   const isLastSegment = (segIdx === line.segments.length - 1);
                   
                   if (isFirstContentSegment) {
-                    // Premier segment de contenu: continuer après le préfixe
+                    // Premier segment de contenu: continuer aprÃ¨s le prÃ©fixe
                     doc.text(segment.text, { 
                       width: contentWidth, 
                       align: 'left',
@@ -1049,7 +1150,7 @@ class EmailService {
                     });
                     isFirstContentSegment = false;
                   } else {
-                    // Segments suivants: continuer le texte précédent
+                    // Segments suivants: continuer le texte prÃ©cÃ©dent
                     doc.text(segment.text, { 
                       width: contentWidth, 
                       align: 'left',
@@ -1058,24 +1159,24 @@ class EmailService {
                   }
                 });
 
-                // Terminer le texte si nécessaire
+                // Terminer le texte si nÃ©cessaire
                 if (!isFirstContentSegment) {
                   doc.text('', { width: contentWidth, continued: false });
                 }
 
-                // Calculer la hauteur réelle utilisée
+                // Calculer la hauteur rÃ©elle utilisÃ©e
                 const yAfter = getActualY();
                 const actualHeight = Math.max(baseLineHeight, yAfter - yBefore);
                 currentY += actualHeight;
               } else if (line.type === 'text' && line.segments) {
-                // Rendre du texte avec segments stylisés
-                // Utiliser le mode continued pour éviter les retours à la ligne incorrects
+                // Rendre du texte avec segments stylisÃ©s
+                // Utiliser le mode continued pour Ã©viter les retours Ã  la ligne incorrects
                 let isFirstSegment = true;
                 const yBefore = currentY;
 
                 line.segments.forEach((segment, segIdx) => {
                   if (segment.text === '\n') {
-                    // Saut de ligne explicite: terminer le texte actuel et passer à la ligne suivante
+                    // Saut de ligne explicite: terminer le texte actuel et passer Ã  la ligne suivante
                     if (!isFirstSegment) {
                       // Terminer le texte en cours
                       doc.text('', { width: drawWidth, continued: false });
@@ -1095,7 +1196,7 @@ class EmailService {
                   const isLastSegment = (segIdx === line.segments.length - 1);
                   
                   if (isFirstSegment) {
-                    // Premier segment: positionner à la position initiale
+                    // Premier segment: positionner Ã  la position initiale
                     doc.text(segment.text, drawX, currentY, { 
                       width: drawWidth, 
                       align: align,
@@ -1103,7 +1204,7 @@ class EmailService {
                     });
                     isFirstSegment = false;
                   } else {
-                    // Segments suivants: continuer le texte précédent
+                    // Segments suivants: continuer le texte prÃ©cÃ©dent
                     doc.text(segment.text, { 
                       width: drawWidth, 
                       align: align,
@@ -1112,7 +1213,7 @@ class EmailService {
                   }
                 });
 
-                // Calculer la hauteur réelle utilisée
+                // Calculer la hauteur rÃ©elle utilisÃ©e
                 const yAfter = getActualY();
                 const actualHeight = Math.max(baseLineHeight, yAfter - yBefore);
                 currentY += actualHeight;
@@ -1122,13 +1223,13 @@ class EmailService {
                 doc.fontSize(9);
                 doc.fillColor(line.color || '#000000');
 
-                // Calculer la hauteur réelle du texte
+                // Calculer la hauteur rÃ©elle du texte
                 const textHeight = calculateTextHeight(line.text, drawWidth);
 
                 // Rendre le texte
                 doc.text(line.text, drawX, currentY, { width: drawWidth, align: align });
                 
-                // Mettre à jour Y avec la hauteur réelle
+                // Mettre Ã  jour Y avec la hauteur rÃ©elle
                 currentY += textHeight;
               }
             } catch (e) {
@@ -1137,36 +1238,72 @@ class EmailService {
             }
           });
 
-          // Calculer la hauteur réelle utilisée
+          // Calculer la hauteur rÃ©elle utilisÃ©e
           const actualHeight = currentY - drawY + padding;
           
           doc.restore();
           
-          // Retourner la hauteur réelle utilisée pour ajuster la ligne
+          // Retourner la hauteur rÃ©elle utilisÃ©e pour ajuster la ligne
           return actualHeight;
         }
 
-        // === LE CONTOUR SERA DESSINÉ APRÈS LE RENDU DES LIGNES ===
-        // On ne connaît pas encore la hauteur réelle nécessaire
-        // Le contour sera dessiné après le rendu avec la hauteur réelle
+        // === LE CONTOUR SERA DESSINÃ‰ APRÃˆS LE RENDU DES LIGNES ===
+        // On ne connaÃ®t pas encore la hauteur rÃ©elle nÃ©cessaire
+        // Le contour sera dessinÃ© aprÃ¨s le rendu avec la hauteur rÃ©elle
+        // === DESSINER L'EN-TÊTE DE LA PREMIÈRE PAGE ===
+        let y = drawDocumentHeader(true);
+        y = drawTableHeader(y);
+        const tableStartY = y;
+
+        // Dessiner le footer sur la première page
+        drawPageFooter(1);
+
+        const bottomMargin = 40;
+        const footerHeight = isSimpleDevis ? 0 : 32;
+        const footerY = pageHeight - bottomMargin - footerHeight;
+        const fixedTableHeight = 250;
+        const maxTableHeight = fixedTableHeight;
+
+        const usePreparationColumns = !!options.usePreparationColumns;
+        const tableStartX = 40;
+        const tableWidth = 525;
+        const colRefX = 40;
+        const colRefWidth = 70;
+        const colDesignationX = 110;
+        const colDesignationWidth = isNonValorise ? 410 : (usePreparationColumns ? 190 : 260);
+        const colDesignationPadding = 20;
+        const colQteX = isNonValorise ? 520 : (usePreparationColumns ? 300 : 370);
+        const colQteWidth = 45;
+        const colPUX = usePreparationColumns ? 345 : 415;
+        const colPUWidth = usePreparationColumns ? 50 : 45;
+        const colRX = usePreparationColumns ? 395 : 460;
+        const colRWidth = usePreparationColumns ? 45 : 35;
+        const colPrepBoxesX = usePreparationColumns ? 440 : null;
+        const colPrepBoxesWidth = usePreparationColumns ? 45 : 0;
+        const colPrepRemainX = usePreparationColumns ? 485 : null;
+        const colPrepRemainWidth = usePreparationColumns ? 80 : 0;
+        const colHTX = 500;
+        const colHTWidth = 50;
+        const colHTMargin = 5;
+
         
-        // === CALCULER TOUTES LES HAUTEURS NÉCESSAIRES D'ABORD (comme demande-achat) ===
-        const baseRowHeight = 16; // Réduit encore plus pour un espacement très compact comme livraison
-        const maxRowHeight = 1000; // Augmenté pour permettre plus de contenu
+        // === CALCULER TOUTES LES HAUTEURS NÃ‰CESSAIRES D'ABORD (comme demande-achat) ===
+        const baseRowHeight = 16; // RÃ©duit encore plus pour un espacement trÃ¨s compact comme livraison
+        const maxRowHeight = 1000; // AugmentÃ© pour permettre plus de contenu
         const rowHeights = [];
         let totalNeededHeight = 0;
-        // availableHeight sera calculé dynamiquement selon le contenu
-        let adjustedRowHeights = []; // Déclarer avant les blocs if pour qu'il soit accessible partout
+        // availableHeight sera calculÃ© dynamiquement selon le contenu
+        let adjustedRowHeights = []; // DÃ©clarer avant les blocs if pour qu'il soit accessible partout
 
         if (devisData && devisData.length > 0) {
-          // Calculer d'abord toutes les hauteurs nécessaires
+          // Calculer d'abord toutes les hauteurs nÃ©cessaires
           devisData.forEach((line) => {
             const designationHtml = line.article || '';
             // La largeur effective pour le calcul de hauteur doit tenir compte du padding interne de renderInlineHtml (16px)
             const effectiveDesignationWidth = Math.max(0, colDesignationWidth - 16);
 
-            // Améliorer le calcul de hauteur en tenant compte des structures HTML
-            // Compter les lignes supplémentaires pour les titres, listes, paragraphes
+            // AmÃ©liorer le calcul de hauteur en tenant compte des structures HTML
+            // Compter les lignes supplÃ©mentaires pour les titres, listes, paragraphes
             let lineCount = 1; // Au moins une ligne
             const htmlContent = designationHtml || '';
             
@@ -1174,15 +1311,15 @@ class EmailService {
             const brCount = (htmlContent.match(/<br\s*\/?>/gi) || []).length;
             lineCount += brCount;
             
-            // Compter les titres (h1-h6) - chaque titre = 1 ligne supplémentaire
+            // Compter les titres (h1-h6) - chaque titre = 1 ligne supplÃ©mentaire
             const headingCount = (htmlContent.match(/<h[1-6][^>]*>/gi) || []).length;
             lineCount += headingCount;
             
-            // Compter les éléments de liste (li) - chaque élément = 1 ligne supplémentaire
+            // Compter les Ã©lÃ©ments de liste (li) - chaque Ã©lÃ©ment = 1 ligne supplÃ©mentaire
             const liCount = (htmlContent.match(/<li[^>]*>/gi) || []).length;
             lineCount += liCount;
             
-            // Compter les paragraphes (p) - chaque paragraphe = 1 ligne supplémentaire
+            // Compter les paragraphes (p) - chaque paragraphe = 1 ligne supplÃ©mentaire
             const pCount = (htmlContent.match(/<p[^>]*>/gi) || []).length;
             lineCount += pCount;
 
@@ -1190,7 +1327,7 @@ class EmailService {
             const designationPlain = (designationHtml || '')
               .replace(/<h[1-6][^>]*>/gi, '\n').replace(/<\/h[1-6]>/gi, '\n')
               .replace(/<ul[^>]*>/gi, '\n').replace(/<\/ul>/gi, '\n')
-              .replace(/<li[^>]*>/gi, '\n• ').replace(/<\/li>/gi, '')
+              .replace(/<li[^>]*>/gi, '\nâ€¢ ').replace(/<\/li>/gi, '')
               .replace(/<br\s*\/?>/gi, '\n')
               .replace(/<p[^>]*>/gi, '\n').replace(/<\/p>/gi, '\n')
               .replace(/<[^>]*>/g, '')
@@ -1211,14 +1348,14 @@ class EmailService {
               }
             }
 
-            // Utiliser le maximum entre la hauteur calculée et le nombre de lignes estimé
-            // Chaque ligne structurelle (titre, liste, etc.) ajoute environ 12px (réduit de 14px)
+            // Utiliser le maximum entre la hauteur calculÃ©e et le nombre de lignes estimÃ©
+            // Chaque ligne structurelle (titre, liste, etc.) ajoute environ 12px (rÃ©duit de 14px)
             const structuralHeight = lineCount * 12;
             const estimatedHeight = Math.max(textHeight, structuralHeight);
 
             const validTextHeight = isNaN(estimatedHeight) || estimatedHeight <= 0 ? baseRowHeight : estimatedHeight;
-            // Espacement vertical minimal - seulement ce qui est nécessaire pour le texte
-            // Réduire le padding à 4px (2px en haut + 2px en bas) pour un espacement très compact comme livraison
+            // Espacement vertical minimal - seulement ce qui est nÃ©cessaire pour le texte
+            // RÃ©duire le padding Ã  4px (2px en haut + 2px en bas) pour un espacement trÃ¨s compact comme livraison
             const naturalHeight = Math.max(baseRowHeight, Math.ceil(validTextHeight) + 4);
             const rowHeight = Math.min(maxRowHeight, naturalHeight);
             const validRowHeight = isNaN(rowHeight) || rowHeight <= 0 ? baseRowHeight : rowHeight;
@@ -1227,18 +1364,18 @@ class EmailService {
             totalNeededHeight += validRowHeight;
           });
 
-          // Utiliser les hauteurs naturelles calculées - ne pas forcer à remplir tout l'espace
-          // Le tableau s'agrandit automatiquement uniquement s'il y a plusieurs détails
+          // Utiliser les hauteurs naturelles calculÃ©es - ne pas forcer Ã  remplir tout l'espace
+          // Le tableau s'agrandit automatiquement uniquement s'il y a plusieurs dÃ©tails
           adjustedRowHeights = [...rowHeights];
-          // totalNeededHeight contient déjà la somme des hauteurs naturelles
+          // totalNeededHeight contient dÃ©jÃ  la somme des hauteurs naturelles
         }
         
         // === RENDU DES LIGNES DU TABLEAU DANS L'ESPACE FIXE ===
         let currentRowY = tableStartY; // Position Y courante pour les lignes
-        let tableStartYCurrent = tableStartY; // Position Y actuelle du début du tableau (peut changer avec pagination)
-        let actualTableHeight = 0; // Hauteur réelle utilisée par les lignes sur la première page
-        let isFirstPage = true; // Indicateur pour savoir si on est sur la première page
-        const firstPageTableStartY = tableStartY; // Sauvegarder la position de la première page pour la vérification
+        let tableStartYCurrent = tableStartY; // Position Y actuelle du dÃ©but du tableau (peut changer avec pagination)
+        let actualTableHeight = 0; // Hauteur rÃ©elle utilisÃ©e par les lignes sur la premiÃ¨re page
+        let isFirstPage = true; // Indicateur pour savoir si on est sur la premiÃ¨re page
+        const firstPageTableStartY = tableStartY; // Sauvegarder la position de la premiÃ¨re page pour la vÃ©rification
         
         console.log(`[PDF ${documentTitle}] Initialisation: tableStartY=${tableStartY}, tableStartYCurrent=${tableStartYCurrent}, firstPageTableStartY=${firstPageTableStartY}`);
         
@@ -1248,15 +1385,15 @@ class EmailService {
             const designationHtml = line.article || '';
             const pu = isNaN(Number(line.prix)) ? 0 : Number(line.prix);
             const qte = isNaN(Number(line.quantite)) ? 0 : Number(line.quantite);
-            // Dans le SQL, 'remise' contient déjà le HT après remise
+            // Dans le SQL, 'remise' contient dÃ©jÃ  le HT aprÃ¨s remise
             const htAfterRemise = isNaN(Number(line.remise)) ? 0 : Number(line.remise);
             const taux_tva = isNaN(Number(line.taux_tva)) ? 0 : Number(line.taux_tva);
 
             // Calculer le montant de la remise
             const totalAvantRemise = pu * qte;
             const montantRemise = isNaN(totalAvantRemise - htAfterRemise) ? 0 : (totalAvantRemise - htAfterRemise);
-            const ht = htAfterRemise; // HT = montant après remise
-            // Si client exonéré (devis) => TVA 0
+            const ht = htAfterRemise; // HT = montant aprÃ¨s remise
+            // Si client exonÃ©rÃ© (devis) => TVA 0
             const tva = (isClientExonerated && isDevis) ? 0 : (isNaN(ht * taux_tva) ? 0 : (ht * taux_tva));
             const ttc = isNaN(ht + tva) ? 0 : (ht + tva);
 
@@ -1265,42 +1402,42 @@ class EmailService {
             totalTVA += tva;
             totalTTC += ttc;
 
-            // Utiliser la hauteur précalculée et ajustée
+            // Utiliser la hauteur prÃ©calculÃ©e et ajustÃ©e
             const validRowHeight = adjustedRowHeights[index] || baseRowHeight;
 
-            // CRITIQUE : Vérifier AVANT de rendre la ligne si elle rentre dans l'espace restant du tableau
-            // Si non, créer une nouvelle page AVANT de rendre la ligne
+            // CRITIQUE : VÃ©rifier AVANT de rendre la ligne si elle rentre dans l'espace restant du tableau
+            // Si non, crÃ©er une nouvelle page AVANT de rendre la ligne
             const currentY = currentRowY;
             const estimatedNextY = currentY + validRowHeight;
             const tableEndY = tableStartYCurrent + maxTableHeight; // Fin du tableau max sur la page actuelle
             
-            // Vérifier si la ligne dépasse la hauteur fixe du tableau
-            // Si oui, créer une nouvelle page AVANT de rendre cette ligne
+            // VÃ©rifier si la ligne dÃ©passe la hauteur fixe du tableau
+            // Si oui, crÃ©er une nouvelle page AVANT de rendre cette ligne
             if (estimatedNextY > tableEndY && !isNaN(estimatedNextY)) {
-              // La ligne va dépasser, créer une nouvelle page AVANT de la rendre
+              // La ligne va dÃ©passer, crÃ©er une nouvelle page AVANT de la rendre
               doc.addPage();
               currentPageNumber++;
               y = drawDocumentHeader(false);
               y = drawTableHeader(y);
-              // Le contour sera dessiné après le rendu des lignes sur cette page
+              // Le contour sera dessinÃ© aprÃ¨s le rendu des lignes sur cette page
               const newTableStartY = y;
-              // Réinitialiser la position Y pour les lignes
+              // RÃ©initialiser la position Y pour les lignes
               currentRowY = newTableStartY;
-              // Mettre à jour tableStartYCurrent pour les vérifications suivantes
+              // Mettre Ã  jour tableStartYCurrent pour les vÃ©rifications suivantes
               tableStartYCurrent = newTableStartY;
-              // On n'est plus sur la première page
+              // On n'est plus sur la premiÃ¨re page
               isFirstPage = false;
             }
 
-            // === MODE NOMENCLATURE : Pagination spéciale pour afficher TOUS les composants ===
+            // === MODE NOMENCLATURE : Pagination spÃ©ciale pour afficher TOUS les composants ===
             if (printMode === 'nomenclature') {
-              console.log('[PDF Nomenclature] 📝 Début rendu nomenclature');
-              console.log('[PDF Nomenclature] - Réf:', ref);
+              console.log('[PDF Nomenclature] ðŸ“ DÃ©but rendu nomenclature');
+              console.log('[PDF Nomenclature] - RÃ©f:', ref);
               console.log('[PDF Nomenclature] - Contenu HTML longueur:', (designationHtml || '').length);
               
               // Constantes pour le rendu
               // CRITIQUE : La largeur doit respecter la marge avant colQteX (350)
-              // Désignation commence à 105, donc largeur max = 350 - 105 - 10 (marge) = 235
+              // DÃ©signation commence Ã  105, donc largeur max = 350 - 105 - 10 (marge) = 235
               const contentWidth = colQteX - 105 - 10; // = 235
               const padding = 8;
               const minLineHeight = 14; // Hauteur minimale par ligne de texte
@@ -1331,7 +1468,7 @@ class EmailService {
                 let lastIndex = 0;
                 let match;
                 
-                // Réinitialiser le pattern
+                // RÃ©initialiser le pattern
                 const tempDiv = remaining;
                 const allMatches = [];
                 
@@ -1372,7 +1509,7 @@ class EmailService {
                     color = rgbToHex(colorMatch[1].trim());
                   }
                   
-                  // Nettoyer le contenu (enlever les tags imbriqués mais garder le texte)
+                  // Nettoyer le contenu (enlever les tags imbriquÃ©s mais garder le texte)
                   const cleanContent = m.content.replace(/<[^>]+>/g, '').trim();
                   if (cleanContent) {
                     segments.push({ text: cleanContent, bold: isBold, italic: isItalic, color: color });
@@ -1381,7 +1518,7 @@ class EmailService {
                   currentPos = m.index + m.length;
                 });
                 
-                // Texte après le dernier tag
+                // Texte aprÃ¨s le dernier tag
                 if (currentPos < tempDiv.length) {
                   const textAfter = tempDiv.substring(currentPos).replace(/<[^>]+>/g, '');
                   if (textAfter.trim()) {
@@ -1389,7 +1526,7 @@ class EmailService {
                   }
                 }
                 
-                // Si aucun segment trouvé, retourner le texte brut
+                // Si aucun segment trouvÃ©, retourner le texte brut
                 if (segments.length === 0) {
                   const plainText = lineHtml.replace(/<[^>]+>/g, '').trim();
                   if (plainText) {
@@ -1400,7 +1537,7 @@ class EmailService {
                 return segments;
               };
               
-              // Séparer le HTML en lignes (par <p>, <li>, <br>, <h1-6>)
+              // SÃ©parer le HTML en lignes (par <p>, <li>, <br>, <h1-6>)
               let tempHtml = htmlContent
                 .replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h[1-6]>/gi, '\n[H$1]$2[/H]\n')
                 .replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '\n[LI]$1[/LI]\n')
@@ -1409,10 +1546,10 @@ class EmailService {
                 .replace(/<br\s*\/?>/gi, '\n');
               
               const rawLines = tempHtml.split('\n').filter(line => line.trim());
-              console.log('[PDF Nomenclature] Lignes parsées:', rawLines.length);
+              console.log('[PDF Nomenclature] Lignes parsÃ©es:', rawLines.length);
               
               // Calculer la hauteur de chaque ligne et parser les segments
-              // IMPORTANT: Utiliser la même largeur que contentWidth pour cohérence
+              // IMPORTANT: Utiliser la mÃªme largeur que contentWidth pour cohÃ©rence
               const lineHeights = [];
               const lineSpacing = 12; // Espacement entre les lignes de texte (taille police 9 + marge)
               
@@ -1435,7 +1572,7 @@ class EmailService {
                 if (segments.length === 0) return;
                 
                 // Calculer le texte complet pour la hauteur
-                const prefix = isLi ? '• ' : '';
+                const prefix = isLi ? 'â€¢ ' : '';
                 const fullText = prefix + segments.map(s => s.text).join('');
                 
                 // Utiliser la bonne police pour le calcul de hauteur
@@ -1443,11 +1580,11 @@ class EmailService {
                 doc.fontSize(fontSize);
                 doc.font(isHeading ? 'Helvetica-Bold' : 'Helvetica');
                 
-                // Calculer avec la largeur réelle de la colonne moins le préfixe si liste
+                // Calculer avec la largeur rÃ©elle de la colonne moins le prÃ©fixe si liste
                 const effectiveWidth = contentWidth - (isLi ? 15 : 0);
                 
-                // MÉTHODE FIABLE : Calculer le nombre de lignes wrappées manuellement
-                // Largeur de chaque caractère moyen ≈ 5.5 pour fontSize 9
+                // MÃ‰THODE FIABLE : Calculer le nombre de lignes wrappÃ©es manuellement
+                // Largeur de chaque caractÃ¨re moyen â‰ˆ 5.5 pour fontSize 9
                 const avgCharWidth = fontSize * 0.55;
                 const charsPerLine = Math.floor(effectiveWidth / avgCharWidth);
                 const numLines = Math.ceil(fullText.length / charsPerLine);
@@ -1455,7 +1592,7 @@ class EmailService {
                 // Hauteur = nombre de lignes * espacement
                 const calculatedHeight = numLines * lineSpacing;
                 
-                // Vérifier aussi avec heightOfString pour plus de précision
+                // VÃ©rifier aussi avec heightOfString pour plus de prÃ©cision
                 let textHeight;
                 try {
                   textHeight = doc.heightOfString(fullText, { width: effectiveWidth, align: 'left' });
@@ -1466,7 +1603,7 @@ class EmailService {
                   textHeight = calculatedHeight;
                 }
                 
-                // Prendre le maximum des deux méthodes + marge de sécurité
+                // Prendre le maximum des deux mÃ©thodes + marge de sÃ©curitÃ©
                 const finalHeight = Math.max(minLineHeight, Math.max(textHeight, calculatedHeight) + 6);
                 
                 console.log(`[PDF] Ligne ${idx}: "${fullText.substring(0, 30)}..." - Largeur: ${effectiveWidth}, Chars: ${fullText.length}, Lignes: ${numLines}, Hauteur: ${finalHeight}`);
@@ -1480,20 +1617,26 @@ class EmailService {
                 });
               });
               
-              console.log('[PDF Nomenclature] Lignes avec hauteurs calculées:', lineHeights.length);
+              console.log('[PDF Nomenclature] Lignes avec hauteurs calculÃ©es:', lineHeights.length);
               
-              // Calculer la hauteur totale nécessaire
+              // Calculer la hauteur totale nÃ©cessaire
               let totalContentHeight = padding * 2;
               lineHeights.forEach(lh => { totalContentHeight += lh.height; });
               console.log('[PDF Nomenclature] Hauteur totale du contenu:', totalContentHeight);
               
-              // Valeurs formatées
-              const qteFormatted = isNaN(qte) ? '0,00' : qte.toFixed(2).replace('.', ',');
+              // Valeurs formatÃ©es
+              const qteFormatted = line.qte_display
+                ? String(line.qte_display)
+                : (isNaN(qte)
+                    ? '0'
+                    : ((isLivraison && (isNonValorise || Number.isInteger(qte)))
+                        ? String(Math.round(qte))
+                        : qte.toFixed(2).replace('.', ',')));
               const puFormatted = isNaN(pu) ? '0,00' : pu.toFixed(2).replace('.', ',');
               const remiseFormatted = isNaN(montantRemise) ? '0,00' : montantRemise.toFixed(2).replace('.', ',');
               const htFormatted = isNaN(ht) ? '0,00' : ht.toFixed(2).replace('.', ',');
               
-              // Variables pour le rendu paginé
+              // Variables pour le rendu paginÃ©
               let currentLineIdx = 0;
               let currentY = y;
               let isFirstBlock = true;
@@ -1501,7 +1644,7 @@ class EmailService {
               
               while (currentLineIdx < lineHeights.length) {
                 // Calculer combien de lignes on peut mettre sur cette page
-                const availableHeight = pageLimit - currentY - padding * 2;
+                const availableHeight = maxYBeforeNewPage - currentY - padding * 2;
                 console.log('[PDF Nomenclature] Page', pageNum, '- Y:', currentY, 'Disponible:', availableHeight);
                 
                 // Si pas assez d'espace pour au moins une ligne, nouvelle page
@@ -1531,7 +1674,7 @@ class EmailService {
                   }
                 }
                 
-                // S'assurer qu'on a au moins une ligne (même si elle dépasse)
+                // S'assurer qu'on a au moins une ligne (mÃªme si elle dÃ©passe)
                 if (linesToRender.length === 0 && tempIdx < lineHeights.length) {
                   linesToRender.push(lineHeights[tempIdx]);
                   blockHeight = padding * 2 + lineHeights[tempIdx].height;
@@ -1543,11 +1686,9 @@ class EmailService {
                 // Dessiner le bloc de tableau
                 const blockY = currentY;
                 const rowHeight = Math.max(baseRowHeight, blockHeight);
+                // Pas de cadre interne autour des composants
                 
-                // Bordure du bloc
-                doc.roundedRect(50, blockY, 510, rowHeight, tableBorderRadius).stroke('#000');
-                
-                // Réf (seulement sur le premier bloc)
+                // RÃ©f (seulement sur le premier bloc)
                 if (isFirstBlock) {
                   doc.save();
                   doc.font('Helvetica').fontSize(9).fillColor('#000');
@@ -1555,24 +1696,24 @@ class EmailService {
                   doc.restore();
                 }
                 
-                // Désignation - rendre les lignes UNE PAR UNE
-                // CRITIQUE : Chaque ligne doit être rendue à sa propre position Y
+                // DÃ©signation - rendre les lignes UNE PAR UNE
+                // CRITIQUE : Chaque ligne doit Ãªtre rendue Ã  sa propre position Y
                 let textY = blockY + padding;
-                const textStartX = 105;
-                const textMaxWidth = colQteX - textStartX - 10; // Marge de sécurité de 10px
+                const textStartX = 110;
+                const textMaxWidth = colQteX - textStartX - 10; // Marge de sÃ©curitÃ© de 10px
                 
                 linesToRender.forEach((lineData) => {
                   doc.save();
                   
-                  // Clipper pour empêcher tout débordement horizontal
+                  // Clipper pour empÃªcher tout dÃ©bordement horizontal
                   doc.rect(textStartX, textY, textMaxWidth, lineData.height).clip();
                   
                   let currentX = textStartX;
                   
-                  // Préfixe pour les listes
+                  // PrÃ©fixe pour les listes
                   if (lineData.isLi) {
                     doc.font('Helvetica').fontSize(9).fillColor('#000');
-                    doc.text('• ', currentX, textY, { lineBreak: false, continued: false });
+                    doc.text('â€¢ ', currentX, textY, { lineBreak: false, continued: false });
                     currentX += 15;
                   }
                   
@@ -1589,11 +1730,11 @@ class EmailService {
                       lineBreak: true
                     });
                   } else {
-                    // Vérifier s'il y a des styles différents
+                    // VÃ©rifier s'il y a des styles diffÃ©rents
                     const hasStyles = lineData.segments.some(s => s.bold || s.italic || s.color);
                     
                     if (!hasStyles || lineData.segments.length === 1) {
-                      // Pas de styles spéciaux ou un seul segment
+                      // Pas de styles spÃ©ciaux ou un seul segment
                       const segment = lineData.segments[0] || { text: '', bold: false, italic: false, color: null };
                       
                       // Appliquer la police
@@ -1617,8 +1758,8 @@ class EmailService {
                         lineBreak: true
                       });
                     } else {
-                      // Plusieurs segments avec styles différents
-                      // Utiliser le mode continued pour éviter les retours à la ligne incorrects
+                      // Plusieurs segments avec styles diffÃ©rents
+                      // Utiliser le mode continued pour Ã©viter les retours Ã  la ligne incorrects
                       let isFirstSegment = true;
                       
                       lineData.segments.forEach((segment, segIdx) => {
@@ -1639,7 +1780,7 @@ class EmailService {
                         const isLastSegment = (segIdx === lineData.segments.length - 1);
                         
                         if (isFirstSegment) {
-                          // Premier segment: positionner à la position initiale
+                          // Premier segment: positionner Ã  la position initiale
                           doc.text(segment.text, currentX, textY, { 
                             width: availableWidth,
                             align: 'left',
@@ -1647,7 +1788,7 @@ class EmailService {
                           });
                           isFirstSegment = false;
                         } else {
-                          // Segments suivants: continuer le texte précédent
+                          // Segments suivants: continuer le texte prÃ©cÃ©dent
                           doc.text(segment.text, { 
                             width: availableWidth,
                             align: 'left',
@@ -1656,7 +1797,7 @@ class EmailService {
                         }
                       });
                       
-                      // Terminer le texte si nécessaire
+                      // Terminer le texte si nÃ©cessaire
                       if (!isFirstSegment) {
                         doc.text('', { width: availableWidth, continued: false });
                       }
@@ -1665,35 +1806,33 @@ class EmailService {
                   
                   doc.restore();
                   
-                  // Incrémenter Y avec la hauteur calculée de cette ligne
+                  // IncrÃ©menter Y avec la hauteur calculÃ©e de cette ligne
                   textY += lineData.height;
                 });
                 
-                // Valeurs numériques (seulement sur le premier bloc)
+                // Valeurs numÃ©riques (seulement sur le premier bloc)
                 if (isFirstBlock) {
                   const centerY = blockY + padding + 3;
                   doc.save();
                   doc.font('Helvetica').fontSize(9).fillColor('#000');
-                  doc.text(qteFormatted, colQteX, centerY, { width: colQteWidth, align: 'right' });
-                  doc.text(puFormatted, colPUX, centerY, { width: colPUWidth, align: 'right' });
-                  doc.text(remiseFormatted, colRX, centerY, { width: colRWidth, align: 'right' });
-                  doc.text(htFormatted, colHTX + 5, centerY, { width: colHTWidth - 5, align: 'right' });
+                  doc.text(qteFormatted, colQteX, centerY, { width: colQteWidth, align: isLivraison ? 'center' : (isNonValorise ? 'center' : 'right') });
+                  if (!isNonValorise) {
+                    doc.text(puFormatted, colPUX, centerY, { width: colPUWidth, align: isLivraison ? 'center' : 'right' });
+                    doc.text(remiseFormatted, colRX, centerY, { width: colRWidth, align: 'right' });
+                    doc.text(htFormatted, colHTX + 5, centerY, { width: colHTWidth - 5, align: 'right' });
+                  }
                   doc.restore();
                 }
+
                 
-                // Lignes verticales
-                [colDesignationX, colQteX, colPUX, colRX, colHTX].forEach(xPos => {
-                  doc.moveTo(xPos, blockY).lineTo(xPos, blockY + rowHeight).stroke('#000');
-                });
-                
-                // Mettre à jour les variables
+                // Mettre Ã  jour les variables
                 currentY = blockY + rowHeight;
                 currentLineIdx = tempIdx;
                 isFirstBlock = false;
                 
                 console.log('[PDF Nomenclature] Bloc rendu, nouveau Y:', currentY, 'Lignes restantes:', lineHeights.length - currentLineIdx);
                 
-                // Si il reste des lignes, passer à une nouvelle page
+                // Si il reste des lignes, passer Ã  une nouvelle page
                 if (currentLineIdx < lineHeights.length) {
                   doc.addPage();
                   currentPageNumber++;
@@ -1704,9 +1843,9 @@ class EmailService {
               }
               
               y = currentY;
-              console.log('[PDF Nomenclature] ✅ Rendu terminé. Y final:', y, 'Pages:', pageNum);
+              console.log('[PDF Nomenclature] âœ… Rendu terminÃ©. Y final:', y, 'Pages:', pageNum);
               
-              // Réinitialiser les positions
+              // RÃ©initialiser les positions
               doc.x = undefined;
               doc.y = undefined;
               
@@ -1714,19 +1853,19 @@ class EmailService {
               return;
             }
             
-            // Tous les éléments sur la même ligne horizontale (comme demande-achat)
+            // Tous les Ã©lÃ©ments sur la mÃªme ligne horizontale (comme demande-achat)
             const validY = currentRowY;
 
             doc.font('Helvetica').fontSize(9).fillColor('#000000');
             
-            // Désignation (avec HTML support) - même ligne
-            // La fonction renderInlineHtml ajoute un padding de 2px de chaque côté
-            // Estimer la hauteur pour déterminer l'alignement vertical
+            // DÃ©signation (avec HTML support) - mÃªme ligne
+            // La fonction renderInlineHtml ajoute un padding de 2px de chaque cÃ´tÃ©
+            // Estimer la hauteur pour dÃ©terminer l'alignement vertical
             const effectiveDesignationWidth = Math.max(0, colDesignationWidth - 4); // Largeur moins padding
             const designationPlain = (designationHtml || '')
               .replace(/<h[1-6][^>]*>/gi, '\n').replace(/<\/h[1-6]>/gi, '\n')
               .replace(/<ul[^>]*>/gi, '\n').replace(/<\/ul>/gi, '\n')
-              .replace(/<li[^>]*>/gi, '\n• ').replace(/<\/li>/gi, '')
+              .replace(/<li[^>]*>/gi, '\nâ€¢ ').replace(/<\/li>/gi, '')
               .replace(/<br\s*\/?>/gi, '\n')
               .replace(/<p[^>]*>/gi, '\n').replace(/<\/p>/gi, '\n')
               .replace(/<[^>]*>/g, '')
@@ -1747,43 +1886,57 @@ class EmailService {
             const estimatedRowHeight = Math.max(validRowHeight, estimatedHeight);
             const centerY = validY + (estimatedRowHeight / 2) - 3;
             
-            // Pour les lignes courtes (une seule ligne), aligner la désignation avec les autres colonnes
-            // renderInlineHtml ajoute un padding de 2px, donc on ajuste le Y de départ pour aligner avec centerY
+            // Pour les lignes courtes (une seule ligne), aligner la dÃ©signation avec les autres colonnes
+            // renderInlineHtml ajoute un padding de 2px, donc on ajuste le Y de dÃ©part pour aligner avec centerY
             const designationStartY = estimatedRowHeight <= validRowHeight + 5 
               ? centerY - 4.5  // Aligner avec centerY pour les lignes courtes (taille police 9 / 2 = 4.5)
               : validY;  // Commencer en haut pour les lignes longues
             
-            // Rendre la désignation avec le bon alignement vertical
-            // S'assurer qu'on a toujours quelque chose à rendre même si designationHtml est vide
+            // Rendre la dÃ©signation avec le bon alignement vertical
+            // S'assurer qu'on a toujours quelque chose Ã  rendre mÃªme si designationHtml est vide
             const designationToRender = designationHtml && String(designationHtml).trim() ? designationHtml : ' ';
             const actualDesignationHeight = renderInlineHtml(doc, designationToRender, colDesignationX, designationStartY, colDesignationWidth, null) || validRowHeight;
             
-            // Utiliser la hauteur réelle retournée par renderInlineHtml, avec un minimum de validRowHeight
+            // Utiliser la hauteur rÃ©elle retournÃ©e par renderInlineHtml, avec un minimum de validRowHeight
             const actualRowHeight = Math.max(validRowHeight, actualDesignationHeight + 2); // +2 pour le padding minimal
             
-            // Recalculer centerY avec la hauteur réelle pour les autres colonnes
+            // Recalculer centerY avec la hauteur rÃ©elle pour les autres colonnes
             const finalCenterY = validY + (actualRowHeight / 2) - 3;
             
-            // Réf aligné à gauche, sur la même ligne que les autres colonnes
+            // RÃ©f alignÃ© Ã  gauche, sur la mÃªme ligne que les autres colonnes
             doc.text(ref || '', colRefX + 8, finalCenterY, { width: colRefWidth - 16, align: 'left' });
 
-            // Qté, P.U., R., H.T. alignés à droite - centrer verticalement dans la ligne
-            doc.text(qte.toFixed(2).replace('.', ','), colQteX, finalCenterY, { width: colQteWidth, align: 'right' });
-            doc.text(pu.toFixed(2).replace('.', ','), colPUX, finalCenterY, { width: colPUWidth, align: 'right' });
-            const remiseText = (montantRemise > 0 ? montantRemise.toFixed(2).replace('.', ',') : '0,00');
-            doc.text(remiseText, colRX, finalCenterY, { width: colRWidth, align: 'right' });
-            doc.text(ht.toFixed(2).replace('.', ','), colHTX, finalCenterY, { width: colHTWidth, align: 'right' });
+            // QtÃ©, P.U., R., H.T. alignÃ©s Ã  droite - centrer verticalement dans la ligne
+            const qteDisplay = line.qte_display
+              ? String(line.qte_display)
+              : ((isLivraison && (isNonValorise || Number.isInteger(qte)))
+                  ? String(Math.round(qte))
+                  : qte.toFixed(2).replace('.', ','));
+            doc.text(qteDisplay, colQteX, finalCenterY, { width: colQteWidth, align: isLivraison ? 'center' : (isNonValorise ? 'center' : 'right') });
+            if (!isNonValorise) {
+              if (usePreparationColumns) {
+                doc.text(String(line.unite_display || line.unite_nom || ''), colPUX, finalCenterY, { width: colPUWidth, align: 'center' });
+                doc.text(String(line.factor_display || line.result_display || ''), colRX, finalCenterY, { width: colRWidth, align: 'center' });
+                doc.text(String(line.boxes_display || ''), colPrepBoxesX, finalCenterY, { width: colPrepBoxesWidth, align: 'center' });
+                doc.text(String(line.remainder_display || ''), colPrepRemainX, finalCenterY, { width: colPrepRemainWidth, align: 'center' });
+              } else {
+                doc.text(pu.toFixed(2).replace('.', ','), colPUX, finalCenterY, { width: colPUWidth, align: isLivraison ? 'center' : 'right' });
+                const remiseText = (montantRemise > 0 ? montantRemise.toFixed(2).replace('.', ',') : '0,00');
+                doc.text(remiseText, colRX, finalCenterY, { width: colRWidth, align: 'right' });
+                doc.text(ht.toFixed(2).replace('.', ','), colHTX, finalCenterY, { width: colHTWidth, align: 'right' });
+              }
+            }
 
-            // Mettre à jour currentRowY pour la ligne suivante avec la hauteur réelle
+            // Mettre Ã  jour currentRowY pour la ligne suivante avec la hauteur rÃ©elle
             currentRowY = validY + actualRowHeight;
             
-            // Mettre à jour la hauteur dans adjustedRowHeights pour le calcul du tableau
+            // Mettre Ã  jour la hauteur dans adjustedRowHeights pour le calcul du tableau
             adjustedRowHeights[index] = actualRowHeight;
             
-            // Mettre à jour la hauteur réelle utilisée (seulement pour la première page)
-            // Calculer après la mise à jour de currentRowY pour avoir la hauteur correcte
+            // Mettre Ã  jour la hauteur rÃ©elle utilisÃ©e (seulement pour la premiÃ¨re page)
+            // Calculer aprÃ¨s la mise Ã  jour de currentRowY pour avoir la hauteur correcte
             if (isFirstPage) {
-              // La hauteur réelle est la position actuelle moins le début du tableau de la première page
+              // La hauteur rÃ©elle est la position actuelle moins le dÃ©but du tableau de la premiÃ¨re page
               const newHeight = currentRowY - firstPageTableStartY;
               actualTableHeight = Math.max(actualTableHeight, newHeight);
               console.log(`[PDF Livraison] Ligne ${index + 1}: currentRowY=${currentRowY.toFixed(2)}, actualTableHeight=${actualTableHeight.toFixed(2)}, maxTableHeight=${maxTableHeight.toFixed(2)}, isFirstPage=${isFirstPage}, firstPageTableStartY=${firstPageTableStartY}`);
@@ -1791,21 +1944,28 @@ class EmailService {
           });
           
           // Utiliser la hauteur fixe maxTableHeight pour que le tableau occupe toujours l'espace jusqu'en bas
-          // Le tableau a une taille fixe même s'il n'y a pas de détails
+          // Le tableau a une taille fixe mÃªme s'il n'y a pas de dÃ©tails
           let targetHeight = maxTableHeight; // Hauteur fixe pour occuper tout l'espace disponible
           
           if (targetHeight > 0 && !isNaN(targetHeight)) {
-            // Dessiner le contour avec la hauteur réelle
+            // Dessiner le contour avec la hauteur rÃ©elle
             doc.roundedRect(tableStartX, tableStartY, tableWidth, targetHeight, tableBorderRadius).stroke('#000');
-            // Dessiner les lignes verticales avec la hauteur réelle (positions mises à jour)
+            // Dessiner les lignes verticales avec la hauteur rÃ©elle (positions mises Ã  jour)
             doc.moveTo(colDesignationX, tableStartY).lineTo(colDesignationX, tableStartY + targetHeight).stroke('#000');
             doc.moveTo(colQteX, tableStartY).lineTo(colQteX, tableStartY + targetHeight).stroke('#000');
-            doc.moveTo(colPUX, tableStartY).lineTo(colPUX, tableStartY + targetHeight).stroke('#000');
-            doc.moveTo(colRX, tableStartY).lineTo(colRX, tableStartY + targetHeight).stroke('#000');
-            doc.moveTo(colHTX, tableStartY).lineTo(colHTX, tableStartY + targetHeight).stroke('#000');
+            if (!isNonValorise) {
+              doc.moveTo(colPUX, tableStartY).lineTo(colPUX, tableStartY + targetHeight).stroke('#000');
+              doc.moveTo(colRX, tableStartY).lineTo(colRX, tableStartY + targetHeight).stroke('#000');
+              if (usePreparationColumns) {
+                doc.moveTo(colPrepBoxesX, tableStartY).lineTo(colPrepBoxesX, tableStartY + targetHeight).stroke('#000');
+                doc.moveTo(colPrepRemainX, tableStartY).lineTo(colPrepRemainX, tableStartY + targetHeight).stroke('#000');
+              } else {
+                doc.moveTo(colHTX, tableStartY).lineTo(colHTX, tableStartY + targetHeight).stroke('#000');
+              }
+            }
           }
           
-          // Mettre à jour y pour être à la fin du tableau
+          // Mettre Ã  jour y pour Ãªtre Ã  la fin du tableau
           y = tableStartY + targetHeight;
         } else {
           // Si aucune ligne, utiliser la hauteur fixe maxTableHeight pour occuper tout l'espace
@@ -1813,98 +1973,139 @@ class EmailService {
           doc.roundedRect(tableStartX, tableStartY, tableWidth, maxTableHeight, tableBorderRadius).stroke('#000');
           doc.moveTo(colDesignationX, tableStartY).lineTo(colDesignationX, tableStartY + maxTableHeight).stroke('#000');
           doc.moveTo(colQteX, tableStartY).lineTo(colQteX, tableStartY + maxTableHeight).stroke('#000');
-          doc.moveTo(colPUX, tableStartY).lineTo(colPUX, tableStartY + maxTableHeight).stroke('#000');
-          doc.moveTo(colRX, tableStartY).lineTo(colRX, tableStartY + maxTableHeight).stroke('#000');
-          doc.moveTo(colHTX, tableStartY).lineTo(colHTX, tableStartY + maxTableHeight).stroke('#000');
+          if (!isNonValorise) {
+            doc.moveTo(colPUX, tableStartY).lineTo(colPUX, tableStartY + maxTableHeight).stroke('#000');
+            doc.moveTo(colRX, tableStartY).lineTo(colRX, tableStartY + maxTableHeight).stroke('#000');
+            if (usePreparationColumns) {
+              doc.moveTo(colPrepBoxesX, tableStartY).lineTo(colPrepBoxesX, tableStartY + maxTableHeight).stroke('#000');
+              doc.moveTo(colPrepRemainX, tableStartY).lineTo(colPrepRemainX, tableStartY + maxTableHeight).stroke('#000');
+            } else {
+              doc.moveTo(colHTX, tableStartY).lineTo(colHTX, tableStartY + maxTableHeight).stroke('#000');
+            }
+          }
           y = tableStartY + maxTableHeight;
         }
 
-        // === BLOC RÉCAPITULATIF HORIZONTAL (ne dépasse pas la moitié de la page, positionné à droite) ===
-        // Ne pas afficher le bloc récapitulatif si le mode est "non_valorise"
+        // === BLOC BAS DE PAGE ===
         if (!isNonValorise) {
-          // Vérifier s'il y a assez d'espace pour le bloc récapitulatif sur la page actuelle
-          const recapTableHeight = 25;
-          const recapTableRowHeight = 20;
-          const recapTableTotalHeight = recapTableHeight + recapTableRowHeight;
-          const spaceNeededForRecap = recapTableTotalHeight + 10; // 10px d'espace avant
-          
-          // Si pas assez d'espace, passer à la page suivante
-          if (y + spaceNeededForRecap > footerY) {
-            doc.addPage();
-            currentPageNumber++;
-            y = drawDocumentHeader(false);
-          }
-          
-          y += 10; // Espace avant le bloc récapitulatif
-          const recapTableY = y;
-          const recapTableWidth = 255; // Moitié de la page (510 / 2)
-          const recapTableX = 305; // Position à droite (50 + 510 - 255 = 305)
+          if (usePreparationColumns) {
+            const totalPreparedQuantity = devisData.reduce((sum, item) => {
+              const value = Number(item?.quantite || 0);
+              return sum + (Number.isFinite(value) ? value : 0);
+            }, 0);
+            const totalPreparedDisplay = Number.isInteger(totalPreparedQuantity)
+              ? String(totalPreparedQuantity)
+              : totalPreparedQuantity.toFixed(2).replace('.', ',');
 
-          // Tableau complet avec bordures arrondies (moitié de la page)
-          doc.roundedRect(recapTableX, recapTableY, recapTableWidth, recapTableTotalHeight, tableBorderRadius).stroke('#000');
+            const summaryHeaderHeight = 25;
+            const summaryBodyHeight = 42;
+            const summaryTableHeight = summaryHeaderHeight + summaryBodyHeight;
+            const visaHeaderHeight = 22;
+            const visaBodyHeight = 52;
+            const visaTableHeight = visaHeaderHeight + visaBodyHeight;
+            const blockHeight = Math.max(summaryTableHeight, visaTableHeight);
+            const requiredSpace = blockHeight + 16;
 
-          // Ligne de séparation horizontale
-          doc.moveTo(recapTableX, recapTableY + recapTableHeight).lineTo(recapTableX + recapTableWidth, recapTableY + recapTableHeight).stroke('#000');
+            if (y + requiredSpace > footerY) {
+              doc.addPage();
+              currentPageNumber++;
+              y = drawDocumentHeader(false);
+            }
 
-          // Lignes de séparation verticales (4 colonnes)
-          const recapColWidth = recapTableWidth / 4; // 63.75px par colonne
-          const recapCol1X = recapTableX + recapColWidth; // Total HT
-          const recapCol2X = recapTableX + recapColWidth * 2;   // Réduction
-          const recapCol3X = recapTableX + recapColWidth * 3;  // Total TVA
+            y += 10;
+            const summaryTableX = 320;
+            const summaryTableY = y;
+            const summaryTableWidth = 235;
 
-          doc.moveTo(recapCol1X, recapTableY).lineTo(recapCol1X, recapTableY + recapTableTotalHeight).stroke('#000');
-          doc.moveTo(recapCol2X, recapTableY).lineTo(recapCol2X, recapTableY + recapTableTotalHeight).stroke('#000');
-          doc.moveTo(recapCol3X, recapTableY).lineTo(recapCol3X, recapTableY + recapTableTotalHeight).stroke('#000');
+            doc.roundedRect(summaryTableX, summaryTableY, summaryTableWidth, summaryTableHeight, tableBorderRadius).stroke('#000');
+            doc.moveTo(summaryTableX, summaryTableY + summaryHeaderHeight).lineTo(summaryTableX + summaryTableWidth, summaryTableY + summaryHeaderHeight).stroke('#000');
+            doc.font('Helvetica-Bold').fontSize(10).fillColor('#000');
+            doc.text('Quantite totale preparee', summaryTableX, summaryTableY + 7, { width: summaryTableWidth, align: 'center' });
+            doc.font('Helvetica-Bold').fontSize(11).fillColor('#000');
+            doc.text(totalPreparedDisplay, summaryTableX, summaryTableY + summaryHeaderHeight + 6, { width: summaryTableWidth, align: 'center' });
 
-          // En-tête (ligne 1)
-          doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
-          doc.text('Total HT', recapTableX, recapTableY + 8, { width: recapColWidth, align: 'center' });
-          doc.text('Réduction', recapCol1X, recapTableY + 8, { width: recapColWidth, align: 'center' });
-          doc.text('Total TVA', recapCol2X, recapTableY + 8, { width: recapColWidth, align: 'center' });
-          doc.text('Total TTC', recapCol3X, recapTableY + 8, { width: recapColWidth, align: 'center' });
+            const visaTableX = 35;
+            const visaTableY = y;
+            const visaTableWidth = 260;
 
-          // Données (ligne 2)
-          doc.font('Helvetica').fontSize(9);
-          doc.text(totalHT.toFixed(2).replace('.', ','), recapTableX, recapTableY + recapTableHeight + 6, { width: recapColWidth, align: 'center' });
-          doc.text(totalReduction.toFixed(2).replace('.', ','), recapCol1X, recapTableY + recapTableHeight + 6, { width: recapColWidth, align: 'center' });
-          // Afficher le montant réel de la TVA au lieu de "20%"
-          doc.text(totalTVA.toFixed(2).replace('.', ','), recapCol2X, recapTableY + recapTableHeight + 6, { width: recapColWidth, align: 'center' });
-          doc.text(totalTTC.toFixed(2).replace('.', ','), recapCol3X, recapTableY + recapTableHeight + 6, { width: recapColWidth, align: 'center' });
+            doc.roundedRect(visaTableX, visaTableY, visaTableWidth, visaTableHeight, tableBorderRadius).stroke('#000');
+            doc.moveTo(visaTableX, visaTableY + visaHeaderHeight).lineTo(visaTableX + visaTableWidth, visaTableY + visaHeaderHeight).stroke('#000');
+            doc.font('Helvetica-Bold').fontSize(10).fillColor('#000');
+            doc.text('Visa preparateur', visaTableX, visaTableY + 6, { width: visaTableWidth, align: 'center' });
 
-          y = recapTableY + recapTableTotalHeight + 10;
+            y = y + blockHeight + 10;
+          } else {
+            // === BLOC RÉCAPITULATIF HORIZONTAL (ne dépasse pas la moitié de la page, positionné à droite) ===
+            // Ne pas afficher le bloc récapitulatif si le mode est "non_valorise"
+            const recapTableHeight = 25;
+            const recapTableRowHeight = 20;
+            const recapTableTotalHeight = recapTableHeight + recapTableRowHeight;
+            const spaceNeededForRecap = recapTableTotalHeight + 10;
+            if (y + spaceNeededForRecap > footerY) {
+              doc.addPage();
+              currentPageNumber++;
+              y = drawDocumentHeader(false);
+            }
+            y += 10;
+            const recapTableY = y;
+            const recapTableWidth = 255;
+            const recapTableX = 305;
+            doc.roundedRect(recapTableX, recapTableY, recapTableWidth, recapTableTotalHeight, tableBorderRadius).stroke('#000');
+            doc.moveTo(recapTableX, recapTableY + recapTableHeight).lineTo(recapTableX + recapTableWidth, recapTableY + recapTableHeight).stroke('#000');
+            const recapColWidth = recapTableWidth / 4;
+            const recapCol1X = recapTableX + recapColWidth;
+            const recapCol2X = recapTableX + recapColWidth * 2;
+            const recapCol3X = recapTableX + recapColWidth * 3;
+            doc.moveTo(recapCol1X, recapTableY).lineTo(recapCol1X, recapTableY + recapTableTotalHeight).stroke('#000');
+            doc.moveTo(recapCol2X, recapTableY).lineTo(recapCol2X, recapTableY + recapTableTotalHeight).stroke('#000');
+            doc.moveTo(recapCol3X, recapTableY).lineTo(recapCol3X, recapTableY + recapTableTotalHeight).stroke('#000');
+            doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
+            doc.text('Total HT', recapTableX, recapTableY + 8, { width: recapColWidth, align: 'center' });
+            doc.text('Reduction', recapCol1X, recapTableY + 8, { width: recapColWidth, align: 'center' });
+            doc.text('Total TVA', recapCol2X, recapTableY + 8, { width: recapColWidth, align: 'center' });
+            doc.text('Total TTC', recapCol3X, recapTableY + 8, { width: recapColWidth, align: 'center' });
+            doc.font('Helvetica').fontSize(9);
+            doc.text(totalHT.toFixed(2).replace('.', ','), recapTableX, recapTableY + recapTableHeight + 6, { width: recapColWidth, align: 'center' });
+            doc.text(totalReduction.toFixed(2).replace('.', ','), recapCol1X, recapTableY + recapTableHeight + 6, { width: recapColWidth, align: 'center' });
+            doc.text(totalTVA.toFixed(2).replace('.', ','), recapCol2X, recapTableY + recapTableHeight + 6, { width: recapColWidth, align: 'center' });
+            doc.text(totalTTC.toFixed(2).replace('.', ','), recapCol3X, recapTableY + recapTableHeight + 6, { width: recapColWidth, align: 'center' });
+            y = recapTableY + recapTableTotalHeight + 10;
 
-          // === MONTANT EN LETTRES (phrase en italique, montant en gras) ===
-          const totalTTCWords = convertAmountToWordsFR(totalTTC);
-          doc.font('Helvetica-Oblique').fontSize(9).fillColor('#000'); // Italique pour la phrase
+            // === MONTANT EN LETTRES (phrase en italique, montant en gras) ===
+            const totalTTCWords = convertAmountToWordsFR(totalTTC);
+            doc.font('Helvetica-Oblique').fontSize(9).fillColor('#000');
 
-          // Adapter le texte selon le type de document
-          let phraseText = 'Arrêté le présent devis à la somme de: ';
-          if (isRetour) {
-            phraseText = 'Arrêté le présent bon de retour à la somme de: ';
-          } else if (isLivraison) {
-            phraseText = 'Arrêté le présent bon de livraison à la somme de: ';
-          }
+            let phraseText = 'ArrÃªtÃ© le prÃ©sent devis Ã  la somme de: ';
+            if (isRetour) {
+              phraseText = 'ArrÃªtÃ© le prÃ©sent bon de retour Ã  la somme de: ';
+            } else if (isLivraison) {
+              phraseText = 'ArrÃªtÃ© le prÃ©sent bon de livraison Ã  la somme de: ';
+            }
 
-          doc.text(phraseText, 50, y, { width: 500, align: 'left' });
+            if (options.overrideAmountWordsPhrase) {
+              phraseText = String(options.overrideAmountWordsPhrase);
+            }
 
-          // Calculer la position du montant en lettres (après la phrase)
+          // Calculer la position du montant en lettres (aprÃ¨s la phrase)
           const phraseWidth = doc.widthOfString(phraseText);
+          doc.text(phraseText, 50, y, { width: phraseWidth + 2, align: 'left', lineBreak: false });
           doc.font('Helvetica-Bold').fontSize(9).fillColor('#000'); // Gras pour le montant
-          doc.text(totalTTCWords, 50 + phraseWidth, y, { width: 500 - phraseWidth, align: 'left' });
+          doc.text(totalTTCWords, 50 + phraseWidth + 2, y, { width: 500 - phraseWidth - 2, align: 'left' });
           y += 20;
         }
 
-        // Mention sur PDF (devis + bon de livraison) si exonération valide
+        }
+        // Mention sur PDF (devis + bon de livraison) si exonÃ©ration valide
         if (isClientExonerated && (isDevis || isLivraison)) {
           doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
-          doc.text('TVA non applicable – Client exonéré conformément à la lettre d\'exonération en vigueur', 50, y, {
+          doc.text('TVA non applicable â€“ Client exonÃ©rÃ© conformÃ©ment Ã  la lettre d\'exonÃ©ration en vigueur', 50, y, {
             width: 500,
             align: 'center'
           });
           y += 15;
         }
 
-        // Mettre à jour le total de pages avant de finaliser
+        // Mettre Ã  jour le total de pages avant de finaliser
         try {
           const finalPageRange = doc.bufferedPageRange();
           if (finalPageRange && typeof finalPageRange.count === 'number' && finalPageRange.count > 0) {
@@ -1916,48 +2117,48 @@ class EmailService {
           totalPagesNumber = currentPageNumber;
         }
 
-        // === TABLEAU CONDITION / EXPÉDITION / TRANSPORTEUR avec bordures arrondies ===
+        // === TABLEAU CONDITION / EXPÃ‰DITION / TRANSPORTEUR avec bordures arrondies ===
         const condition = devisData[0]?.condition || '';
         const expedition = devisData[0]?.expedition || '';
         const transporteur = devisData[0]?.transporteur || '';
 
-        // Afficher le tableau seulement si au moins une donnée existe
+        // Afficher le tableau seulement si au moins une donnÃ©e existe
         if (condition || expedition || transporteur) {
           const conditionTableY = y;
-          const conditionTableHeight = 18; // Réduit de 25 à 18
-          const conditionTableRowHeight = 15; // Réduit de 20 à 15
+          const conditionTableHeight = 18; // RÃ©duit de 25 Ã  18
+          const conditionTableRowHeight = 15; // RÃ©duit de 20 Ã  15
           const conditionTableTotalHeight = conditionTableHeight + conditionTableRowHeight;
 
           // Tableau complet avec bordures arrondies (un seul rectangle)
           doc.roundedRect(50, conditionTableY, 510, conditionTableTotalHeight, tableBorderRadius).stroke('#000');
 
-          // Ligne de séparation horizontale
+          // Ligne de sÃ©paration horizontale
           doc.moveTo(50, conditionTableY + conditionTableHeight).lineTo(560, conditionTableY + conditionTableHeight).stroke('#000');
 
-          // Lignes de séparation verticales
+          // Lignes de sÃ©paration verticales
           doc.moveTo(220, conditionTableY).lineTo(220, conditionTableY + conditionTableTotalHeight).stroke('#000');
           doc.moveTo(390, conditionTableY).lineTo(390, conditionTableY + conditionTableTotalHeight).stroke('#000');
 
-          // En-tête (ligne 1)
-          doc.font('Helvetica-Bold').fontSize(8).fillColor('#000'); // Réduit de 9 à 8
-          doc.text('Condition de règlement', 55, conditionTableY + 5, { width: 170, align: 'center' }); // Réduit de 8 à 5
-          doc.text('Expédition', 225, conditionTableY + 5, { width: 170, align: 'center' });
+          // En-tÃªte (ligne 1)
+          doc.font('Helvetica-Bold').fontSize(8).fillColor('#000'); // RÃ©duit de 9 Ã  8
+          doc.text('Condition de rÃ¨glement', 55, conditionTableY + 5, { width: 170, align: 'center' }); // RÃ©duit de 8 Ã  5
+          doc.text('ExpÃ©dition', 225, conditionTableY + 5, { width: 170, align: 'center' });
           doc.text('Transporteur', 395, conditionTableY + 5, { width: 165, align: 'center' });
 
           // Valeurs (ligne 2)
-          doc.font('Helvetica').fontSize(8); // Réduit de 9 à 8
-          doc.text(condition, 55, conditionTableY + conditionTableHeight + 4, { width: 170, align: 'center' }); // Réduit de 6 à 4
+          doc.font('Helvetica').fontSize(8); // RÃ©duit de 9 Ã  8
+          doc.text(condition, 55, conditionTableY + conditionTableHeight + 4, { width: 170, align: 'center' }); // RÃ©duit de 6 Ã  4
           doc.text(expedition, 225, conditionTableY + conditionTableHeight + 4, { width: 170, align: 'center' });
           doc.text(transporteur, 395, conditionTableY + conditionTableHeight + 4, { width: 165, align: 'center' });
 
-          y = conditionTableY + conditionTableTotalHeight + 10; // Réduit de 20 à 10 pour réduire l'espace
+          y = conditionTableY + conditionTableTotalHeight + 10; // RÃ©duit de 20 Ã  10 pour rÃ©duire l'espace
         }
 
-        // === TABLEAU DE VÉRIFICATION (remplace les cadres Direction et Bon pour accord) ===
-        // Ce tableau est affiché UNIQUEMENT dans les PDFs de livraison, APRÈS le montant en lettres
-        // Il ne doit pas impacter l'affichage du tableau des détails
-        if (isLivraison) {
-          y += 10; // Espace avant le tableau de vérification
+        // === TABLEAU DE VÃ‰RIFICATION (remplace les cadres Direction et Bon pour accord) ===
+        // Ce tableau est affichÃ© UNIQUEMENT dans les PDFs de livraison, APRÃˆS le montant en lettres
+        // Il ne doit pas impacter l'affichage du tableau des dÃ©tails
+        if (isLivraison && !options.hideVerificationTable) {
+          y += 10; // Espace avant le tableau de vÃ©rification
           
           // Calculer l'espace disponible avant le pied de page
           const verificationBottomMargin = 40;
@@ -1966,18 +2167,18 @@ class EmailService {
           const minSpaceBeforeFooter = 10;
           const maxYForVerificationTable = footerYForVerification - minSpaceBeforeFooter;
           
-          // Dimensions du tableau de vérification
+          // Dimensions du tableau de vÃ©rification
           const verificationTableWidth = 510;
           const verificationTableX = 50;
           const verificationHeaderHeight = 25;
-          const verificationNumberOfRows = 6; // Quantité, Numéro de lot/série, Date de péremption, Indicateur, Nom et prénom du vérificateur, Signature
+          const verificationNumberOfRows = 6; // QuantitÃ©, NumÃ©ro de lot/sÃ©rie, Date de pÃ©remption, Indicateur, Nom et prÃ©nom du vÃ©rificateur, Signature
           const verificationRowHeight = 25; // Hauteur fixe par ligne (pas de compression)
           const verificationTableHeight = verificationHeaderHeight + (verificationRowHeight * verificationNumberOfRows);
           
-          // Vérifier si on a assez d'espace pour le tableau de vérification sur la page actuelle
+          // VÃ©rifier si on a assez d'espace pour le tableau de vÃ©rification sur la page actuelle
           const availableSpace = maxYForVerificationTable - y;
           
-          // Si pas assez d'espace, passer à la page suivante
+          // Si pas assez d'espace, passer Ã  la page suivante
           if (availableSpace < verificationTableHeight) {
             doc.addPage();
             currentPageNumber++;
@@ -1987,8 +2188,8 @@ class EmailService {
           
           const verificationTableY = y;
           
-          // Définir les colonnes du tableau
-          const colCriteresWidth = 220; // Colonne "Critères"
+          // DÃ©finir les colonnes du tableau
+          const colCriteresWidth = 220; // Colonne "CritÃ¨res"
           const colConformeWidth = 90;  // Colonne "Conforme"
           const colNonConformeWidth = 100; // Colonne "Non Conforme"
           const colRemarquesWidth = 100; // Colonne "Remarques"
@@ -2001,17 +2202,17 @@ class EmailService {
           // Dessiner le contour du tableau
           doc.roundedRect(verificationTableX, verificationTableY, verificationTableWidth, verificationTableHeight, tableBorderRadius).stroke('#000');
           
-          // Ligne horizontale de l'en-tête
+          // Ligne horizontale de l'en-tÃªte
           doc.moveTo(verificationTableX, verificationTableY + verificationHeaderHeight).lineTo(verificationTableX + verificationTableWidth, verificationTableY + verificationHeaderHeight).stroke('#000');
           
-          // Lignes verticales de séparation
+          // Lignes verticales de sÃ©paration
           doc.moveTo(colConformeX, verificationTableY).lineTo(colConformeX, verificationTableY + verificationTableHeight).stroke('#000');
           doc.moveTo(colNonConformeX, verificationTableY).lineTo(colNonConformeX, verificationTableY + verificationTableHeight).stroke('#000');
           doc.moveTo(colRemarquesX, verificationTableY).lineTo(colRemarquesX, verificationTableY + verificationTableHeight).stroke('#000');
           
-          // En-tête du tableau
+          // En-tÃªte du tableau
           doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
-          doc.text('Critères', colCriteresX + 5, verificationTableY + 8, { width: colCriteresWidth - 10, align: 'left' });
+          doc.text('CritÃ¨res', colCriteresX + 5, verificationTableY + 8, { width: colCriteresWidth - 10, align: 'left' });
           doc.text('Conforme', colConformeX + 5, verificationTableY + 8, { width: colConformeWidth - 10, align: 'center' });
           doc.text('Non Conforme', colNonConformeX + 5, verificationTableY + 8, { width: colNonConformeWidth - 10, align: 'center' });
           doc.text('Remarques', colRemarquesX + 5, verificationTableY + 8, { width: colRemarquesWidth - 10, align: 'left' });
@@ -2024,11 +2225,11 @@ class EmailService {
           
           // Contenu des lignes
           const criteria = [
-            'Quantité',
-            'Numéro de lot/série',
-            '!date de péremption',
+            'QuantitÃ©',
+            'NumÃ©ro de lot/sÃ©rie',
+            '!date de pÃ©remption',
             'Indicateur',
-            'Nom et prénom du vérificateur :',
+            'Nom et prÃ©nom du vÃ©rificateur :',
             'Signature :'
           ];
           
@@ -2036,18 +2237,18 @@ class EmailService {
           criteria.forEach((criterion, index) => {
             const rowY = verificationTableY + verificationHeaderHeight + (verificationRowHeight * index) + 6;
             doc.text(criterion, colCriteresX + 5, rowY, { width: colCriteresWidth - 10, align: 'left' });
-            // Les colonnes Conforme, Non Conforme et Remarques restent vides pour être remplies manuellement
+            // Les colonnes Conforme, Non Conforme et Remarques restent vides pour Ãªtre remplies manuellement
           });
           
           y = verificationTableY + verificationTableHeight + 10;
         }
 
-        // === PIED DE PAGE - Mettre à jour la numérotation sur TOUTES les pages ===
-        // Utiliser simplement le compteur de pages comme total (il est incrémenté à chaque addPage)
+        // === PIED DE PAGE - Mettre Ã  jour la numÃ©rotation sur TOUTES les pages ===
+        // Utiliser simplement le compteur de pages comme total (il est incrÃ©mentÃ© Ã  chaque addPage)
         totalPagesNumber = currentPageNumber;
 
-        // Redessiner le footer sur toutes les pages avec la numérotation correcte
-        // Les pages sont indexées à partir de 1 dans PDFKit
+        // Redessiner le footer sur toutes les pages avec la numÃ©rotation correcte
+        // Les pages sont indexÃ©es Ã  partir de 1 dans PDFKit
         for (let i = 1; i <= totalPagesNumber; i++) {
           try {
             doc.switchToPage(i);
@@ -2060,7 +2261,7 @@ class EmailService {
           }
         }
         
-        // Retourner à la dernière page
+        // Retourner Ã  la derniÃ¨re page
         if (totalPagesNumber > 0) {
           try {
             doc.switchToPage(totalPagesNumber);
@@ -2080,11 +2281,11 @@ class EmailService {
           doc.lineWidth(3).strokeColor('#c0392b').fillColor('rgba(0,0,0,0)');
           doc.circle(stampX, stampY, 60).stroke();
           doc.font('Helvetica-Bold').fontSize(14).fillColor('#c0392b');
-          doc.text('VALIDÉ', stampX - 50, stampY - 10, { width: 100, align: 'center' });
+          doc.text('VALIDÃ‰', stampX - 50, stampY - 10, { width: 100, align: 'center' });
           doc.restore();
         }
 
-        // ✅ Fin du document
+        // âœ… Fin du document
         doc.end();
 
       } catch (error) {
@@ -2093,16 +2294,16 @@ class EmailService {
     });
   }
 
-  // Génère le PDF en mémoire (buffer) sans sauvegarde sur disque
+  // GÃ©nÃ¨re le PDF en mÃ©moire (buffer) sans sauvegarde sur disque
   async genererPDFBuffer(devisData, options = {}) {
-    console.log('[EmailService] 📄 Début genererPDFBuffer (en mémoire)');
+    console.log('[EmailService] ðŸ“„ DÃ©but genererPDFBuffer (en mÃ©moire)');
     if (!devisData || devisData.length === 0) {
-      console.error('[EmailService] ❌ devisData est vide ou indéfini');
-      throw new Error('Données du document manquantes pour la génération du PDF');
+      console.error('[EmailService] âŒ devisData est vide ou indÃ©fini');
+      throw new Error('DonnÃ©es du document manquantes pour la gÃ©nÃ©ration du PDF');
     }
     return new Promise(async (resolve, reject) => {
       try {
-        // Réutiliser la même logique que genererPDF mais avec buffer au lieu de fichier
+        // RÃ©utiliser la mÃªme logique que genererPDF mais avec buffer au lieu de fichier
         const printMode = (options.printMode || 'normal').toLowerCase();
         const part_id = devisData?.[0]?.part_id;
         const documentType0 = devisData?.[0]?.type;
@@ -2110,8 +2311,26 @@ class EmailService {
         const isRetour0 = documentKind0 === 'RETOUR CLIENT' || documentType0 === 5;
         const isLivraison0 = documentKind0 === 'LIVRAISON' || documentType0 === 2;
         const isDevis0 = !isRetour0 && !isLivraison0;
+        if (printMode === 'composition' && isLivraison0 && options.document_id) {
+          try {
+            const sequelizeConn = options.sequelize || require('../config/database');
+            const exactCompositionData = await getEmailDataByDocumentId(options.document_id, sequelizeConn, {
+              forceDocumentType: options.forceDocumentType || 'LIVRAISON',
+              printMode: 'composition'
+            });
 
-        // Gestion de la nomenclature (même logique que genererPDF)
+            if (Array.isArray(exactCompositionData) && exactCompositionData.length > 0) {
+              devisData = exactCompositionData;
+            }
+          } catch (compositionError) {
+            console.warn('[EmailService] Composition exacte non rechargee (buffer):', compositionError.message);
+          }
+        }
+
+        // Gestion de la nomenclature (mÃªme logique que genererPDF)
+        if (printMode === 'composition' && isLivraison0) {
+          devisData = normalizeCompositionPdfLines(devisData);
+        }
         if (printMode === 'nomenclature' && isDevis0) {
           const sequelizeConn = options.sequelize || require('../config/database');
           const compose = options.composeArticle || {};
@@ -2145,13 +2364,14 @@ class EmailService {
             composeArticleDb = rows?.[0] || null;
           }
 
-          let composantsData = [];
-          if (composeId) {
-            composantsData = await sequelizeConn.query(
-              `SELECT n.Composant_id, n.Quantite AS composant_qte, a.article_cod AS composant_cod, a.article_nom AS composant_nom FROM article_Nomenclature n LEFT JOIN article a ON a.article_id = n.Composant_id WHERE n.Compose_id = :composeId ORDER BY a.article_nom ASC`,
-              { replacements: { composeId }, type: sequelizeConn.QueryTypes.SELECT }
-            );
-          }
+          const composantsData = (devisData || []).map((line) => {
+            const rawNom = line.designation || line.article_nom || line.article || '';
+            const composantNom = String(rawNom).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+            return {
+              composant_cod: line.article_cod || '',
+              composant_nom: composantNom || 'Composant'
+            };
+          });
 
           const composePrix = !isNaN(Number(compose.prix)) && Number(compose.prix) > 0
             ? Number(compose.prix)
@@ -2166,14 +2386,15 @@ class EmailService {
           const tauxTva = isNaN(Number(base.taux_tva)) ? 0.2 : Number(base.taux_tva);
           const ht = composePrix * composeQte;
 
-          let designationHtml = `<h3 style="color: #046ba7;"><strong>Composé</strong></h3><p><strong>- ${composeNom}</strong></p>`;
+          let designationHtml = `<h3 style="color: #046ba7;"><strong>ComposÃ©</strong></h3><p><strong>- ${composeNom}</strong></p>`;
           if (composantsData && composantsData.length > 0) {
             designationHtml += `<h3 style="color: #046ba7;"><strong>Composants</strong></h3><ul>`;
             composantsData.forEach((comp) => {
-              const qte = !isNaN(Number(comp.composant_qte)) ? Number(comp.composant_qte) : 1;
               const nom = comp.composant_nom || comp.composant_cod || 'Composant';
               const cod = comp.composant_cod || '';
-              designationHtml += `<li><strong style="color: #c00000;">${cod}</strong> - ${nom} <span style="color: #7030a0;">(Qté: ${qte})</span></li>`;
+              designationHtml += cod
+                ? `<li><strong style="color: #c00000;">${cod}</strong> - ${nom}</li>`
+                : `<li>${nom}</li>`;
             });
             designationHtml += '</ul>';
           }
@@ -2193,7 +2414,7 @@ class EmailService {
           }];
         }
 
-        // Exonération TVA (même logique)
+        // ExonÃ©ration TVA (mÃªme logique)
         let isClientExonerated = false;
         if (part_id && (isDevis0 || isLivraison0)) {
           try {
@@ -2216,7 +2437,7 @@ class EmailService {
           }
         }
 
-        // Détecter le type de document
+        // DÃ©tecter le type de document
         // Si forceDocumentType est fourni dans les options, l'utiliser (pour forcer DEVIS depuis l'interface des devis)
         const forceDocumentType = options.forceDocumentType ? options.forceDocumentType.toString().toUpperCase().trim() : null;
         
@@ -2243,20 +2464,20 @@ class EmailService {
             isLivraison = false;
           }
         } else {
-          // Détection automatique (comportement par défaut)
+          // DÃ©tection automatique (comportement par dÃ©faut)
           isRetour = documentKind === 'RETOUR CLIENT' || documentType === 5;
           isLivraison = documentKind === 'LIVRAISON' || documentType === 2;
           isDevis = !isRetour && !isLivraison;
         }
 
         let documentTitle = 'DEVIS';
-        let headerLabel = 'Devis N°';
+        let headerLabel = 'Devis NÂ°';
         if (isRetour) {
           documentTitle = 'BON DE RETOUR';
-          headerLabel = 'Retour N°';
+          headerLabel = 'Retour NÂ°';
         } else if (isLivraison) {
           documentTitle = 'BON DE LIVRAISON';
-          headerLabel = 'Livraison N°';
+          headerLabel = 'Livraison NÂ°';
         }
 
         const doc = new PDFDocument({ margin: 40, size: 'A4' });
@@ -2269,17 +2490,20 @@ class EmailService {
           resolve(pdfBuffer);
         });
         doc.on('error', (err) => {
-          console.error('❌ Erreur génération PDF buffer :', err);
+          console.error('âŒ Erreur gÃ©nÃ©ration PDF buffer :', err);
           reject(err);
         });
 
-        // Réutiliser toute la logique de génération du PDF depuis genererPDF
-        // Pour simplifier, on va appeler genererPDF et lire le fichier généré
-        // Le fichier sera conservé sur disque (sera supprimé après 1h par la route)
-        const tempPath = await this.genererPDF(devisData, options);
+        // RÃ©utiliser toute la logique de gÃ©nÃ©ration du PDF depuis genererPDF
+        // Pour simplifier, on va appeler genererPDF et lire le fichier gÃ©nÃ©rÃ©
+        // Le fichier sera conservÃ© sur disque (sera supprimÃ© aprÃ¨s 1h par la route)
+        const tempPath = await this.genererPDF(devisData, {
+          ...options,
+          skipNomenclatureBuild: true
+        });
         const pdfBuffer = fs.readFileSync(tempPath);
-        // Ne pas supprimer le fichier immédiatement - il sera supprimé après 1h par la route
-        // fs.unlinkSync(tempPath); // Commenté pour conserver le fichier
+        // Ne pas supprimer le fichier immÃ©diatement - il sera supprimÃ© aprÃ¨s 1h par la route
+        // fs.unlinkSync(tempPath); // CommentÃ© pour conserver le fichier
         resolve(pdfBuffer);
       } catch (error) {
         reject(error);
@@ -2287,15 +2511,17 @@ class EmailService {
     });
   }
 
-  // 📤 Envoie l'e-mail avec le PDF du devis
+  // ðŸ“¤ Envoie l'e-mail avec le PDF du devis
   async envoyerEmail({ to, cc, subject, body, document_id, documentSociete = null }) {
     try {
-      const devisData = await getEmailDataByDocumentId(document_id);
+      const sequelizeConn = require('../config/database');
+      let devisData = sortPdfLinesByDisplayOrder(await getEmailDataByDocumentId(document_id, sequelizeConn));
       if (!devisData) throw new Error('Devis introuvable');
+      devisData = await hideNomenclatureComponentRowsForPdf(devisData, sequelizeConn);
 
       const pdfPath = await this.genererPDF(devisData, { documentSociete });
 
-      // Déterminer les labels selon le type
+      // DÃ©terminer les labels selon le type
       const documentKind = devisData[0]?.document_kind || '';
       const isRetour = documentKind === 'RETOUR CLIENT' || devisData[0]?.type === 5;
       const isLivraison = documentKind === 'LIVRAISON' || devisData[0]?.type === 2;
@@ -2325,33 +2551,33 @@ class EmailService {
         ]
       };
 
-      // Vérifier la connexion avant d'envoyer (avec gestion d'erreur améliorée)
+      // VÃ©rifier la connexion avant d'envoyer (avec gestion d'erreur amÃ©liorÃ©e)
       try {
         await this.transporter.verify();
       } catch (verifyError) {
-        console.error('Erreur vérification connexion SMTP :', verifyError);
-        // Ne pas bloquer si la vérification échoue, mais logger l'erreur
+        console.error('Erreur vÃ©rification connexion SMTP :', verifyError);
+        // Ne pas bloquer si la vÃ©rification Ã©choue, mais logger l'erreur
       }
 
       await this.transporter.sendMail(mailOptions);
 
 
       // Note: Dans email.service.js, on ne peut pas utiliser req directement
-      // On utilise BASE_URL depuis l'env ou une valeur par défaut
+      // On utilise BASE_URL depuis l'env ou une valeur par dÃ©faut
       const BASE_URL = process.env.BASE_URL || 'http://172.16.20.100';
       return {
         success: true,
-        message: `E-mail et ${label} envoyés avec succès`,
+        message: `E-mail et ${label} envoyÃ©s avec succÃ¨s`,
         pdfUrl: `${BASE_URL}/${folder}/${path.basename(pdfPath)}`
       };
     } catch (error) {
       console.error('Erreur envoi e-mail :', error);
 
-      // Messages d'erreur plus détaillés
-      let errorMessage = 'Échec de l\'envoi de l\'e-mail';
+      // Messages d'erreur plus dÃ©taillÃ©s
+      let errorMessage = 'Ã‰chec de l\'envoi de l\'e-mail';
 
       if (error.code === 'EDNS' || error.code === 'ETIMEOUT') {
-        errorMessage = 'Erreur de connexion réseau : Impossible de se connecter au serveur email. Vérifiez votre connexion internet et réessayez.';
+        errorMessage = 'Erreur de connexion rÃ©seau : Impossible de se connecter au serveur email. VÃ©rifiez votre connexion internet et rÃ©essayez.';
       } else if (error.code === 'EAUTH') {
         errorMessage = 'Erreur d\'authentification : Les identifiants email sont incorrects.';
       } else if (error.code === 'ECONNECTION') {
@@ -2364,12 +2590,16 @@ class EmailService {
     }
   }
 
-  // 📤 Envoie l'e-mail avec le PDF de la commande
+  // ðŸ“¤ Envoie l'e-mail avec le PDF de la commande
   async envoyerCommandeEmail({ to, cc, subject, body, document_id, documentSociete = null }) {
     try {
       const commandePdfService = require('./commande-pdf.service');
-      const commandeData = await getEmailDataByDocumentId(document_id);
+      const sequelizeConn = require('../config/database');
+      let commandeData = sortPdfLinesByDisplayOrder(
+        await getEmailDataByDocumentId(document_id, sequelizeConn, { forceDocumentType: 'COMMANDE' })
+      );
       if (!commandeData || commandeData.length === 0) throw new Error('Commande introuvable');
+      commandeData = await hideNomenclatureComponentRowsForPdf(commandeData, sequelizeConn);
 
       const pdfPath = await commandePdfService.genererPDF(commandeData, { documentSociete });
 
@@ -2384,33 +2614,33 @@ class EmailService {
         ]
       };
 
-      // Vérifier la connexion avant d'envoyer (avec gestion d'erreur améliorée)
+      // VÃ©rifier la connexion avant d'envoyer (avec gestion d'erreur amÃ©liorÃ©e)
       try {
         await this.transporter.verify();
       } catch (verifyError) {
-        console.error('Erreur vérification connexion SMTP :', verifyError);
-        // Ne pas bloquer si la vérification échoue, mais logger l'erreur
+        console.error('Erreur vÃ©rification connexion SMTP :', verifyError);
+        // Ne pas bloquer si la vÃ©rification Ã©choue, mais logger l'erreur
       }
 
       await this.transporter.sendMail(mailOptions);
 
 
       // Note: Dans email.service.js, on ne peut pas utiliser req directement
-      // On utilise BASE_URL depuis l'env ou une valeur par défaut
+      // On utilise BASE_URL depuis l'env ou une valeur par dÃ©faut
       const BASE_URL = process.env.BASE_URL || 'http://172.16.20.100';
       return {
         success: true,
-        message: 'E-mail et bon de commande envoyés avec succès',
+        message: 'E-mail et bon de commande envoyÃ©s avec succÃ¨s',
         pdfUrl: `${BASE_URL}/commandes/${path.basename(pdfPath)}`
       };
     } catch (error) {
       console.error('Erreur envoi e-mail commande :', error);
 
-      // Messages d'erreur plus détaillés
-      let errorMessage = 'Échec de l\'envoi de l\'e-mail';
+      // Messages d'erreur plus dÃ©taillÃ©s
+      let errorMessage = 'Ã‰chec de l\'envoi de l\'e-mail';
 
       if (error.code === 'EDNS' || error.code === 'ETIMEOUT') {
-        errorMessage = 'Erreur de connexion réseau : Impossible de se connecter au serveur email. Vérifiez votre connexion internet et réessayez.';
+        errorMessage = 'Erreur de connexion rÃ©seau : Impossible de se connecter au serveur email. VÃ©rifiez votre connexion internet et rÃ©essayez.';
       } else if (error.code === 'EAUTH') {
         errorMessage = 'Erreur d\'authentification : Les identifiants email sont incorrects.';
       } else if (error.code === 'ECONNECTION') {
@@ -2427,3 +2657,9 @@ class EmailService {
 
 
 module.exports = new EmailService();
+
+
+
+
+
+

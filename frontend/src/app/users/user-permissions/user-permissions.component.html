@@ -66,7 +66,7 @@
 
   <!-- Permissions Cards by Category -->
   <div class="row" *ngIf="selectedUser && !loading">
-    <div class="col-md-6 col-lg-4 mb-4" *ngFor="let category of organizedMenuCategories">
+    <div class="col-md-6 col-lg-4 mb-4" *ngFor="let category of organizedMenuCategories; trackBy: trackByCategory">
       <div class="permission-card">
         <div class="card-header-custom">
           <i [class]="category.icon"></i>
@@ -80,7 +80,7 @@
                 type="checkbox" 
                 [checked]="isAllCategoryItemsChecked(category)"
                 [indeterminate]="isSomeCategoryItemsChecked(category) && !isAllCategoryItemsChecked(category)"
-                (change)="toggleCategoryPermissions(category)"
+                (change)="toggleCategoryPermissions(category, $any($event.target).checked)"
                 class="checkbox-input">
               <span class="checkbox-custom"></span>
               <span class="permission-label category-label">
@@ -90,7 +90,7 @@
           </div>
           <hr class="category-divider">
           <div class="permissions-list">
-            <div class="permission-item" *ngFor="let item of category.items">
+            <div class="permission-item" *ngFor="let item of category.items; trackBy: trackByMenuItem">
               <!-- Item parent avec enfants PDF -->
               <div *ngIf="item.isParent" class="tree-item-parent">
                 <div class="tree-item-header">
@@ -98,7 +98,7 @@
                      [ngClass]="item.expanded ? 'fa-chevron-down' : 'fa-chevron-right'"
                      (click)="toggleItemExpansion(item)"
                      title="Cliquer pour {{ item.expanded ? 'réduire' : 'déplier' }}"></i>
-                  <label class="permission-checkbox tree-parent-checkbox" (click)="togglePermission(item.name); $event.stopPropagation()">
+                  <label class="permission-checkbox tree-parent-checkbox">
                     <input 
                       type="checkbox" 
                       [checked]="hasPermission(item.name)"
@@ -107,14 +107,14 @@
                       class="checkbox-input">
                     <span class="checkbox-custom"></span>
                     <span class="permission-label tree-parent-label">
-                      <strong>{{ item.name }}</strong>
+                      <strong>{{ getMenuItemDisplayName(item.name) }}</strong>
                     </span>
                   </label>
                 </div>
                 <!-- Enfants PDF (indentés) -->
                 <div class="tree-children" [class.expanded]="item.expanded">
-                  <div class="permission-item tree-child" *ngFor="let child of item.children">
-                    <label class="permission-checkbox tree-child-checkbox" (click)="togglePermission(child.name); $event.stopPropagation()">
+                  <div class="permission-item tree-child" *ngFor="let child of item.children; trackBy: trackByMenuItem">
+                    <label class="permission-checkbox tree-child-checkbox">
                       <input 
                         type="checkbox" 
                         [checked]="hasPermission(child.name)"
@@ -132,7 +132,7 @@
               </div>
               <!-- Item régulier sans enfants -->
               <div *ngIf="!item.isParent" class="tree-item-regular">
-                <label class="permission-checkbox" (click)="togglePermission(item.name); $event.stopPropagation()">
+                <label class="permission-checkbox">
                   <input 
                     type="checkbox" 
                     [checked]="hasPermission(item.name)"
@@ -140,7 +140,7 @@
                     (click)="$event.stopPropagation()"
                     class="checkbox-input">
                   <span class="checkbox-custom"></span>
-                  <span class="permission-label">{{ item.name }}</span>
+                  <span class="permission-label">{{ getMenuItemDisplayName(item.name) }}</span>
                 </label>
               </div>
             </div>

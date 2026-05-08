@@ -36,3 +36,94 @@
   }
 }
 
+.products-panel {
+  overflow: visible;
+}
+
+.products-table-wrap {
+  max-height: none;
+  width: 100%;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+}
+
+.products-table-wrap.table-responsive {
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+}
+
+.products-table-wrap .table,
+.products-table-wrap .table tbody td {
+  overflow: visible;
+}
+
+.edit-demande-achat-products-table {
+  width: 100%;
+  table-layout: fixed;
+  margin-bottom: 0;
+}
+
+.edit-demande-achat-products-table th,
+.edit-demande-achat-products-table td {
+  padding-left: 8px;
+  padding-right: 8px;
+  vertical-align: middle;
+  min-width: 0 !important;
+}
+
+.edit-demande-achat-products-table th {
+  white-space: nowrap;
+}
+
+.edit-demande-achat-products-table .designation-cell {
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.25;
+}
+
+.article-search-input,
+.destination-select,
+.quantity-input {
+  min-width: 0;
+  width: 100%;
+}
+
+.action-cell {
+  width: 44px;
+  padding: 2px !important;
+}
+
+.product-search-cell {
+  min-width: 0;
+  width: 100%;
+  position: relative;
+  z-index: 50;
+}
+
+.product-autocomplete-dropdown {
+  margin-top: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  z-index: 3000;
+  border: 1px solid rgba(230, 126, 34, 0.14);
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.14) !important;
+}
+
+.product-autocomplete-item {
+  text-align: left;
+  padding: 10px 12px;
+  line-height: 1.25;
+  cursor: pointer;
+}
+
+.product-autocomplete-item:hover {
+  background: #fff4ea;
+}
+
+.product-autocomplete-item.active {
+  background: linear-gradient(135deg, #e67e22 0%, #d35400 100%);
+  color: white;
+}
+

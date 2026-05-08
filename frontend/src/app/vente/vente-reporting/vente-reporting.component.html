@@ -1,7 +1,7 @@
-<div class="container py-4">
+<div class="container-fluid py-4 vente-reporting-page">
   <div class="page-inner">
 
-    <!-- En-tête -->
+    <!-- En-tÃªte -->
     <div class="page-header mb-4">
       <h3 class="fw-bold text-dark">Reporting Vente</h3>
       <ul class="breadcrumbs d-flex align-items-center">
@@ -54,29 +54,44 @@
         <!-- Barre de recherche et filtres -->
         <div class="row mb-3">
           <div class="col-md-3">
-            <div class="input-group">
-              <span class="input-group-text"><i class="fas fa-search"></i></span>
-              <input type="text" class="form-control" placeholder="Rechercher..."
-                     [(ngModel)]="grandLivreSearchTerm" (keyup.enter)="onGrandLivreSearch()">
-              <button class="btn btn-primary" type="button" (click)="onGrandLivreSearch()">
-                <i class="fas fa-search"></i>
-              </button>
+            <div class="position-relative">
+              <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input type="text" class="form-control" placeholder="Rechercher par client..."
+                       [(ngModel)]="grandLivreSearchTerm"
+                       (ngModelChange)="onClientSearchInput('grand-livre', $event)"
+                       (focus)="showClientAutocomplete('grand-livre', grandLivreSearchTerm)"
+                       (blur)="hideAutocompleteDelayed()"
+                       (keyup.enter)="onGrandLivreSearch()" autocomplete="off">
+                <button class="btn btn-primary" type="button" (click)="onGrandLivreSearch()">
+                  <i class="fas fa-search"></i>
+                </button>
+              </div>
+              <ul *ngIf="activeAutocomplete === 'grand-livre' && clientSuggestions.length > 0"
+                  class="list-group position-absolute w-100 shadow reporting-autocomplete">
+                <li class="list-group-item list-group-item-action reporting-autocomplete-item"
+                    *ngFor="let client of clientSuggestions"
+                    (mousedown)="selectClientSuggestion('grand-livre', client)">
+                  <div class="fw-semibold">{{ client.client_nom }}</div>
+                  <div class="small text-muted">{{ client.nombre_factures || 0 }} facture(s) - {{ formatCurrency(client.chiffre_affaires || 0) }}</div>
+                </li>
+              </ul>
             </div>
           </div>
           <div class="col-md-2">
-            <input type="date" class="form-control" placeholder="Date début"
-                   [(ngModel)]="grandLivreDateFrom" (change)="getGrandLivre()">
+            <input type="date" class="form-control" placeholder="Date dÃ©but"
+                   [value]="grandLivreDateFrom" (change)="grandLivreDateFrom = $any($event.target).value; getGrandLivre()">
           </div>
           <div class="col-md-2">
             <input type="date" class="form-control" placeholder="Date fin"
-                   [(ngModel)]="grandLivreDateTo" (change)="getGrandLivre()">
+                   [value]="grandLivreDateTo" (change)="grandLivreDateTo = $any($event.target).value; getGrandLivre()">
           </div>
           <div class="col-md-2">
-            <select class="form-select" [(ngModel)]="grandLivrePageSize" (change)="getGrandLivre()">
-              <option [value]="10">10 par page</option>
-              <option [value]="25">25 par page</option>
-              <option [value]="50">50 par page</option>
-              <option [value]="100">100 par page</option>
+            <select class="form-select" [value]="grandLivrePageSize" (change)="grandLivrePageSize = +$any($event.target).value; getGrandLivre()">
+              <option value="10">10 par page</option>
+              <option value="25">25 par page</option>
+              <option value="50">50 par page</option>
+              <option value="100">100 par page</option>
             </select>
           </div>
           <div class="col-md-3 text-end">
@@ -112,6 +127,10 @@
                       Document
                       <i class="fas ms-1" [class]="getGrandLivreSortIcon('numero')"></i>
                     </th>
+                    <th (click)="onGrandLivreSort('document_type')" class="sortable">
+                      Type
+                      <i class="fas ms-1" [class]="getGrandLivreSortIcon('document_type')"></i>
+                    </th>
                     <th (click)="onGrandLivreSort('client')" class="sortable">
                       Client
                       <i class="fas ms-1" [class]="getGrandLivreSortIcon('client')"></i>
@@ -127,21 +146,22 @@
                 </thead>
                 <tbody>
                   <tr *ngIf="grandLivreLoading">
-                    <td colspan="7" class="text-center py-4">
+                    <td colspan="8" class="text-center py-4">
                       <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">Chargement...</span>
                       </div>
                     </td>
                   </tr>
                   <tr *ngIf="!grandLivreLoading && grandLivre.length === 0">
-                    <td colspan="7" class="text-center py-4 text-muted">
+                    <td colspan="8" class="text-center py-4 text-muted">
                       <i class="fas fa-inbox fa-2x mb-2"></i><br>
-                      Aucune donnée trouvée
+                      Aucune donnÃ©e trouvÃ©e
                     </td>
                   </tr>
                   <tr *ngFor="let item of grandLivre">
                     <td>{{ formatDate(item.date) }}</td>
                     <td><strong>{{ item.numero || item.facture_num || '-' }}</strong></td>
+                    <td><span class="badge bg-light text-dark">{{ item.document_type || '-' }}</span></td>
                     <td>{{ item.client || item.nom || '-' }}</td>
                     <td>{{ item.description || '-' }}</td>
                     <td class="text-end">{{ formatCurrency(item.total_ht || item.facture_ht || 0) }}</td>
@@ -156,7 +176,7 @@
             <div class="d-flex justify-content-between align-items-center mt-3" *ngIf="grandLivreTotalPages > 1">
               <div class="text-muted">
                 Affichage de {{ getDisplayRange(grandLivreCurrentPage, grandLivrePageSize, grandLivreTotalRecords) }}
-                sur {{ grandLivreTotalRecords }} éléments
+                sur {{ grandLivreTotalRecords }} Ã©lÃ©ments
               </div>
               <nav aria-label="Pagination grand livre">
                 <ul class="pagination pagination-sm mb-0">
@@ -189,29 +209,44 @@
         <!-- Barre de recherche et filtres -->
         <div class="row mb-3">
           <div class="col-md-3">
-            <div class="input-group">
-              <span class="input-group-text"><i class="fas fa-search"></i></span>
-              <input type="text" class="form-control" placeholder="Rechercher par client..."
-                     [(ngModel)]="facturesClientSearchTerm" (keyup.enter)="onFacturesClientSearch()">
-              <button class="btn btn-primary" type="button" (click)="onFacturesClientSearch()">
-                <i class="fas fa-search"></i>
-              </button>
+            <div class="position-relative">
+              <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input type="text" class="form-control" placeholder="Rechercher par client..."
+                       [(ngModel)]="facturesClientSearchTerm"
+                       (ngModelChange)="onClientSearchInput('factures-client', $event)"
+                       (focus)="showClientAutocomplete('factures-client', facturesClientSearchTerm)"
+                       (blur)="hideAutocompleteDelayed()"
+                       (keyup.enter)="onFacturesClientSearch()" autocomplete="off">
+                <button class="btn btn-primary" type="button" (click)="onFacturesClientSearch()">
+                  <i class="fas fa-search"></i>
+                </button>
+              </div>
+              <ul *ngIf="activeAutocomplete === 'factures-client' && clientSuggestions.length > 0"
+                  class="list-group position-absolute w-100 shadow reporting-autocomplete">
+                <li class="list-group-item list-group-item-action reporting-autocomplete-item"
+                    *ngFor="let client of clientSuggestions"
+                    (mousedown)="selectClientSuggestion('factures-client', client)">
+                  <div class="fw-semibold">{{ client.client_nom }}</div>
+                  <div class="small text-muted">{{ client.nombre_factures || 0 }} facture(s) - {{ formatCurrency(client.chiffre_affaires || 0) }}</div>
+                </li>
+              </ul>
             </div>
           </div>
           <div class="col-md-2">
-            <input type="date" class="form-control" placeholder="Date début"
-                   [(ngModel)]="facturesClientDateFrom" (change)="getFacturesClient()">
+            <input type="date" class="form-control" placeholder="Date dÃ©but"
+                   [value]="facturesClientDateFrom" (change)="facturesClientDateFrom = $any($event.target).value; getFacturesClient()">
           </div>
           <div class="col-md-2">
             <input type="date" class="form-control" placeholder="Date fin"
-                   [(ngModel)]="facturesClientDateTo" (change)="getFacturesClient()">
+                   [value]="facturesClientDateTo" (change)="facturesClientDateTo = $any($event.target).value; getFacturesClient()">
           </div>
           <div class="col-md-2">
-            <select class="form-select" [(ngModel)]="facturesClientPageSize" (change)="getFacturesClient()">
-              <option [value]="10">10 par page</option>
-              <option [value]="25">25 par page</option>
-              <option [value]="50">50 par page</option>
-              <option [value]="100">100 par page</option>
+            <select class="form-select" [value]="facturesClientPageSize" (change)="facturesClientPageSize = +$any($event.target).value; getFacturesClient()">
+              <option value="10">10 par page</option>
+              <option value="25">25 par page</option>
+              <option value="50">50 par page</option>
+              <option value="100">100 par page</option>
             </select>
           </div>
           <div class="col-md-3 text-end">
@@ -240,7 +275,7 @@
                 <thead class="table-dark">
                   <tr>
                     <th (click)="onFacturesClientSort('facture_num')" class="sortable">
-                      Numéro Facture
+                      NumÃ©ro Facture
                       <i class="fas ms-1" [class]="getFacturesClientSortIcon('facture_num')"></i>
                     </th>
                     <th (click)="onFacturesClientSort('facture_dat')" class="sortable">
@@ -270,16 +305,16 @@
                   <tr *ngIf="!facturesClientLoading && facturesClient.length === 0">
                     <td colspan="6" class="text-center py-4 text-muted">
                       <i class="fas fa-inbox fa-2x mb-2"></i><br>
-                      Aucune facture trouvée
+                      Aucune facture trouvÃ©e
                     </td>
                   </tr>
                   <tr *ngFor="let facture of facturesClient">
                     <td><strong>{{ facture.facture_num || '-' }}</strong></td>
                     <td>{{ formatDate(facture.facture_dat) }}</td>
-                    <td>{{ facture.nom || '-' }}</td>
+                    <td>{{ facture.client_nom || facture.nom || '-' }}</td>
                     <td class="text-end">{{ formatCurrency(facture.facture_ht || 0) }}</td>
                     <td class="text-end">{{ formatCurrency(facture.facture_tva || 0) }}</td>
-                    <td class="text-end"><strong>{{ formatCurrency((facture.facture_ht || 0) + (facture.facture_tva || 0)) }}</strong></td>
+                    <td class="text-end"><strong>{{ formatCurrency(facture.total_ttc || (facture.facture_ht || 0) + (facture.facture_tva || 0)) }}</strong></td>
                   </tr>
                 </tbody>
               </table>
@@ -289,7 +324,7 @@
             <div class="d-flex justify-content-between align-items-center mt-3" *ngIf="facturesClientTotalPages > 1">
               <div class="text-muted">
                 Affichage de {{ getDisplayRange(facturesClientCurrentPage, facturesClientPageSize, facturesClientTotalRecords) }}
-                sur {{ facturesClientTotalRecords }} éléments
+                sur {{ facturesClientTotalRecords }} Ã©lÃ©ments
               </div>
               <nav aria-label="Pagination factures client">
                 <ul class="pagination pagination-sm mb-0">
@@ -322,29 +357,44 @@
         <!-- Barre de recherche et filtres -->
         <div class="row mb-3">
           <div class="col-md-3">
-            <div class="input-group">
-              <span class="input-group-text"><i class="fas fa-search"></i></span>
-              <input type="text" class="form-control" placeholder="Rechercher par code ou nom..."
-                     [(ngModel)]="caArticlesSearchTerm" (keyup.enter)="onChiffreAffairesArticlesSearch()">
-              <button class="btn btn-primary" type="button" (click)="onChiffreAffairesArticlesSearch()">
-                <i class="fas fa-search"></i>
-              </button>
+            <div class="position-relative">
+              <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input type="text" class="form-control" placeholder="Rechercher par article..."
+                       [(ngModel)]="caArticlesSearchTerm"
+                       (ngModelChange)="onArticleSearchInput($event)"
+                       (focus)="showArticleAutocomplete(caArticlesSearchTerm)"
+                       (blur)="hideAutocompleteDelayed()"
+                       (keyup.enter)="onChiffreAffairesArticlesSearch()" autocomplete="off">
+                <button class="btn btn-primary" type="button" (click)="onChiffreAffairesArticlesSearch()">
+                  <i class="fas fa-search"></i>
+                </button>
+              </div>
+              <ul *ngIf="activeAutocomplete === 'ca-articles' && articleSuggestions.length > 0"
+                  class="list-group position-absolute w-100 shadow reporting-autocomplete">
+                <li class="list-group-item list-group-item-action reporting-autocomplete-item"
+                    *ngFor="let article of articleSuggestions"
+                    (mousedown)="selectArticleSuggestion(article)">
+                  <div class="fw-semibold">{{ article.article_nom }}</div>
+                  <div class="small text-muted">{{ article.article_cod || '-' }} - {{ article.famille_nom || '-' }}</div>
+                </li>
+              </ul>
             </div>
           </div>
           <div class="col-md-2">
-            <input type="date" class="form-control" placeholder="Date début"
-                   [(ngModel)]="caArticlesDateFrom" (change)="getChiffreAffairesArticles()">
+            <input type="date" class="form-control" placeholder="Date dÃ©but"
+                   [value]="caArticlesDateFrom" (change)="caArticlesDateFrom = $any($event.target).value; getChiffreAffairesArticles()">
           </div>
           <div class="col-md-2">
             <input type="date" class="form-control" placeholder="Date fin"
-                   [(ngModel)]="caArticlesDateTo" (change)="getChiffreAffairesArticles()">
+                   [value]="caArticlesDateTo" (change)="caArticlesDateTo = $any($event.target).value; getChiffreAffairesArticles()">
           </div>
           <div class="col-md-2">
-            <select class="form-select" [(ngModel)]="caArticlesPageSize" (change)="getChiffreAffairesArticles()">
-              <option [value]="10">10 par page</option>
-              <option [value]="25">25 par page</option>
-              <option [value]="50">50 par page</option>
-              <option [value]="100">100 par page</option>
+            <select class="form-select" [value]="caArticlesPageSize" (change)="caArticlesPageSize = +$any($event.target).value; getChiffreAffairesArticles()">
+              <option value="10">10 par page</option>
+              <option value="25">25 par page</option>
+              <option value="50">50 par page</option>
+              <option value="100">100 par page</option>
             </select>
           </div>
           <div class="col-md-3 text-end">
@@ -380,9 +430,9 @@
                       Nom Article
                       <i class="fas ms-1" [class]="getChiffreAffairesArticlesSortIcon('article_nom')"></i>
                     </th>
-                    <th>Catégorie</th>
+                    <th>Famille</th>
                     <th (click)="onChiffreAffairesArticlesSort('quantite_vendue')" class="sortable text-end">
-                      Qté Vendue
+                      QtÃ© Vendue
                       <i class="fas ms-1" [class]="getChiffreAffairesArticlesSortIcon('quantite_vendue')"></i>
                     </th>
                     <th (click)="onChiffreAffairesArticlesSort('chiffre_affaires')" class="sortable text-end">
@@ -403,14 +453,14 @@
                   <tr *ngIf="!caArticlesLoading && caArticles.length === 0">
                     <td colspan="6" class="text-center py-4 text-muted">
                       <i class="fas fa-chart-line fa-2x mb-2"></i><br>
-                      Aucune donnée de vente trouvée
+                      Aucune donnÃ©e de vente trouvÃ©e
                     </td>
                   </tr>
                   <tr *ngFor="let article of caArticles">
                     <td><strong>{{ article.article_cod }}</strong></td>
                     <td>{{ article.article_nom }}</td>
-                    <td>{{ article.categorie_nom || '-' }}</td>
-                    <td class="text-end">{{ article.quantite_vendue | number:'1.0-2' }}</td>
+                    <td>{{ article.famille_nom || article.categorie_nom || '-' }}</td>
+                    <td class="text-end">{{ formatNumber(article.quantite_vendue, 0, 2) }}</td>
                     <td class="text-end"><strong class="text-success">{{ formatCurrency(article.chiffre_affaires) }}</strong></td>
                     <td class="text-end">{{ formatCurrency(article.prix_moyen_vente) }}</td>
                   </tr>
@@ -422,7 +472,7 @@
             <div class="d-flex justify-content-between align-items-center mt-3" *ngIf="caArticlesTotalPages > 1">
               <div class="text-muted">
                 Affichage de {{ getDisplayRange(caArticlesCurrentPage, caArticlesPageSize, caArticlesTotalRecords) }}
-                sur {{ caArticlesTotalRecords }} éléments
+                sur {{ caArticlesTotalRecords }} Ã©lÃ©ments
               </div>
               <nav aria-label="Pagination CA articles">
                 <ul class="pagination pagination-sm mb-0">
@@ -455,29 +505,44 @@
         <!-- Barre de recherche et filtres -->
         <div class="row mb-3">
           <div class="col-md-3">
-            <div class="input-group">
-              <span class="input-group-text"><i class="fas fa-search"></i></span>
-              <input type="text" class="form-control" placeholder="Rechercher par client..."
-                     [(ngModel)]="caClientsSearchTerm" (keyup.enter)="onChiffreAffairesClientsSearch()">
-              <button class="btn btn-primary" type="button" (click)="onChiffreAffairesClientsSearch()">
-                <i class="fas fa-search"></i>
-              </button>
+            <div class="position-relative">
+              <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input type="text" class="form-control" placeholder="Rechercher par client..."
+                       [(ngModel)]="caClientsSearchTerm"
+                       (ngModelChange)="onClientSearchInput('ca-clients', $event)"
+                       (focus)="showClientAutocomplete('ca-clients', caClientsSearchTerm)"
+                       (blur)="hideAutocompleteDelayed()"
+                       (keyup.enter)="onChiffreAffairesClientsSearch()" autocomplete="off">
+                <button class="btn btn-primary" type="button" (click)="onChiffreAffairesClientsSearch()">
+                  <i class="fas fa-search"></i>
+                </button>
+              </div>
+              <ul *ngIf="activeAutocomplete === 'ca-clients' && clientSuggestions.length > 0"
+                  class="list-group position-absolute w-100 shadow reporting-autocomplete">
+                <li class="list-group-item list-group-item-action reporting-autocomplete-item"
+                    *ngFor="let client of clientSuggestions"
+                    (mousedown)="selectClientSuggestion('ca-clients', client)">
+                  <div class="fw-semibold">{{ client.client_nom }}</div>
+                  <div class="small text-muted">{{ client.nombre_factures || 0 }} facture(s) - {{ formatCurrency(client.chiffre_affaires || 0) }}</div>
+                </li>
+              </ul>
             </div>
           </div>
           <div class="col-md-2">
-            <input type="date" class="form-control" placeholder="Date début"
-                   [(ngModel)]="caClientsDateFrom" (change)="getChiffreAffairesClients()">
+            <input type="date" class="form-control" placeholder="Date dÃ©but"
+                   [value]="caClientsDateFrom" (change)="caClientsDateFrom = $any($event.target).value; getChiffreAffairesClients()">
           </div>
           <div class="col-md-2">
             <input type="date" class="form-control" placeholder="Date fin"
-                   [(ngModel)]="caClientsDateTo" (change)="getChiffreAffairesClients()">
+                   [value]="caClientsDateTo" (change)="caClientsDateTo = $any($event.target).value; getChiffreAffairesClients()">
           </div>
           <div class="col-md-2">
-            <select class="form-select" [(ngModel)]="caClientsPageSize" (change)="getChiffreAffairesClients()">
-              <option [value]="10">10 par page</option>
-              <option [value]="25">25 par page</option>
-              <option [value]="50">50 par page</option>
-              <option [value]="100">100 par page</option>
+            <select class="form-select" [value]="caClientsPageSize" (change)="caClientsPageSize = +$any($event.target).value; getChiffreAffairesClients()">
+              <option value="10">10 par page</option>
+              <option value="25">25 par page</option>
+              <option value="50">50 par page</option>
+              <option value="100">100 par page</option>
             </select>
           </div>
           <div class="col-md-3 text-end">
@@ -531,7 +596,7 @@
                   <tr *ngIf="!caClientsLoading && caClients.length === 0">
                     <td colspan="4" class="text-center py-4 text-muted">
                       <i class="fas fa-users fa-2x mb-2"></i><br>
-                      Aucune donnée trouvée
+                      Aucune donnÃ©e trouvÃ©e
                     </td>
                   </tr>
                   <tr *ngFor="let client of caClients">
@@ -548,7 +613,7 @@
             <div class="d-flex justify-content-between align-items-center mt-3" *ngIf="caClientsTotalPages > 1">
               <div class="text-muted">
                 Affichage de {{ getDisplayRange(caClientsCurrentPage, caClientsPageSize, caClientsTotalRecords) }}
-                sur {{ caClientsTotalRecords }} éléments
+                sur {{ caClientsTotalRecords }} Ã©lÃ©ments
               </div>
               <nav aria-label="Pagination CA clients">
                 <ul class="pagination pagination-sm mb-0">
@@ -578,13 +643,3 @@
     </div>
   </div>
 </div>
-
-
-
-
-
-
-
-
-
-

@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { Router } from '@angular/router';
+import { Params, Router } from '@angular/router';
 import { NotificationService, Notification, NotificationFilters } from '../service/notification.service';
 import { AuthService } from '../service/auth.service';
 import { PermissionsService } from '../service/permissions.service';
@@ -61,12 +61,12 @@ export class NotificationComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.notificationService.getNotifications(this.filters).subscribe({
       next: (response: any) => {
-        const normalNotifications = response.success ? (response.data || []) : [];
+        const normalNotifications = response.success ? (response.data || []).map((item: any) => this.normalizeNotification(item)) : [];
         
         // Charger les notifications calculées
         this.notificationService.getCalculatedNotifications().subscribe({
           next: (calcResponse: any) => {
-            const calculatedNotifications = calcResponse.success ? (calcResponse.data || []) : [];
+            const calculatedNotifications = calcResponse.success ? (calcResponse.data || []).map((item: any) => this.normalizeNotification(item)) : [];
             
             // Combiner les deux listes (notifications calculées en premier)
             this.notifications = [...calculatedNotifications, ...normalNotifications];
@@ -85,7 +85,7 @@ export class NotificationComponent implements OnInit, OnDestroy {
         // En cas d'erreur, essayer quand même de charger les notifications calculées
         this.notificationService.getCalculatedNotifications().subscribe({
           next: (calcResponse: any) => {
-            this.notifications = calcResponse.success ? (calcResponse.data || []) : [];
+            this.notifications = calcResponse.success ? (calcResponse.data || []).map((item: any) => this.normalizeNotification(item)) : [];
             this.applyFilters();
             this.loading = false;
           },
@@ -218,14 +218,15 @@ export class NotificationComponent implements OnInit, OnDestroy {
     // Si c'est une notification calculée avec redirection
     if (notification.isCalculated && notification.redirectRoute) {
       // Rediriger vers la route spécifiée
-      this.router.navigate([notification.redirectRoute]);
+      this.navigateToNotificationTarget(notification);
       return;
     }
     
     this.selectedNotification = notification;
     // Marquer comme lue si elle est nouvelle (etat = 0)
-    if (notification.etat === 0 && this.hasPermission('notification_mark_read') && typeof notification.id === 'number') {
-      this.markAsRead(notification.id, false);
+    const numericId = this.toNumericNotificationId(notification.id);
+    if (notification.etat === 0 && this.hasPermission('notification_mark_read') && numericId !== null) {
+      this.markAsRead(numericId, false);
     }
   }
 
@@ -233,7 +234,7 @@ export class NotificationComponent implements OnInit, OnDestroy {
     // Si c'est une notification calculée avec redirection
     if (notification.isCalculated && notification.redirectRoute) {
       // Rediriger vers la route spécifiée
-      this.router.navigate([notification.redirectRoute]);
+      this.navigateToNotificationTarget(notification);
     } else {
       // Comportement normal : ouvrir les détails
       this.viewNotification(notification);
@@ -241,15 +242,17 @@ export class NotificationComponent implements OnInit, OnDestroy {
   }
 
   markAsReadAndClose(id: number | string): void {
-    if (typeof id === 'number') {
-      this.markAsRead(id);
+    const numericId = this.toNumericNotificationId(id);
+    if (numericId !== null) {
+      this.markAsRead(numericId);
       this.closeDetails();
     }
   }
 
   restoreAndClose(id: number | string): void {
-    if (typeof id === 'number') {
-      this.restore(id);
+    const numericId = this.toNumericNotificationId(id);
+    if (numericId !== null) {
+      this.restore(numericId);
       this.closeDetails();
     }
   }
@@ -269,11 +272,12 @@ export class NotificationComponent implements OnInit, OnDestroy {
     }
 
     // Les notifications calculées ne peuvent pas être marquées comme lues
-    if (typeof id !== 'number') {
+    const numericId = this.toNumericNotificationId(id);
+    if (numericId === null) {
       return;
     }
 
-    this.notificationService.markAsRead(id).subscribe({
+    this.notificationService.markAsRead(numericId).subscribe({
       next: () => {
         if (showMessage) {
           Swal.fire('Succès', 'Notification marquée comme lue', 'success');
@@ -293,8 +297,9 @@ export class NotificationComponent implements OnInit, OnDestroy {
     }
 
     const unreadIds = this.filteredNotifications
-      .filter(n => n.etat === 0 && typeof n.id === 'number' && !n.isCalculated)
-      .map(n => n.id as number);
+      .map(n => ({ notification: n, id: this.toNumericNotificationId(n.id) }))
+      .filter(item => item.notification.etat === 0 && item.id !== null && !item.notification.isCalculated)
+      .map(item => item.id as number);
 
     if (unreadIds.length === 0) {
       Swal.fire('Info', 'Aucune notification non lue', 'info');
@@ -319,7 +324,8 @@ export class NotificationComponent implements OnInit, OnDestroy {
     }
 
     // Les notifications calculées ne peuvent pas être archivées
-    if (typeof id !== 'number') {
+    const numericId = this.toNumericNotificationId(id);
+    if (numericId === null) {
       return;
     }
 
@@ -332,11 +338,11 @@ export class NotificationComponent implements OnInit, OnDestroy {
       cancelButtonText: 'Annuler'
     }).then((result) => {
       if (result.isConfirmed) {
-        this.notificationService.archive(id).subscribe({
+        this.notificationService.archive(numericId).subscribe({
           next: () => {
             Swal.fire('Succès', 'Notification archivée', 'success');
             this.loadNotifications();
-            if (this.selectedNotification?.id === id) {
+            if (this.toNumericNotificationId(this.selectedNotification?.id ?? null) === numericId) {
               this.closeDetails();
             }
           },
@@ -355,11 +361,12 @@ export class NotificationComponent implements OnInit, OnDestroy {
     }
 
     // Les notifications calculées ne peuvent pas être restaurées
-    if (typeof id !== 'number') {
+    const numericId = this.toNumericNotificationId(id);
+    if (numericId === null) {
       return;
     }
 
-    this.notificationService.restore(id).subscribe({
+    this.notificationService.restore(numericId).subscribe({
       next: () => {
         Swal.fire('Succès', 'Notification restaurée', 'success');
         this.loadNotifications();
@@ -377,7 +384,8 @@ export class NotificationComponent implements OnInit, OnDestroy {
     }
 
     // Les notifications calculées ne peuvent pas être supprimées
-    if (typeof id !== 'number') {
+    const numericId = this.toNumericNotificationId(id);
+    if (numericId === null) {
       return;
     }
 
@@ -391,11 +399,11 @@ export class NotificationComponent implements OnInit, OnDestroy {
       confirmButtonColor: '#d33'
     }).then((result) => {
       if (result.isConfirmed) {
-        this.notificationService.delete(id).subscribe({
+        this.notificationService.delete(numericId).subscribe({
           next: () => {
             Swal.fire('Succès', 'Notification supprimée', 'success');
             this.loadNotifications();
-            if (this.selectedNotification?.id === id) {
+            if (this.toNumericNotificationId(this.selectedNotification?.id ?? null) === numericId) {
               this.closeDetails();
             }
           },
@@ -507,13 +515,12 @@ export class NotificationComponent implements OnInit, OnDestroy {
     });
   }
 
-  hasPermission(permission: string): boolean {
+hasPermission(permission: string): boolean {
     return this.permissionsService.hasPermission(permission);
   }
 
-  // Helper pour vérifier si l'ID est un nombre (utilisable dans le template)
   isNumericId(id: number | string): boolean {
-    return typeof id === 'number';
+    return this.toNumericNotificationId(id) !== null;
   }
 
   get unreadCount(): number {
@@ -624,5 +631,63 @@ export class NotificationComponent implements OnInit, OnDestroy {
         this.loading = false;
       }
     });
+  }
+
+  private toNumericNotificationId(id: number | string | null | undefined): number | null {
+    if (typeof id === 'number' && Number.isFinite(id)) {
+      return id;
+    }
+
+    if (typeof id === 'string' && id.trim() !== '') {
+      const parsed = Number(id);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    return null;
+  }
+
+  private normalizeNotification(notification: any): Notification {
+    const numericId = this.toNumericNotificationId(notification?.id);
+    const etat = Number(notification?.etat);
+    const lire = Number(notification?.lire);
+    const type = Number(notification?.type);
+
+    return {
+      ...notification,
+      id: numericId ?? notification?.id,
+      etat: Number.isFinite(etat) ? etat : 0,
+      lire: Number.isFinite(lire) ? lire : notification?.lire,
+      type: Number.isFinite(type) ? type : 1
+    };
+  }
+
+  private navigateToNotificationTarget(notification: Notification): void {
+    if (!notification.redirectRoute) {
+      return;
+    }
+
+    this.router.navigate([notification.redirectRoute], {
+      queryParams: this.buildNotificationQueryParams(notification)
+    });
+  }
+
+  private buildNotificationQueryParams(notification: Notification): Params | undefined {
+    if (notification.notificationType !== 'contract_expiring') {
+      return undefined;
+    }
+
+    const queryParams: Params = {
+      focus: Date.now()
+    };
+
+    if (notification.stock_id) {
+      queryParams['highlightContratId'] = notification.stock_id;
+    }
+
+    if (notification.numero) {
+      queryParams['search'] = notification.numero;
+    }
+
+    return queryParams;
   }
 }

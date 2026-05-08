@@ -101,6 +101,33 @@
   font-size: 18px;
 }
 
+.bc-progress-summary {
+  width: 100%;
+  min-width: 0;
+}
+
+.bc-progress-text {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 0.3rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bc-progress {
+  height: 10px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.bc-progress .progress-bar {
+  background: linear-gradient(90deg, #2563eb, #10b981);
+  border-radius: 999px;
+}
+
 @keyframes fadein {
   from {
     opacity: 0;

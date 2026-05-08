@@ -10,79 +10,85 @@ const path = require('path');
 
 /**
  * Routes pour la génération de PDF des AVOIRS
+ *
+ * ⚠️ Important :
+ * - Les routes POST sont protégées par le middleware d'authentification,
+ *   comme pour les factures.
+ * - La route GET de lecture de PDF reste publique afin de permettre
+ *   l'ouverture du PDF via `window.open()` sans header Authorization,
+ *   comme pour `facturation-pdf` et `retour-pdf`.
  */
 
-// Toutes les routes nécessitent une authentification
-router.use(authenticateToken);
-
-// Middleware pour injecter la connexion appropriée
-router.use(databaseInjector.injectConnection.bind(databaseInjector));
-
-// Générer un PDF d'avoir
-router.post('/generate', checkPdfPermission('avoir'), async (req, res) => {
+// Générer un PDF d'avoir (route protégée)
+router.post(
+  '/generate',
+  authenticateToken,
+  databaseInjector.injectConnection.bind(databaseInjector),
+  checkPdfPermission('avoir'),
+  async (req, res) => {
     try {
         const { document_id, withStamp } = req.body;
 
-        if (!document_id) {
-            return res.status(400).json({ success: false, message: 'document_id est requis' });
-        }
+    if (!document_id) {
+      return res.status(400).json({ success: false, message: 'document_id est requis' });
+    }
 
         // Récupérer les données de l'avoir
-        const avoirData = await getAvoirReportById(document_id, req.sequelize);
+    const avoirData = await getAvoirReportById(document_id, req.sequelize);
 
-        if (!avoirData || (Array.isArray(avoirData) && avoirData.length === 0)) {
-            console.error('[avoir-pdf/generate] ❌ Aucune donnée trouvée pour document_id:', document_id);
-            return res.status(404).json({
-                success: false,
-                message: 'Avoir introuvable ou aucune ligne de détail trouvée',
-                document_id: document_id
-            });
-        }
+    if (!avoirData || (Array.isArray(avoirData) && avoirData.length === 0)) {
+      console.error('[avoir-pdf/generate] ❌ Aucune donnée trouvée pour document_id:', document_id);
+      return res.status(404).json({
+        success: false,
+        message: 'Avoir introuvable ou aucune ligne de détail trouvée',
+        document_id: document_id
+      });
+    }
 
         // Récupérer les informations depuis le fichier JSON de configuration
-        const documentSociete = pdfConfigService.getDocumentSociete();
+    const documentSociete = pdfConfigService.getDocumentSociete();
 
-        const pdfPath = await avoirPdfService.genererPDF(avoirData, {
-            withStamp: !!withStamp,
-            documentSociete: documentSociete
-        });
+    const pdfPath = await avoirPdfService.genererPDF(avoirData, {
+      withStamp: !!withStamp,
+      documentSociete: documentSociete
+    });
 
-        // Lire le PDF en mémoire et le supprimer immédiatement
-        const pdfBuffer = require('fs').readFileSync(pdfPath);
-        require('fs').unlinkSync(pdfPath);
+    // Lire le PDF en mémoire et le supprimer immédiatement
+    const pdfBuffer = require('fs').readFileSync(pdfPath);
+    require('fs').unlinkSync(pdfPath);
 
-        const fileName = path.basename(pdfPath);
-        const protocol = req.protocol || 'http';
-        const host = req.get('host') || 'localhost';
-        const baseUrl = process.env.BASE_URL || `${protocol}://${host}`;
-        const pdfUrl = `${baseUrl}/api/avoir-pdf/${fileName}`;
+    const fileName = path.basename(pdfPath);
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost';
+    const baseUrl = process.env.BASE_URL || `${protocol}://${host}`;
+    const pdfUrl = `${baseUrl}/api/avoir-pdf/${fileName}`;
 
-        if (!global.pdfCache) {
-          global.pdfCache = new Map();
-        }
-        global.pdfCache.set(`avoirs/${fileName}`, {
-          buffer: pdfBuffer,
-          timestamp: Date.now()
-        });
-        setTimeout(() => {
-          if (global.pdfCache) {
-            global.pdfCache.delete(`avoirs/${fileName}`);
-          }
-        }, 5 * 60 * 1000);
-
-        return res.json({ success: true, pdfUrl });
-    } catch (error) {
-        console.error('Erreur génération PDF avoir :', error);
-        return res.status(500).json({
-            success: false,
-            message: 'Erreur génération PDF avoir',
-            error: error.message
-        });
+    if (!global.pdfCache) {
+      global.pdfCache = new Map();
     }
+    global.pdfCache.set(`avoirs/${fileName}`, {
+      buffer: pdfBuffer,
+      timestamp: Date.now()
+    });
+    setTimeout(() => {
+      if (global.pdfCache) {
+        global.pdfCache.delete(`avoirs/${fileName}`);
+      }
+    }, 5 * 60 * 1000);
+
+    return res.json({ success: true, pdfUrl });
+  } catch (error) {
+    console.error('Erreur génération PDF avoir :', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur génération PDF avoir',
+      error: error.message
+    });
+  }
 });
 
-// Route GET pour servir les PDFs depuis le cache mémoire
-router.get('/:filename', authenticateToken, async (req, res) => {
+// Route GET publique pour servir les PDFs depuis le cache mémoire ou le disque
+router.get('/:filename', async (req, res) => {
   try {
     const { filename } = req.params;
     const fs = require('fs');

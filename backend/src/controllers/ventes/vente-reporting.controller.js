@@ -97,19 +97,49 @@ const getChiffreAffairesClients = async (req, res) => {
   }
 };
 
+/**
+ * Suggestions clients pour les recherches autocomplete.
+ */
+const getClientSuggestions = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const options = {
+      search: req.query.search || '',
+      limit: parseInt(req.query.limit) || 20
+    };
+
+    const result = await venteReportingService.getClientSuggestions(options, sequelize);
+    res.json(result);
+  } catch (err) {
+    console.error('[getClientSuggestions Vente] Erreur:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * Suggestions articles pour les recherches autocomplete.
+ */
+const getArticleSuggestions = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const options = {
+      search: req.query.search || '',
+      limit: parseInt(req.query.limit) || 20
+    };
+
+    const result = await venteReportingService.getArticleSuggestions(options, sequelize);
+    res.json(result);
+  } catch (err) {
+    console.error('[getArticleSuggestions Vente] Erreur:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 module.exports = {
   getGrandLivre,
   getFacturesByClient,
   getChiffreAffairesArticles,
-  getChiffreAffairesClients
+  getChiffreAffairesClients,
+  getClientSuggestions,
+  getArticleSuggestions
 };
-
-
-
-
-
-
-
-
-
-

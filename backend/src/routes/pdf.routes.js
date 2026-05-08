@@ -6,9 +6,55 @@ const { authenticateToken } = require('../middleware/auth.middleware');
 const databaseInjector = require('../middleware/database-injector.middleware');
 const { checkPdfPermission } = require('../middleware/pdf-permissions.middleware');
 const pdfConfigService = require('../services/pdf-config.service');
+const devisHtmlPdfService = require('../services/devis-html-pdf.service');
 const path = require('path');
 const https = require('https');
 const fs = require('fs');
+const {
+  sortPdfLinesByDisplayOrder,
+  buildPdfLineOrderSignature
+} = require('../utils/pdf-line-order.helper');
+const {
+  enrichRowsWithNomenclature,
+  buildNomenclatureSignature,
+  removeNomenclatureComponentRows
+} = require('../utils/nomenclature.helper');
+const GENERATED_PDF_TTL_MS = 3 * 60 * 1000;
+const PDF_RENDERER_VERSION = '20260501-nomenclature-parent-match';
+
+function getGeneratedPdfRequestCache() {
+  if (!global.generatedPdfRequestCache) {
+    global.generatedPdfRequestCache = new Map();
+  }
+  return global.generatedPdfRequestCache;
+}
+
+function getRecentGeneratedPdf(requestCacheKey, fileCacheKey, absoluteFilePath) {
+  const cache = getGeneratedPdfRequestCache();
+  const cached = cache.get(requestCacheKey);
+  if (!cached) return null;
+  if (Date.now() - cached.timestamp > GENERATED_PDF_TTL_MS) {
+    cache.delete(requestCacheKey);
+    return null;
+  }
+
+  const existsInMemory = !!(global.pdfCache && global.pdfCache.has(fileCacheKey));
+  const existsOnDisk = absoluteFilePath ? fs.existsSync(absoluteFilePath) : false;
+  if (!existsInMemory && !existsOnDisk) {
+    cache.delete(requestCacheKey);
+    return null;
+  }
+
+  return cached;
+}
+
+function rememberGeneratedPdf(requestCacheKey, pdfUrl, fileCacheKey) {
+  getGeneratedPdfRequestCache().set(requestCacheKey, {
+    pdfUrl,
+    fileCacheKey,
+    timestamp: Date.now()
+  });
+}
 
 // utilise les méthodes de emailService directement
 
@@ -37,6 +83,10 @@ router.get('/:folder/:filename', async (req, res) => {
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
         res.setHeader('Content-Length', cached.buffer.length);
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.setHeader('Surrogate-Control', 'no-store');
         return res.send(cached.buffer);
       } else {
         console.log(`[PDF Route] ⏰ Cache expiré pour: ${cacheKey}`);
@@ -53,12 +103,16 @@ router.get('/:folder/:filename', async (req, res) => {
       // Vérifier l'âge du fichier (ne pas servir les fichiers de plus de 1 heure)
       const stats = fs.statSync(publicPath);
       const fileAge = Date.now() - stats.mtime.getTime();
-      console.log(`[PDF Route] 📅 Âge du fichier: ${Math.round(fileAge / 1000)} secondes`);
+      console.log(`[PDF Route] 📅 ge du fichier: ${Math.round(fileAge / 1000)} secondes`);
       
       if (fileAge < 60 * 60 * 1000) {
         console.log(`[PDF Route] ✅ Envoi du PDF depuis le disque: ${publicPath}`);
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.setHeader('Surrogate-Control', 'no-store');
         return res.sendFile(publicPath);
       } else {
         console.log(`[PDF Route] ⏰ Fichier trop vieux, suppression: ${publicPath}`);
@@ -90,7 +144,7 @@ router.post('/generate',
   databaseInjector.injectConnection.bind(databaseInjector),
   async (req, res, next) => {
     try {
-      const { document_id, forceDocumentType } = req.body;
+      const { document_id, forceDocumentType, printMode } = req.body;
       const docId = parseInt(document_id, 10);
       
       if (isNaN(docId)) {
@@ -98,7 +152,7 @@ router.post('/generate',
       }
       
       const sequelize = req.sequelize || require('../config/database');
-      const devisData = await getEmailDataByDocumentId(docId, sequelize);
+      const devisData = await getEmailDataByDocumentId(docId, sequelize, { forceDocumentType, printMode });
       
       if (!devisData || devisData.length === 0) {
         return res.status(404).json({ success: false, message: 'Document introuvable' });
@@ -109,16 +163,23 @@ router.post('/generate',
       
       // Déterminer le type de PDF
       let pdfType = 'devis'; // par défaut
-      if (documentKind === 'LIVRAISON' || documentType === 2) {
+      const forcedType = String(forceDocumentType || '').trim().toLowerCase();
+      if (forcedType === 'livraison' || forcedType === 'bl') {
+        pdfType = 'livraison';
+      } else if (forcedType === 'retour' || forcedType === 'retour client') {
+        pdfType = 'retour';
+      } else if (forcedType === 'devis') {
+        pdfType = 'devis';
+      } else if (forcedType === 'facturation') {
+        pdfType = 'facturation';
+      } else if (forcedType === 'commande') {
+        pdfType = 'commande';
+      } else if (forcedType === 'avoir') {
+        pdfType = 'avoir';
+      } else if (documentKind === 'LIVRAISON' || documentType === 2) {
         pdfType = 'livraison';
       } else if (documentKind === 'RETOUR CLIENT' || documentType === 5) {
         pdfType = 'retour';
-      } else if (forceDocumentType === 'facturation') {
-        pdfType = 'facturation';
-      } else if (forceDocumentType === 'commande') {
-        pdfType = 'commande';
-      } else if (forceDocumentType === 'avoir') {
-        pdfType = 'avoir';
       }
       
       // Vérifier la permission
@@ -140,7 +201,7 @@ router.post('/generate',
     
       let devisData;
       try {
-        devisData = await getEmailDataByDocumentId(docId, sequelize);
+        devisData = await getEmailDataByDocumentId(docId, sequelize, { forceDocumentType, printMode });
 
         console.log('📊 Données récupérées:', devisData?.length || 0, 'ligne(s)');
         if (!devisData || devisData.length === 0) {
@@ -159,20 +220,142 @@ router.post('/generate',
         });
       }
 
-    // Récupérer les informations depuis le fichier JSON de configuration
-    const documentSociete = pdfConfigService.getDocumentSociete();
-    console.log('📄 Informations de la société récupérées depuis la configuration:', documentSociete ? 'Oui' : 'Non');
+    devisData = sortPdfLinesByDisplayOrder(devisData);
+    devisData = await enrichRowsWithNomenclature(devisData, sequelize);
+    devisData = removeNomenclatureComponentRows(devisData);
 
-    // Générer le PDF en mémoire (buffer) au lieu de sauvegarder
-    const pdfBuffer = await emailService.genererPDFBuffer(devisData, { 
-      withStamp: !!withStamp,
-      documentSociete: documentSociete,
-      sequelize,
-      document_id: docId,
-      printMode: printMode || 'normal',
-      composeArticle: composeArticle || null,
-      forceDocumentType: forceDocumentType || null
-    });
+    const normalizedPrintMode = (printMode || 'normal').toLowerCase();
+    const normalizedForcedType = String(forceDocumentType || '').trim().toUpperCase();
+    const firstLine = devisData[0] || {};
+    const lineOrderSignature = [
+      buildPdfLineOrderSignature(devisData),
+      buildNomenclatureSignature(devisData)
+    ].filter(Boolean).join('|nomenclature:');
+    const documentKind = String(firstLine.document_kind || '').trim().toUpperCase();
+    const isForcedDevis = normalizedForcedType === 'DEVIS';
+    const isForcedCommande = normalizedForcedType === 'COMMANDE';
+    const isForcedLivraison = normalizedForcedType === 'LIVRAISON' || normalizedForcedType === 'BON DE LIVRAISON' || normalizedForcedType === 'BL';
+    const isNativeDevis = documentKind === 'DEVIS' || (!documentKind && Number(firstLine.type) === 1);
+    const isNativeCommande = documentKind === 'COMMANDE' || (!documentKind && (Number(firstLine.type) === 2 || Number(firstLine.etat) === 2));
+    const isNativeLivraison = documentKind === 'LIVRAISON' || documentKind === 'BON DE LIVRAISON';
+    const hideNomenclatureComponents = false;
+    const isSimpleDevisPrint = normalizedPrintMode === 'simple' && (isForcedDevis || isNativeDevis);
+    const documentSociete = isSimpleDevisPrint ? null : pdfConfigService.getDocumentSociete();
+    console.log('Informations de la societe recuperees depuis la configuration:', isSimpleDevisPrint ? 'Ignorees (mode devis simple)' : (documentSociete ? 'Oui' : 'Non'));
+    const shouldUseHtmlDevisRenderer =
+      (
+        normalizedPrintMode === 'normal' &&
+        (isForcedDevis || isForcedCommande || isForcedLivraison || isNativeDevis || isNativeCommande || isNativeLivraison)
+      ) ||
+      (
+        normalizedPrintMode === 'non_valorise' &&
+        (isForcedLivraison || isNativeLivraison)
+      ) ||
+      (
+        normalizedPrintMode === 'composition' &&
+        (isForcedLivraison || isNativeLivraison)
+      ) ||
+      isSimpleDevisPrint;
+
+    let isClientExonerated = false;
+    if (shouldUseHtmlDevisRenderer && firstLine.part_id) {
+      try {
+        const exonerationModel = require('../models/base/partenaire-exoneration.model');
+        const exonerations = await exonerationModel.getAllExonerationsByPartId(firstLine.part_id, sequelize);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        isClientExonerated = (Array.isArray(exonerations) ? exonerations : []).some((exon) => {
+          if (!exon?.date_debut || !exon?.date_fin) return false;
+          const dateDebut = new Date(exon.date_debut);
+          const dateFin = new Date(exon.date_fin);
+          dateDebut.setHours(0, 0, 0, 0);
+          dateFin.setHours(0, 0, 0, 0);
+          return today >= dateDebut && today <= dateFin;
+        });
+      } catch (error) {
+        console.warn('[PDF Route] Vérification exonération ignorée:', error.message);
+      }
+    }
+
+    const resolvedDocumentType = devisData[0]?.document_kind || (devisData[0] && (devisData[0].etat === 2 || devisData[0].type === 2) ? 'COMMANDE' : 'DEVIS');
+    let resolvedFolderName = 'devis';
+    let resolvedDocumentTitle = 'DEVIS';
+
+    switch ((resolvedDocumentType || '').toUpperCase()) {
+      case 'COMMANDE':
+        resolvedFolderName = 'commandes';
+        resolvedDocumentTitle = 'COMMANDE';
+        break;
+      case 'LIVRAISON':
+      case 'BON DE LIVRAISON':
+        resolvedFolderName = 'livraisons';
+        resolvedDocumentTitle = 'LIVRAISON';
+        break;
+      case 'RETOUR CLIENT':
+      case 'RETOUR':
+        resolvedFolderName = 'retours';
+        resolvedDocumentTitle = 'RETOUR';
+        break;
+      default:
+        resolvedFolderName = 'devis';
+        resolvedDocumentTitle = 'DEVIS';
+        break;
+    }
+
+    const resolvedNumeroDoc = devisData[0]?.numero || resolvedDocumentTitle;
+    const resolvedNomClient = (devisData[0]?.client || 'CLIENT').toString().trim().replace(/[^a-zA-Z0-9\s\-_]/g, '').replace(/\s+/g, '_').substring(0, 50);
+    const resolvedPrintModeSuffix = normalizedPrintMode && normalizedPrintMode !== 'normal'
+      ? `_${normalizedPrintMode.replace(/[^a-z0-9_-]/gi, '_')}`
+      : '';
+    const resolvedFileName = `${resolvedNumeroDoc}_${resolvedNomClient}${resolvedPrintModeSuffix}.pdf`;
+    const resolvedFileCacheKey = `${resolvedFolderName}/${resolvedFileName}`;
+    const resolvedPublicFolderPath = path.join(__dirname, '..', 'public', resolvedFolderName);
+    const resolvedPdfFilePath = path.join(resolvedPublicFolderPath, resolvedFileName);
+    const requestCacheKey = [
+      'pdf',
+      PDF_RENDERER_VERSION,
+      resolvedFolderName,
+      docId,
+      normalizedPrintMode,
+      normalizedForcedType || (resolvedDocumentType || '').toUpperCase(),
+      withStamp ? 'stamp' : 'nostamp',
+      lineOrderSignature,
+      composeArticle ? JSON.stringify(composeArticle) : ''
+    ].join(':');
+    const cachedPdf = getRecentGeneratedPdf(requestCacheKey, resolvedFileCacheKey, resolvedPdfFilePath);
+    if (cachedPdf) {
+      console.log(`[PDF Route] ♻️ PDF recent renvoye sans regeneration: ${resolvedFileCacheKey}`);
+      return res.json({ success: true, pdfUrl: cachedPdf.pdfUrl });
+    }
+
+    let pdfBuffer;
+    if (shouldUseHtmlDevisRenderer) {
+      try {
+        pdfBuffer = await devisHtmlPdfService.generatePdfBuffer(devisData, {
+          withStamp: !!withStamp,
+          documentSociete,
+          isClientExonerated,
+          printMode: normalizedPrintMode,
+          forceDocumentType: forceDocumentType || null,
+          hideNomenclatureComponents
+        });
+        console.log('[PDF Route] ✅ PDF devis généré avec Puppeteer');
+      } catch (error) {
+        console.warn('[PDF Route] ⚠️ Fallback sur le moteur PDF existant:', error.message);
+      }
+    }
+
+    if (!pdfBuffer) {
+      pdfBuffer = await emailService.genererPDFBuffer(devisData, {
+        withStamp: !!withStamp,
+        documentSociete: documentSociete,
+        sequelize,
+        document_id: docId,
+        printMode: normalizedPrintMode,
+        composeArticle: composeArticle || null,
+        forceDocumentType: forceDocumentType || null
+      });
+    }
     
     // Déterminer le nom du fichier selon le type de document
     const documentType = devisData[0]?.document_kind || (devisData[0] && (devisData[0].etat === 2 || devisData[0].type === 2) ? 'COMMANDE' : 'DEVIS');
@@ -203,13 +386,16 @@ router.post('/generate',
     // Créer un nom de fichier
     const numeroDoc = devisData[0]?.numero || documentTitle;
     const nomClient = (devisData[0]?.client || 'CLIENT').toString().trim().replace(/[^a-zA-Z0-9\s\-_]/g, '').replace(/\s+/g, '_').substring(0, 50);
-    const fileName = `${numeroDoc}_${nomClient}.pdf`;
+    const printModeSuffix = normalizedPrintMode && normalizedPrintMode !== 'normal'
+      ? `_${normalizedPrintMode.replace(/[^a-z0-9_-]/gi, '_')}`
+      : '';
+    const fileName = `${numeroDoc}_${nomClient}${printModeSuffix}.pdf`;
     
     // Utiliser l'URL de la requête pour construire l'URL du PDF
     const protocol = req.protocol || 'http';
     const host = req.get('host') || 'localhost';
     const baseUrl = process.env.BASE_URL || `${protocol}://${host}`;
-    const pdfUrl = `${baseUrl}/api/pdf/${folderName}/${fileName}`;
+    const pdfUrl = `${baseUrl}/api/pdf/${folderName}/${fileName}?v=${encodeURIComponent(PDF_RENDERER_VERSION)}&sig=${encodeURIComponent(lineOrderSignature)}`;
 
     // Créer le dossier s'il n'existe pas
     const publicFolderPath = path.join(__dirname, '..', 'public', folderName);
@@ -230,6 +416,7 @@ router.post('/generate',
       buffer: pdfBuffer,
       timestamp: Date.now()
     });
+    rememberGeneratedPdf(requestCacheKey, pdfUrl, `${folderName}/${fileName}`);
     
     // Nettoyer le cache mémoire après 1 heure
     setTimeout(() => {
@@ -279,9 +466,23 @@ router.post('/send-whatsapp', authenticateToken, databaseInjector.injectConnecti
       });
     }
 
-    const devisData = await getEmailDataByDocumentId(document_id);
+    const sequelize = req.sequelize || require('../config/database');
+    let devisData = sortPdfLinesByDisplayOrder(await getEmailDataByDocumentId(document_id, sequelize));
     if (!devisData || devisData.length === 0) {
       return res.status(404).json({ success: false, message: 'Devis introuvable' });
+    }
+
+    const firstLine = devisData[0] || {};
+    const documentKind = String(firstLine.document_kind || '').trim().toUpperCase();
+    const shouldHideNomenclatureComponents =
+      documentKind === 'COMMANDE'
+      || documentKind === 'LIVRAISON'
+      || documentKind === 'BON DE LIVRAISON'
+      || Number(firstLine.type) === 2;
+
+    if (shouldHideNomenclatureComponents) {
+      devisData = await enrichRowsWithNomenclature(devisData, sequelize);
+      devisData = removeNomenclatureComponentRows(devisData);
     }
 
     console.log('📄 Génération PDF...');

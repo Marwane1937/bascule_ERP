@@ -1,4 +1,5 @@
 const stockService = require('../services/stock.service');
+const PDFDocument = require('pdfkit');
 
 /**
  * Récupérer les achats non encore entrés en stock
@@ -115,7 +116,12 @@ const getEtatStock = async (req, res) => {
       orderBy: req.query.orderBy || 'article_nom',
       orderDirection: req.query.orderDirection || 'ASC',
       search: req.query.search || '',
-      depotId: req.query.depotId || 1,
+      article: req.query.article || '',
+      articleId: req.query.articleId || null,
+      articleCode: req.query.articleCode || '',
+      dateFrom: req.query.dateFrom || null,
+      dateTo: req.query.dateTo || null,
+      depotId: req.query.depotId || null,
       stockMinimum: req.query.stockMinimum || null
     };
 
@@ -182,6 +188,200 @@ const getChiffreAffairesArticles = async (req, res) => {
   } catch (err) {
     console.error('[getChiffreAffairesArticles] Erreur:', err);
     res.status(500).json({ message: err.message });
+  }
+};
+
+const getEntrepotResume = async (req, res) => {
+  try {
+    const rows = await stockService.getEntrepotResume();
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('[getEntrepotResume] Erreur:', err);
+    res.status(500).json({ success: false, message: err.message || 'Erreur serveur', data: [] });
+  }
+};
+
+const getEntrepotDetails = async (req, res) => {
+  try {
+    const depotId = parseInt(req.params.depotId, 10);
+    if (!depotId || isNaN(depotId)) {
+      return res.status(400).json({ success: false, message: 'depotId invalide', data: [] });
+    }
+    const rows = await stockService.getEntrepotDetails(depotId);
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('[getEntrepotDetails] Erreur:', err);
+    res.status(500).json({ success: false, message: err.message || 'Erreur serveur', data: [] });
+  }
+};
+
+const getPreparations = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || require('../config/database').getConnection();
+    const options = {
+      page: req.query.page || 1,
+      pageSize: req.query.pageSize || 25,
+      search: req.query.search || ''
+    };
+    const result = await stockService.getPreparations(options, sequelize);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[getPreparations] Erreur:', err);
+    res.status(500).json({ success: false, message: err.message, data: [] });
+  }
+};
+
+const getNextPreparationNumero = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || require('../config/database').getConnection();
+    const result = await stockService.getNextPreparationNumero(sequelize);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[getNextPreparationNumero] Erreur:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const getCommandesDisponiblesPourPreparation = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || require('../config/database').getConnection();
+    const rows = await stockService.getCommandesDisponiblesPourPreparation(sequelize);
+    res.json({ success: true, data: rows || [] });
+  } catch (err) {
+    console.error('[getCommandesDisponiblesPourPreparation] Erreur:', err);
+    res.status(500).json({ success: false, message: err.message, data: [] });
+  }
+};
+
+const createPreparation = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || require('../config/database').getConnection();
+    const utilisateurId = req.user?.id || 1;
+    const payload = {
+      description: req.body?.description || '',
+      sourceCommandeId: req.body?.sourceCommandeId || null,
+      date: req.body?.date || null,
+      part_id: req.body?.part_id || null,
+      contact_id: req.body?.contact_id || null,
+      depot_id: req.body?.depot_id || null,
+      date_fin: req.body?.date_fin || null
+    };
+    const result = await stockService.createPreparation(payload, utilisateurId, sequelize);
+    res.status(201).json({ success: true, ...result, message: 'Bon de préparation créé avec succès' });
+  } catch (err) {
+    console.error('[createPreparation] Erreur:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const getPreparationById = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || require('../config/database').getConnection();
+    const preparationId = parseInt(req.params.id, 10);
+    if (!preparationId || isNaN(preparationId)) {
+      return res.status(400).json({ success: false, message: 'ID préparation invalide' });
+    }
+    const data = await stockService.getPreparationById(preparationId, sequelize);
+    if (!data) {
+      return res.status(404).json({ success: false, message: 'Bon de préparation introuvable' });
+    }
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('[getPreparationById] Erreur:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const searchPreparationArticles = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || require('../config/database').getConnection();
+    const term = String(req.query?.term || '').trim();
+    const data = await stockService.searchPreparationArticles(term, sequelize);
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('[searchPreparationArticles] Erreur:', err);
+    res.status(500).json({ success: false, message: err.message, data: [] });
+  }
+};
+
+const updatePreparationHeader = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || require('../config/database').getConnection();
+    const preparationId = parseInt(req.params.id, 10);
+    if (!preparationId || isNaN(preparationId)) {
+      return res.status(400).json({ success: false, message: 'ID préparation invalide' });
+    }
+    const data = await stockService.updatePreparationHeader(preparationId, req.body || {}, sequelize);
+    res.json({ success: true, data, message: 'Informations du bon de préparation mises à jour' });
+  } catch (err) {
+    console.error('[updatePreparationHeader] Erreur:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const savePreparationLines = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || require('../config/database').getConnection();
+    const utilisateurId = req.user?.id || 1;
+    const preparationId = parseInt(req.params.id, 10);
+    if (!preparationId || isNaN(preparationId)) {
+      return res.status(400).json({ success: false, message: 'ID préparation invalide' });
+    }
+    const lines = Array.isArray(req.body?.lignes) ? req.body.lignes : [];
+    const data = await stockService.savePreparationLines(preparationId, lines, utilisateurId, sequelize);
+    res.json({ success: true, data, message: 'Lignes du bon de préparation enregistrées' });
+  } catch (err) {
+    console.error('[savePreparationLines] Erreur:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const transfererPreparationVersLivraison = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || require('../config/database').getConnection();
+    const utilisateurId = req.user?.id || 1;
+    const preparationId = parseInt(req.params.id, 10);
+    if (!preparationId || isNaN(preparationId)) {
+      return res.status(400).json({ success: false, message: 'ID préparation invalide' });
+    }
+    const result = await stockService.transfererPreparationVersLivraison(preparationId, utilisateurId, sequelize);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[transfererPreparationVersLivraison] Erreur:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const printPreparationPdf = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || require('../config/database').getConnection();
+    const preparationId = parseInt(req.params.id, 10);
+    if (!preparationId || isNaN(preparationId)) {
+      return res.status(400).json({ success: false, message: 'ID pr�paration invalide' });
+    }
+
+    const prep = await stockService.getPreparationById(preparationId, sequelize);
+    if (!prep) {
+      return res.status(404).json({ success: false, message: 'Bon de pr�paration introuvable' });
+    }
+
+    const preparationPdfService = require('../services/stock/preparation-pdf.service');
+    const pdfBuffer = await preparationPdfService.generatePreparationPdfBuffer(prep, { sequelize });
+    const clientName = String(prep?.client || 'CLIENT')
+      .trim()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/\s+/g, ' ')
+      .substring(0, 50) || 'CLIENT';
+    const fileName = `Bon de Preparation ${clientName}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+    return res.send(pdfBuffer);
+  } catch (err) {
+    console.error('[printPreparationPdf] Erreur:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+    return res.end();
   }
 };
 
@@ -1093,7 +1293,14 @@ const exportEtatStock = async (req, res) => {
       pageSize: req.query.pageSize || 10000, // Grande page pour export complet
       orderBy: req.query.orderBy || 'date',
       orderDirection: req.query.orderDirection || 'DESC',
-      search: req.query.search || ''
+      search: req.query.search || '',
+      article: req.query.article || '',
+      articleId: req.query.articleId || null,
+      articleCode: req.query.articleCode || '',
+      dateFrom: req.query.dateFrom || null,
+      dateTo: req.query.dateTo || null,
+      depotId: req.query.depotId || null,
+      stockMinimum: req.query.stockMinimum || null
     };
 
     const result = await stockService.getEtatStock(options);
@@ -1467,6 +1674,18 @@ module.exports = {
   getEtatStock,
   getFicheStock,
   getChiffreAffairesArticles,
+  getEntrepotResume,
+  getEntrepotDetails,
+  getPreparations,
+  getNextPreparationNumero,
+  getCommandesDisponiblesPourPreparation,
+  createPreparation,
+  getPreparationById,
+  searchPreparationArticles,
+  updatePreparationHeader,
+  savePreparationLines,
+  transfererPreparationVersLivraison,
+  printPreparationPdf,
   exportEtatStock,
   exportFicheStock,
   exportChiffreAffairesArticles,
@@ -1488,4 +1707,3 @@ module.exports = {
   validerInventaire,
   validationFinaleInventaire
 };
-

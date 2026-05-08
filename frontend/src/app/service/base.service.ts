@@ -39,8 +39,24 @@ export class BaseService {
     return this.http.post(`${this.apiUrl}/clients`, data, { headers: this.httpHeaders });
   }
 
+  checkClientUniqueness(params: { code?: string; nom?: string; excludeId?: string | number | null }): Observable<any> {
+    const url = `${this.apiUrl}/clients/client/check-unique`;
+    let httpParams = new HttpParams();
+
+    if (params?.code != null) httpParams = httpParams.set('code', String(params.code));
+    if (params?.nom != null) httpParams = httpParams.set('nom', String(params.nom));
+    if (params?.excludeId != null) httpParams = httpParams.set('excludeId', String(params.excludeId));
+
+    return this.http.get(url, { params: httpParams });
+  }
+
   getClientById(id: string | number): Observable<any> {
     return this.http.get(`${this.apiUrl}/clients/${id}`);
+  }
+
+  getClientStatistics(id: string | number): Observable<any> {
+    const params = new HttpParams().set('_ts', String(Date.now()));
+    return this.http.get(`${this.apiUrl}/clients/client/${id}/stats`, { params });
   }
 
   updateClient(id: string | number, data: { code: string | number; nom: string }): Observable<any> {
@@ -77,8 +93,29 @@ export class BaseService {
   createFournisseur(data: { code: string | number; nom: string }): Observable<any> {
     return this.http.post(`${this.apiUrl}/clients/fournisseur`, data, { headers: this.httpHeaders });
   }
+
+  checkFournisseurUniqueness(params: { code?: string; nom?: string; excludeId?: string | number | null }): Observable<any> {
+    const url = `${this.apiUrl}/clients/fournisseur/check-unique`;
+    let httpParams = new HttpParams();
+
+    if (params?.code != null) httpParams = httpParams.set('code', String(params.code));
+    if (params?.nom != null) httpParams = httpParams.set('nom', String(params.nom));
+    if (params?.excludeId != null) httpParams = httpParams.set('excludeId', String(params.excludeId));
+
+    return this.http.get(url, { params: httpParams });
+  }
+
+  getFournisseurStatistics(id: string | number): Observable<any> {
+    const params = new HttpParams().set('_ts', String(Date.now()));
+    return this.http.get(`${this.apiUrl}/clients/fournisseur/${id}/stats`, { params });
+  }
   getCommercial(): Observable<any> {
     const url = `${this.apiUrl}/clients/contact`;
+    return this.http.get(url);
+  }
+
+  getCommercialAutocomplete(): Observable<any> {
+    const url = `${this.apiUrl}/clients/contact/autocomplete`;
     return this.http.get(url);
   }
 
@@ -103,6 +140,17 @@ export class BaseService {
 
   createCommercial(data: { code?: string; nom: string; prenom?: string; mobile?: string; phone?: string; email?: string }): Observable<any> {
     return this.http.post(`${this.apiUrl}/clients/contact`, data, { headers: this.httpHeaders });
+  }
+
+  checkCommercialUniqueness(params: { code?: string; nom?: string; excludeId?: string | number | null }): Observable<any> {
+    const url = `${this.apiUrl}/clients/contact/check-unique`;
+    let httpParams = new HttpParams();
+
+    if (params?.code != null) httpParams = httpParams.set('code', String(params.code));
+    if (params?.nom != null) httpParams = httpParams.set('nom', String(params.nom));
+    if (params?.excludeId != null) httpParams = httpParams.set('excludeId', String(params.excludeId));
+
+    return this.http.get(url, { params: httpParams });
   }
 
   updateCommercial(id: string, data: { code?: string; nom: string; prenom?: string; mobile?: string; phone?: string; email?: string }): Observable<any> {
@@ -134,6 +182,15 @@ export class BaseService {
     return this.http.get(`${this.apiUrl}/articles/${article_id}`);
   }
 
+  getArticleStockDisponible(article_id: string | number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/articles/${article_id}/stock-disponible`);
+  }
+
+  getArticleStatistics(article_id: string | number): Observable<any> {
+    const params = new HttpParams().set('_ts', String(Date.now()));
+    return this.http.get(`${this.apiUrl}/articles/${article_id}/stats`, { params });
+  }
+
   // === Article Nomenclature ===
   getArticleNomenclature(compose_id: string | number): Observable<any> {
     return this.http.get(`${this.apiUrl}/articles/${compose_id}/nomenclature`);
@@ -149,6 +206,37 @@ export class BaseService {
 
   deleteArticleNomenclatureLine(compose_id: string | number, composant_id: string | number): Observable<any> {
     return this.http.delete(`${this.apiUrl}/articles/${compose_id}/nomenclature/${composant_id}`);
+  }
+
+  // === Article Unite ===
+  getArticleUnites(article_id: string | number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/articles/${article_id}/unites`);
+  }
+
+  saveArticleUnites(article_id: string | number, unites: any[]): Observable<any> {
+    return this.http.put(`${this.apiUrl}/articles/${article_id}/unites`, { unites }, { headers: this.httpHeaders });
+  }
+
+  // === Article Stock ===
+  getDepots(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/articles/depots`);
+  }
+
+  getArticleStocks(article_id: string | number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/articles/${article_id}/stock-config`);
+  }
+
+  saveArticleStocks(article_id: string | number, stocks: any[]): Observable<any> {
+    return this.http.put(`${this.apiUrl}/articles/${article_id}/stock-config`, { stocks }, { headers: this.httpHeaders });
+  }
+
+  // === Article Fournisseur (article_code) ===
+  getArticleCodes(article_id: string | number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/articles/${article_id}/codes`);
+  }
+
+  saveArticleCodes(article_id: string | number, codes: any[]): Observable<any> {
+    return this.http.put(`${this.apiUrl}/articles/${article_id}/codes`, { codes }, { headers: this.httpHeaders });
   }
 
   getProduitsPaged(options: {
@@ -168,6 +256,35 @@ export class BaseService {
     if (options?.search != null) params = params.set('search', options.search);
 
     return this.http.get(url, { params });
+  }
+
+  getWarehousesPaged(options: {
+    page?: number;
+    pageSize?: number;
+    orderBy?: string;
+    orderDirection?: 'ASC' | 'DESC' | string;
+    search?: string;
+  }): Observable<any> {
+    const url = `${this.apiUrl}/warehouses`;
+    let params = new HttpParams();
+
+    if (options?.page != null) params = params.set('page', String(options.page));
+    if (options?.pageSize != null) params = params.set('pageSize', String(options.pageSize));
+    if (options?.orderBy) params = params.set('orderBy', options.orderBy);
+    if (options?.orderDirection) params = params.set('orderDirection', String(options.orderDirection));
+    if (options?.search != null) params = params.set('search', options.search);
+
+    return this.http.get(url, { params });
+  }
+
+  getWarehouseById(id: string | number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/warehouses/${id}`);
+  }
+
+  updateWarehouse(id: string | number, data: any): Observable<any> {
+    return this.http.put(`${this.apiUrl}/warehouses/${id}`, data, {
+      headers: this.httpHeaders,
+    });
   }
 
   getFamille(): Observable<any> {
@@ -249,6 +366,11 @@ export class BaseService {
   /////////////////////// EMPLOYE METHODS
   getEmploye(): Observable<any> {
     const url = `${this.apiUrl}/employes`;
+    return this.http.get(url);
+  }
+
+  getEmployeAutocomplete(): Observable<any> {
+    const url = `${this.apiUrl}/employes/autocomplete`;
     return this.http.get(url);
   }
 

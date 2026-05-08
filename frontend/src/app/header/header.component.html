@@ -1,95 +1,94 @@
 <nav class="navbar">
   <div class="navbar-brand">
-    <h1>Système de Gestion</h1>
+    <h1>{{ 'header.system_title' | t }}</h1>
   </div>
-  
+
   <div class="navbar-user" *ngIf="currentUser">
-    <!-- Sélecteur de base de données -->
     <div class="database-selector-container">
       <app-database-selector></app-database-selector>
     </div>
-    
-    <!-- Notifications -->
+
     <div class="notification-container">
-      <div 
-        class="notification-icon-wrapper" 
+      <div
+        class="notification-icon-wrapper"
         [class.disabled]="!hasNotificationPermission()"
         [class.has-urgent]="hasNotificationPermission() && urgentCount > 0"
         (click)="hasNotificationPermission() && toggleNotificationDropdown()"
-        [title]="hasNotificationPermission() ? 'Notifications' : 'Permission requise'">
-        <i 
+        [title]="hasNotificationPermission() ? ('header.notifications' | t) : ('header.permission_required' | t)">
+        <i
           class="fas fa-bell notification-icon"
           [style.color]="urgentCount > 0 ? '#dc3545' : 'white'"></i>
-        <span 
-          class="notification-badge blink-red" 
+        <span
+          class="notification-badge blink-red"
           *ngIf="hasNotificationPermission() && urgentCount > 0"
           style="background-color: #dc3545;">
           {{ urgentCount > 99 ? '99+' : urgentCount }}
         </span>
       </div>
-      
-      <!-- Panneau latéral notifications -->
+
       <div class="notification-panel" *ngIf="showNotificationDropdown" (click)="$event.stopPropagation()">
         <div class="notification-panel-header">
           <h5 class="mb-0">
-            <i class="fas fa-bell me-2"></i>Notifications
+            <i class="fas fa-bell me-2"></i>{{ 'header.notifications' | t }}
           </h5>
           <div class="header-actions">
-            <button 
-              class="btn-remember" 
+            <button
+              class="btn-remember"
               [class.active]="rememberEnabled"
-              (click)="toggleRemember()" 
-              [title]="rememberEnabled ? 'Désactiver les rappels' : 'Activer les rappels toutes les 10 minutes'">
+              (click)="toggleRemember()"
+              [title]="rememberEnabled ? ('header.disable_reminders' | t) : ('header.enable_reminders' | t)">
               <i class="fas" [class.fa-bell]="!rememberEnabled" [class.fa-bell-slash]="rememberEnabled"></i>
             </button>
-            <button class="btn-close-panel" (click)="closeNotificationDropdown()" title="Fermer">
+            <button class="btn-close-panel" (click)="closeNotificationDropdown()" [title]="'header.close' | t">
               <i class="fas fa-times"></i>
             </button>
           </div>
         </div>
-        
+
         <div class="notification-panel-body">
           <div *ngIf="loadingNotifications" class="text-center py-5">
             <div class="spinner-border text-primary" role="status">
               <span class="visually-hidden">Chargement...</span>
             </div>
           </div>
-          
+
           <div *ngIf="!loadingNotifications && recentNotifications.length === 0" class="empty-notifications">
             <div class="empty-icon">
               <i class="fas fa-bell-slash"></i>
             </div>
-            <p class="empty-text">Aucune notification urgente</p>
-            <p class="empty-subtext">Toutes vos notifications sont à jour</p>
+            <p class="empty-text">{{ 'header.no_urgent_notifications' | t }}</p>
+            <p class="empty-subtext">{{ 'header.notifications_up_to_date' | t }}</p>
           </div>
-          
+
           <div *ngIf="!loadingNotifications && recentNotifications.length > 0" class="notification-list-panel">
-            <div 
+            <div
               *ngFor="let notification of recentNotifications"
               class="notification-item-panel"
               [class.notification-calculated]="notification.isCalculated"
+              [class.notification-contract-card]="isContractNotification(notification)"
               [class.notification-error]="notification.type === 3"
               [style.cursor]="notification.redirectRoute ? 'pointer' : 'default'"
               (click)="onNotificationClick(notification, $event)">
               <div class="notification-item-left">
-                <i *ngIf="notification.type === 3" class="fas fa-exclamation-triangle notification-calendar-icon text-danger"></i>
-                <i *ngIf="notification.type !== 3" class="far fa-calendar-alt notification-calendar-icon"></i>
+                <i *ngIf="isContractNotification(notification)" class="fas fa-file-contract notification-calendar-icon text-danger"></i>
+                <i *ngIf="!isContractNotification(notification) && notification.type === 3" class="fas fa-exclamation-triangle notification-calendar-icon text-danger"></i>
+                <i *ngIf="!isContractNotification(notification) && notification.type !== 3" class="far fa-calendar-alt notification-calendar-icon"></i>
               </div>
               <div class="notification-item-content">
                 <div class="notification-text-panel" [class.text-danger]="notification.type === 3" [class.fw-bold]="notification.isCalculated">
-                  {{ notification.description || 'Sans description' }}
+                  {{ getNotificationDescription(notification) }}
                 </div>
                 <div class="notification-days">
-                  <span *ngIf="notification.jours_restants !== undefined" 
-                        class="days-badge" 
+                  <span *ngIf="notification.jours_restants !== undefined"
+                        class="days-badge"
                         [ngClass]="{
                           'days-danger': notification.jours_restants < 5,
                           'days-warning': notification.jours_restants >= 5 && notification.jours_restants < 10
                         }">
                     {{ notification.jours_restants }} jour(s) restant(s)
                   </span>
-                  <span *ngIf="notification.jours_restants === undefined" 
-                        class="days-badge" 
+                  <span *ngIf="notification.jours_restants === undefined"
+                        class="days-badge"
                         [ngClass]="{
                           'days-danger': getTimeRemaining(notification.date_alarme).isOverdue || getTimeRemaining(notification.date_alarme).days <= 1,
                           'days-warning': !getTimeRemaining(notification.date_alarme).isOverdue && getTimeRemaining(notification.date_alarme).days <= 3,
@@ -98,40 +97,65 @@
                     {{ getTimeRemaining(notification.date_alarme).text }}
                   </span>
                 </div>
-                <small *ngIf="notification.redirectRoute" class="text-primary d-block mt-1">
-                  <i class="fas fa-arrow-right"></i> Cliquez pour voir les détails
-                </small>
+                <button
+                  *ngIf="notification.redirectRoute"
+                  type="button"
+                  class="notification-detail-button mt-1"
+                  (click)="openNotificationDetails(notification, $event)">
+                  <i class="fas fa-arrow-right"></i> {{ 'header.click_for_details' | t }}
+                </button>
               </div>
-              <button 
-                *ngIf="!notification.isCalculated && isNumericId(notification.id)"
-                class="btn-close-notification"
-                (click)="markNotificationAsRead(notification.id, $event); $event.stopPropagation()"
-                title="Marquer comme lue">
-                <i class="fas fa-times"></i>
-              </button>
-              <span *ngIf="notification.isCalculated" class="btn-close-notification text-muted" title="Notification calculée automatiquement">
-                <i class="fas fa-calculator"></i>
-              </span>
+              <div class="notification-item-actions">
+                <button
+                  *ngIf="canShowRenewNotificationAction(notification)"
+                  type="button"
+                  class="btn-renew-notification"
+                  (click)="renewContractFromNotification(notification, $event)"
+                  [disabled]="!canResolveNotificationContrat(notification)">
+                  Renouveler
+                </button>
+                <button
+                  *ngIf="!notification.isCalculated && isNumericId(notification.id)"
+                  type="button"
+                  class="btn-close-notification"
+                  (click)="markNotificationAsRead(notification.id, $event)"
+                  [title]="'header.mark_as_read' | t">
+                  <i class="fas fa-times"></i>
+                </button>
+                <span *ngIf="notification.isCalculated && !isContractNotification(notification)" class="btn-close-notification text-muted" [title]="'header.calculated_notification' | t">
+                  <i class="fas fa-calculator"></i>
+                </span>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-    
+
+    <div class="language-switcher" [attr.aria-label]="'header.language' | t">
+      <button type="button" class="lang-btn" [class.active]="languageService.currentLanguage === 'fr'" (click)="setLanguage('fr')">FR</button>
+      <button type="button" class="lang-btn" [class.active]="languageService.currentLanguage === 'en'" (click)="setLanguage('en')">EN</button>
+    </div>
+
     <div class="user-info">
-      <span class="user-name">{{ currentUser.nom || currentUser.login || 'Utilisateur' }}</span>
+      <span class="user-name">{{ currentUser.nom || currentUser.login || ('header.user' | t) }}</span>
       <span class="user-role">{{ getRoleDisplayName(currentUser.type) }}</span>
     </div>
-    <button class="logout-btn" (click)="logout()" title="Se déconnecter">
+
+    <button class="profile-btn" (click)="navigateToProfile()" [title]="'header.profile' | t">
+      <i class="fas fa-user-circle"></i>
+      {{ 'header.profile' | t }}
+    </button>
+
+    <button class="logout-btn" (click)="logout()" [title]="'header.logout' | t">
       <i class="fas fa-sign-out-alt"></i>
-      Déconnexion
+      {{ 'header.logout' | t }}
     </button>
   </div>
 </nav>
 
-<!-- Backdrop pour fermer le dropdown -->
-<div 
-  *ngIf="showNotificationDropdown" 
+<div
+  *ngIf="showNotificationDropdown"
   class="notification-backdrop"
   (click)="closeNotificationDropdown()">
 </div>

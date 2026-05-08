@@ -10,7 +10,7 @@ const getDevis= async (req, res) => {
     const options = {
       page: req.query.page || 1,
       pageSize: req.query.pageSize || 25,
-      orderBy: req.query.orderBy || 'date',
+      orderBy: req.query.orderBy || 'document_id',
       orderDirection: req.query.orderDirection || 'DESC',
       search: req.query.search || '',
       dateFrom: req.query.dateFrom || '',

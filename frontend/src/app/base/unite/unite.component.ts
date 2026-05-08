@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import Swal from 'sweetalert2';
+import { environment } from 'src/environments/environment';
 
 @Component({
   selector: 'app-unite',
@@ -8,6 +9,7 @@ import Swal from 'sweetalert2';
   styleUrls: ['./unite.component.css']
 })
 export class UniteComponent implements OnInit {
+  private readonly apiUrl = environment.apiUrl;
   unites: any[] = [];
   loading: boolean = true;
 
@@ -49,7 +51,7 @@ export class UniteComponent implements OnInit {
       orderDirection: this.sortDirection
     };
 
-    this.http.get('http://localhost:3500/api/unites', { params }).subscribe({
+    this.http.get(`${this.apiUrl}/unites`, { params }).subscribe({
       next: (response: any) => {
         this.unites = response?.data || [];
         this.totalRecords = response?.pagination?.total || 0;
@@ -152,8 +154,8 @@ export class UniteComponent implements OnInit {
     }
 
     const url = this.isEditMode
-      ? `http://localhost:3500/api/unites/${this.currentUnite.id}`
-      : 'http://localhost:3500/api/unites';
+      ? `${this.apiUrl}/unites/${this.currentUnite.id}`
+      : `${this.apiUrl}/unites`;
     const method = this.isEditMode ? 'put' : 'post';
 
     this.http[method](url, this.currentUnite).subscribe({
@@ -178,7 +180,7 @@ export class UniteComponent implements OnInit {
       confirmButtonText: 'Oui'
     }).then((result) => {
       if (result.isConfirmed) {
-        this.http.delete(`http://localhost:3500/api/unites/${unite.id}`).subscribe({
+        this.http.delete(`${this.apiUrl}/unites/${unite.id}`).subscribe({
           next: () => {
             Swal.fire('Succès', 'Unité supprimée', 'success');
             this.getUnites();

@@ -40,7 +40,22 @@
 
           <!-- Solde du jour -->
           <div class="row mb-4">
-            <div class="col-md-4">
+            <div class="col-md-3">
+              <div class="card"
+                [ngClass]="caisseType === 'black' ? 'border-danger caisse-black-card' : 'bg-secondary text-white'">
+                <div class="card-body">
+                  <h6 class="card-title"
+                    [ngClass]="{'text-dark': caisseType === 'black', 'text-white': caisseType !== 'black'}">
+                    <i class="fas fa-coins me-2"></i>Fond
+                  </h6>
+                  <h3 class="mb-0"
+                    [ngClass]="{'text-dark': caisseType === 'black', 'text-white': caisseType !== 'black'}">
+                    {{ solde.total_fond | number:'1.2-2' }} DH
+                  </h3>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-3">
               <div class="card"
                 [ngClass]="caisseType === 'black' ? 'border-danger caisse-black-card' : 'bg-success text-white'">
                 <div class="card-body">
@@ -55,7 +70,7 @@
                 </div>
               </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
               <div class="card"
                 [ngClass]="caisseType === 'black' ? 'border-danger caisse-black-card' : 'bg-danger text-white'">
                 <div class="card-body">
@@ -70,7 +85,7 @@
                 </div>
               </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
               <div class="card"
                 [ngClass]="caisseType === 'black' ? 'border-danger caisse-black-card' : (getSoldeClass() + ' text-white')">
                 <div class="card-body">
@@ -293,28 +308,15 @@
 
           <!-- Navigation vers les modules -->
           <div class="row">
-            <div class="col-md-6 mb-3">
+            <div class="col-md-12 mb-3">
               <div class="card h-100 border-primary">
                 <div class="card-body text-center">
-                  <i class="fas fa-arrow-down fa-3x text-success mb-3"></i>
-                  <h5 class="card-title">Recettes</h5>
-                  <p class="card-text">Gérer les entrées de caisse (règlements clients, etc.)</p>
-                  <button class="btn btn-success" (click)="navigateToRecettes()">
+                  <i class="fas fa-cash-register fa-3x text-primary mb-3"></i>
+                  <h5 class="card-title">Interface Recette/Dépense</h5>
+                  <p class="card-text">Gérer chaque journée de caisse avec le fond, les recettes, les dépenses et le solde net dans une seule interface.</p>
+                  <button class="btn btn-primary" (click)="navigateToRecetteDepense()">
                     <i class="fas fa-arrow-right me-2"></i>
-                    Accéder aux Recettes
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div class="col-md-6 mb-3">
-              <div class="card h-100 border-danger">
-                <div class="card-body text-center">
-                  <i class="fas fa-arrow-up fa-3x text-danger mb-3"></i>
-                  <h5 class="card-title">Dépenses</h5>
-                  <p class="card-text">Gérer les sorties de caisse (paiements fournisseurs, frais, etc.)</p>
-                  <button class="btn btn-danger" (click)="navigateToDepenses()">
-                    <i class="fas fa-arrow-right me-2"></i>
-                    Accéder aux Dépenses
+                    Accéder à l'interface unifiée
                   </button>
                 </div>
               </div>

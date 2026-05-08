@@ -103,10 +103,12 @@ class PdfConfigService {
    */
   getDefaultConfig() {
     return {
+      id_db: null,
       logo: {
         path: 'public/logo-bascule.jpg',
         width: 100,
-        height: null
+        height: null,
+        top: 14
       },
       entete: {
         path: null
@@ -179,6 +181,26 @@ class PdfConfigService {
       width: logoConfig.width || 100, // Défaut: 100
       height: logoConfig.height || null // null = proportionnel
     };
+  }
+
+  /**
+   * Récupère la position verticale du logo depuis la configuration
+   * @returns {number} Position Y du logo
+   */
+  getLogoTop() {
+    const dbConfig = this.getConfigForCurrentDatabase();
+    const config = this.loadConfig();
+
+    // Utiliser la configuration de la base actuelle, sinon la config par défaut, sinon l'ancienne structure
+    const logoConfig = dbConfig?.logo || config.default?.logo || config.logo;
+    const rawTop = logoConfig?.top ?? logoConfig?.y;
+    const parsedTop = Number(rawTop);
+
+    if (Number.isFinite(parsedTop)) {
+      return parsedTop;
+    }
+
+    return 14;
   }
 
   /**
@@ -286,11 +308,15 @@ class PdfConfigService {
    * @returns {Object} Configuration au format documentSociete
    */
   getDocumentSociete() {
+    const config = this.loadConfig();
+    const dbConfig = this.getConfigForCurrentDatabase();
     const logoPath = this.getLogoPath();
     const entete = this.getEntete();
     const piedPage = this.getPiedPage();
     const logoSize = this.getLogoSize();
+    const logoTop = this.getLogoTop();
     const currentDbName = databaseSwitchService.getCurrentDatabase();
+    const resolvedIdDb = dbConfig?.id_db || config?.default?.id_db || currentDbName || null;
 
     console.log(`[PdfConfigService] Récupération configuration pour base: ${currentDbName}`);
 
@@ -307,8 +333,14 @@ class PdfConfigService {
     }
 
     return {
+      id_db: resolvedIdDb,
+      current_db: currentDbName,
+      logoPath: logoPath,
       logo: logoBase64,
       logoSize: logoSize, // Ajouter la taille du logo
+      logoWidth: logoSize.width,
+      logoHeight: logoSize.height,
+      logoTop: logoTop,
       entete: entete,
       pied_page: piedPage
     };
@@ -316,4 +348,3 @@ class PdfConfigService {
 }
 
 module.exports = new PdfConfigService();
-

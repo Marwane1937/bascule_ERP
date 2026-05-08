@@ -1,14 +1,16 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { BaseService } from 'src/app/service/base.service';
 import Swal from 'sweetalert2';
+import { merge, of, Subject } from 'rxjs';
+import { catchError, debounceTime, map, switchMap, takeUntil } from 'rxjs/operators';
 
 @Component({
   selector: 'app-commercial',
   templateUrl: './commercial.component.html',
   styleUrls: ['./commercial.component.css']
 })
-export class CommercialComponent implements OnInit {
+export class CommercialComponent implements OnInit, OnDestroy {
   commercials: any[] = [];
   loading: boolean = true;
   commercialForm!: FormGroup;
@@ -25,12 +27,20 @@ export class CommercialComponent implements OnInit {
   searchTerm: string = '';
   sortColumn: string = 'nom';
   sortDirection: 'ASC' | 'DESC' = 'ASC';
+  checkingUnique: boolean = false;
+  private destroy$ = new Subject<void>();
 
   constructor(private baseService: BaseService, private fb: FormBuilder) {}
 
   ngOnInit(): void {
     this.initForm();
+    this.setupUniquenessValidation();
     this.loadCommercials(1);
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   initForm(): void {
@@ -42,6 +52,60 @@ export class CommercialComponent implements OnInit {
       phone: [''],
       email: ['']
     });
+  }
+
+  private setupUniquenessValidation(): void {
+    const codeControl = this.commercialForm.get('code');
+    const nomControl = this.commercialForm.get('nom');
+    if (!codeControl || !nomControl) return;
+
+    merge(codeControl.valueChanges, nomControl.valueChanges)
+      .pipe(
+        debounceTime(300),
+        switchMap(() => {
+          const code = (codeControl.value || '').toString().trim();
+          const nom = (nomControl.value || '').toString().trim();
+          const excludeId = this.isEditMode && this.currentCommercialId ? this.currentCommercialId : null;
+
+          if (!code && !nom) {
+            this.checkingUnique = false;
+            this.applyDuplicateState(false, false);
+            return of(null);
+          }
+
+          this.checkingUnique = true;
+          return this.baseService.checkCommercialUniqueness({ code, nom, excludeId }).pipe(
+            map((response: any) => response?.data || response || {}),
+            catchError(() => of({ codeExists: false, nomExists: false }))
+          );
+        }),
+        takeUntil(this.destroy$)
+      )
+      .subscribe((result: any) => {
+        if (result !== null) {
+          this.applyDuplicateState(!!result?.codeExists, !!result?.nomExists);
+        }
+        this.checkingUnique = false;
+      });
+  }
+
+  private applyDuplicateState(codeExists: boolean, nomExists: boolean): void {
+    this.setDuplicateError('code', codeExists);
+    this.setDuplicateError('nom', nomExists);
+  }
+
+  private setDuplicateError(controlName: 'code' | 'nom', exists: boolean): void {
+    const control = this.commercialForm.get(controlName);
+    if (!control) return;
+
+    const errors = { ...(control.errors || {}) };
+    if (exists) {
+      errors['duplicate'] = true;
+    } else {
+      delete errors['duplicate'];
+    }
+
+    control.setErrors(Object.keys(errors).length ? errors : null);
   }
 
   loadCommercials(page: number = 1, search: string = '', resetFilters: boolean = false): void {
@@ -84,6 +148,10 @@ export class CommercialComponent implements OnInit {
   }
 
   onSubmit(): void {
+    if (this.checkingUnique) {
+      return;
+    }
+
     if (this.commercialForm.valid) {
       if (this.isEditMode && this.currentCommercialId) {
         this.baseService.updateCommercial(this.currentCommercialId, this.commercialForm.value).subscribe({
@@ -94,7 +162,10 @@ export class CommercialComponent implements OnInit {
             this.loadCommercials(this.currentPage);
           },
           error: (err) => {
-            this.showError("❌ Une erreur s'est produite lors de la modification du commercial.");
+            if (err?.status === 409) {
+              this.applyDuplicateState(!!err?.error?.codeExists, !!err?.error?.nomExists);
+            }
+            this.showError('❌ Erreur modification commercial.');
           }
         });
       } else {
@@ -106,12 +177,15 @@ export class CommercialComponent implements OnInit {
             this.loadCommercials(1);
           },
           error: (err) => {
-            this.showError("❌ Une erreur s'est produite lors de l'ajout du commercial.");
+            if (err?.status === 409) {
+              this.applyDuplicateState(!!err?.error?.codeExists, !!err?.error?.nomExists);
+            }
+            this.showError('❌ Erreur ajout commercial.');
           }
         });
       }
     } else {
-      this.showError("❗ Le formulaire est invalide.");
+      this.showError('❗ Le formulaire est invalide.');
     }
   }
 
@@ -126,6 +200,7 @@ export class CommercialComponent implements OnInit {
       phone: commercial.phone || '',
       email: commercial.email || ''
     });
+    this.applyDuplicateState(false, false);
     // Ouvrir le modal (Bootstrap 5)
     const modalElement = document.getElementById('addClientModal');
     if (modalElement) {
@@ -205,6 +280,7 @@ export class CommercialComponent implements OnInit {
       phone: '',
       email: ''
     });
+    this.applyDuplicateState(false, false);
   }
 
   closeAddCommercialModal(): void {
@@ -301,3 +377,5 @@ export class CommercialComponent implements OnInit {
     });
   }
 }
+
+

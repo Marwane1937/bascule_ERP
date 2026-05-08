@@ -431,8 +431,10 @@ class AuthService {
 
       return {
         id: user.id,
-        name: user.nom,
-        username: user.login,
+        nom: user.nom,
+        login: user.login,
+        type: user.type,
+        etat: user.etat || 1,
         role: user.type === 1 ? 'admin' : 'user',
         allowed_databases: availableDatabases
       };

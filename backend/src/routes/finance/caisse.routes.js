@@ -20,8 +20,8 @@ router.get('/:id', caisseController.getCaisseDocumentById);
 router.post('/', caisseController.createCaisseDocument);
 router.post('/from-reglement', caisseController.createCaisseFromReglement);
 router.put('/:id', caisseController.updateCaisseDocument);
+router.put('/:id/details/:sens', caisseController.updateCaisseDocumentBySens);
 router.put('/:id/cloturer', caisseController.cloturerCaisseDocument);
 router.delete('/:id', caisseController.deleteCaisseDocument);
 
 module.exports = router;
-

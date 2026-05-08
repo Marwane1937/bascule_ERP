@@ -15,7 +15,10 @@
 
     <!-- Bouton Ajouter Produit -->
     <div class="row mb-4">
-      <div class="col-12 text-end">
+      <div class="col-12 d-flex justify-content-end gap-2 flex-wrap">
+        <button type="button" class="btn btn-outline-primary px-4 py-2 shadow-sm" (click)="openNomenclaturePopup()">
+          <i class="fas fa-sitemap me-2"></i> Produits nomenclature
+        </button>
         <button type="button" class="btn btn-gradient px-4 py-2 shadow-sm" data-bs-toggle="modal"
           data-bs-target="#addClientModal" (click)="resetForm()">
           <i class="fas fa-plus me-2"></i> Ajouter un Produit
@@ -91,9 +94,13 @@
             type="text"
             class="form-control"
             placeholder="Rechercher par code, nom..."
+            list="produit-search-suggestions"
             [(ngModel)]="searchTerm"
             (keyup.enter)="onSearch()"
           />
+          <datalist id="produit-search-suggestions">
+            <option *ngFor="let suggestion of produitSearchSuggestions" [value]="suggestion"></option>
+          </datalist>
           <button class="btn btn-primary" type="button" (click)="onSearch()">
             <i class="fas fa-search"></i> Rechercher
           </button>
@@ -140,39 +147,72 @@
                     <th (click)="onSort('article_nom')" class="sortable" style="cursor: pointer;">
                       Désignation <i class="fas ms-1" [ngClass]="getSortIcon('article_nom')"></i>
                     </th>
-                    <th>Famille</th>
+                    <th (click)="onSort('unite_nom')" class="sortable" style="cursor: pointer;">
+                      Unité <i class="fas ms-1" [ngClass]="getSortIcon('unite_nom')"></i>
+                    </th>
+                    <th (click)="onSort('etat')" class="sortable" style="cursor: pointer;">
+                      Statut <i class="fas ms-1" [ngClass]="getSortIcon('etat')"></i>
+                    </th>
                     <th (click)="onSort('prix_quantite')" class="sortable" style="cursor: pointer;">
                       Prix <i class="fas ms-1" [ngClass]="getSortIcon('prix_quantite')"></i>
                     </th>
-                    <th>Unite</th>
-                    <th style="width: 180px;" class="text-center">Actions</th>
+                    <th (click)="onSort('stock_max')" class="sortable" style="cursor: pointer;">
+                      Stock <i class="fas ms-1" [ngClass]="getSortIcon('stock_max')"></i>
+                    </th>
+                    <th style="width: 220px;" class="text-center">Actions</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   <tr *ngIf="!loading && produits.length === 0">
-                    <td colspan="6" class="text-center py-4">
+                    <td colspan="7" class="text-center py-4">
                       <p class="text-muted mb-0">Aucun produit trouvé</p>
                     </td>
                   </tr>
 
                   <tr *ngFor="let produit of produits">
-                    <td>{{ produit.article_cod }}</td>
-                    <td>{{ produit.article_nom }}</td>
-                    <td>{{ produit.famille_nom || '-' }}</td>
-                    <td>{{ produit.prix_quantite || '-' }}</td>
-                    <td>{{ produit.unite_nom || '-' }}</td>
+                    <td class="fw-semibold">{{ produit.article_cod }}</td>
+                    <td>
+                      <div class="cell-primary">{{ produit.article_nom || '-' }}</div>
+                      <div class="cell-sub">
+                        <i class="fas fa-warehouse text-muted me-1"></i>{{ produit.depot_nom || 'Dépôt non défini' }}
+                      </div>
+                      <div class="cell-sub" *ngIf="produit.code_barre">
+                        <i class="fas fa-barcode text-muted me-1"></i>{{ produit.code_barre }}
+                      </div>
+                    </td>
+                    <td>
+                      <div class="cell-primary">{{ produit.unite_nom || '-' }}</div>
+                      <div class="cell-sub">Qté: {{ produit.quantite_unite || produit.prix_quantite || '-' }}</div>
+                    </td>
+                    <td>
+                      <div class="cell-sub"><span class="text-muted">Etat:</span> {{ produit.etat ?? '-' }}</div>
+                      <div class="cell-sub"><span class="text-muted">Périssable:</span> {{ produit.perissabilite ?? '-' }}</div>
+                    </td>
+                    <td>
+                      <div class="cell-sub"><span class="text-muted">Achat:</span> {{ produit.prix_achat ?? '-' }}</div>
+                      <div class="cell-sub"><span class="text-muted">Vente:</span> {{ produit.prix_vente ?? '-' }}</div>
+                    </td>
+                    <td>
+                      <div class="cell-sub"><span class="text-muted">Min:</span> {{ produit.stock_min ?? '-' }}</div>
+                      <div class="cell-sub"><span class="text-muted">Max:</span> {{ produit.stock_max ?? '-' }}</div>
+                    </td>
 
                     <td class="text-center">
-                      <button class="btn btn-sm btn-outline-info me-1" (click)="goToEditProduit(produit.article_id)" title="Modifier">
-                        <i class="fas fa-edit"></i>
-                      </button>
-                      <button class="btn btn-sm btn-outline-danger me-1" (click)="onDelete(produit.article_id)" title="Supprimer">
-                        <i class="fas fa-trash-alt"></i>
-                      </button>
-                      <button class="btn btn-sm btn-outline-warning" (click)="onArchive(produit)" title="Archiver">
-                        <i class="fas fa-archive"></i>
-                      </button>
+                      <div class="product-action-group">
+                        <button class="btn btn-sm btn-outline-primary" (click)="openStatsModal(produit)" title="Statistiques">
+                          <i class="fas fa-chart-pie"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-info" (click)="goToEditProduit(produit.article_id)" title="Modifier">
+                          <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" (click)="onDelete(produit.article_id)" title="Supprimer">
+                          <i class="fas fa-trash-alt"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-warning" (click)="onArchive(produit)" title="Archiver">
+                          <i class="fas fa-archive"></i>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
@@ -213,6 +253,224 @@
       </div>
     </div>
 
+  </div>
+
+  <ng-template #produitNomenclatureNodeTpl let-node>
+    <div class="nomenclature-popup-node">
+      <div class="nomenclature-popup-line">
+        <div class="nomenclature-popup-main">
+          <span class="nomenclature-popup-code">{{ node.code || '-' }}</span>
+          <span>{{ node.designation || '-' }}</span>
+        </div>
+        <div class="nomenclature-popup-values">
+          <span>Qté {{ node.quantiteTotale | number:'1.0-2' }}</span>
+          <span>PU {{ node.prix | number:'1.2-2' }} dh</span>
+          <strong>{{ node.total | number:'1.2-2' }} dh</strong>
+        </div>
+      </div>
+      <div class="nomenclature-popup-meta" *ngIf="node.unite || node.famille || node.poidsStandard !== null || node.poidsReel !== null">
+        <span *ngIf="node.unite">Unité {{ node.unite }}</span>
+        <span *ngIf="node.famille">Famille {{ node.famille }}</span>
+        <span *ngIf="node.poidsStandard !== null">Poids std {{ node.poidsStandard | number:'1.2-2' }}</span>
+        <span *ngIf="node.poidsReel !== null">Poids réel {{ node.poidsReel | number:'1.2-2' }}</span>
+      </div>
+      <div class="nomenclature-popup-children" *ngIf="node.children && node.children.length > 0">
+        <ng-container *ngFor="let child of node.children">
+          <ng-container *ngTemplateOutlet="produitNomenclatureNodeTpl; context: { $implicit: child }"></ng-container>
+        </ng-container>
+      </div>
+    </div>
+  </ng-template>
+
+  <div *ngIf="showNomenclatureModal" class="stats-modal-backdrop" (click)="closeNomenclaturePopup()">
+    <div class="stats-modal-card nomenclature-modal-card" (click)="$event.stopPropagation()">
+      <div class="stats-modal-header">
+        <div>
+          <div class="stats-modal-kicker">Nomenclature</div>
+          <h4 class="stats-modal-title mb-1">Produits nomenclature</h4>
+          <div class="stats-modal-subtitle">{{ nomenclatureRows.length }} produit(s)</div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <button type="button" class="btn btn-sm btn-outline-primary" (click)="reloadNomenclatureProducts()" [disabled]="nomenclatureLoading">
+            <span *ngIf="nomenclatureLoading" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+            <i *ngIf="!nomenclatureLoading" class="fas fa-rotate-right me-1"></i>
+            Actualiser
+          </button>
+          <button type="button" class="stats-close-btn" (click)="closeNomenclaturePopup()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      </div>
+
+      <div *ngIf="nomenclatureLoading" class="stats-loading-state">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Chargement...</span>
+        </div>
+        <p class="mb-0">Chargement des produits nomenclature...</p>
+      </div>
+
+      <div *ngIf="!nomenclatureLoading" class="stats-modal-body">
+        <div *ngIf="nomenclatureError" class="alert alert-danger mb-0">{{ nomenclatureError }}</div>
+
+        <div *ngIf="!nomenclatureError && nomenclatureRows.length === 0" class="stats-empty-state">
+          Aucun produit nomenclature trouvé.
+        </div>
+
+        <div *ngIf="!nomenclatureError && nomenclatureRows.length > 0" class="table-responsive nomenclature-table-wrap">
+          <table class="table table-sm table-bordered align-middle nomenclature-table">
+            <thead class="table-light">
+              <tr>
+                <th style="width: 26%;">Produit composé</th>
+                <th class="text-end" style="width: 12%;">Prix</th>
+                <th style="width: 12%;">Composants</th>
+                <th>Structure</th>
+                <th class="text-end" style="width: 14%;">Total composants</th>
+                <th class="text-center" style="width: 72px;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of nomenclatureRows">
+                <td>
+                  <div class="cell-primary">{{ row.code || '-' }}</div>
+                  <div class="cell-sub">{{ row.designation || '-' }}</div>
+                </td>
+                <td class="text-end">{{ row.prix | number:'1.2-2' }} dh</td>
+                <td>{{ row.composantsCount }}</td>
+                <td>
+                  <ng-container *ngIf="row.composants.length > 0; else noNomenclatureComponents">
+                    <div class="nomenclature-popup-tree">
+                      <ng-container *ngFor="let component of row.composants">
+                        <ng-container *ngTemplateOutlet="produitNomenclatureNodeTpl; context: { $implicit: component }"></ng-container>
+                      </ng-container>
+                    </div>
+                  </ng-container>
+                </td>
+                <td class="text-end fw-semibold">{{ row.total | number:'1.2-2' }} dh</td>
+                <td class="text-center">
+                  <button type="button" class="btn btn-sm btn-outline-primary" (click)="editNomenclatureProduct(row)" title="Modifier le produit">
+                    <i class="fas fa-edit"></i>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <ng-template #noNomenclatureComponents>
+          <span class="text-muted">Aucun composant</span>
+        </ng-template>
+      </div>
+    </div>
+  </div>
+
+  <div *ngIf="showStatsModal" class="stats-modal-backdrop" (click)="closeStatsModal()">
+    <div class="stats-modal-card" (click)="$event.stopPropagation()">
+      <div class="stats-modal-header">
+        <div>
+          <div class="stats-modal-kicker">Analyse article</div>
+          <h4 class="stats-modal-title mb-1">{{ statsData?.article?.article_nom || selectedStatsArticle?.article_nom }}</h4>
+          <div class="stats-modal-subtitle">{{ statsData?.article?.article_cod || selectedStatsArticle?.article_cod }}</div>
+        </div>
+        <button type="button" class="stats-close-btn" (click)="closeStatsModal()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <div *ngIf="statsLoading" class="stats-loading-state">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Chargement...</span>
+        </div>
+        <p class="mb-0">Chargement des statistiques article...</p>
+      </div>
+
+      <div *ngIf="!statsLoading && statsData" class="stats-modal-body">
+        <div class="stats-kpi-grid">
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">Chiffre d'affaires HT</span>
+            <strong>{{ statsData.sales.revenue_ht | number:'1.2-2' }} dh</strong>
+          </div>
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">Quantité vendue</span>
+            <strong>{{ statsData.sales.quantity_sold | number:'1.0-2' }}</strong>
+          </div>
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">Coût de revient</span>
+            <strong>{{ statsData.margin.selected_cost | number:'1.2-2' }} dh</strong>
+          </div>
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">Stock disponible</span>
+            <strong>{{ statsData.article.stock_disponible | number:'1.0-2' }}</strong>
+          </div>
+        </div>
+
+        <div class="stats-summary-grid">
+          <section class="stats-panel">
+            <div class="stats-panel-head">
+              <h5>Fournisseurs</h5>
+              <span>{{ statsData.suppliers?.length || 0 }} source(s)</span>
+            </div>
+            <div class="supplier-list" *ngIf="statsData.suppliers?.length; else noSupplierState">
+              <div class="supplier-pill" *ngFor="let supplier of statsData.suppliers">
+                <div class="supplier-pill-title">{{ supplier.fournisseur }}</div>
+                <div class="supplier-pill-meta">
+                  <span *ngIf="supplier.average_cost">Coût moy.: {{ supplier.average_cost | number:'1.2-2' }} dh</span>
+                  <span *ngIf="supplier.code">Code: {{ supplier.code }}</span>
+                </div>
+              </div>
+            </div>
+            <ng-template #noSupplierState>
+              <div class="stats-empty-state">Aucun fournisseur configuré pour cet article.</div>
+            </ng-template>
+          </section>
+
+          <section class="stats-panel">
+            <div class="stats-panel-head">
+              <h5>Recommandations AI</h5>
+              <span>{{ statsData.recommendations?.length || 0 }} insight(s)</span>
+            </div>
+            <div class="recommendation-list">
+              <article class="recommendation-card" *ngFor="let recommendation of statsData.recommendations" [attr.data-tone]="recommendation.tone || 'info'">
+                <div class="recommendation-icon">
+                  <i [class]="getRecommendationIcon(recommendation.tone)"></i>
+                </div>
+                <div>
+                  <div class="recommendation-title">{{ recommendation.title }}</div>
+                  <div class="recommendation-text">{{ recommendation.message }}</div>
+                </div>
+              </article>
+            </div>
+          </section>
+        </div>
+
+        <div class="stats-chart-grid">
+          <section class="stats-panel">
+            <div class="stats-panel-head">
+              <h5>Evolution du CA mensuel</h5>
+              <span>{{ statsData.sales.deliveries_count || 0 }} livraison(s)</span>
+            </div>
+            <div class="chart-shell" *ngIf="statsData.charts?.monthly_sales?.length; else noMonthlyChart">
+              <canvas id="articleStatsRevenueChart"></canvas>
+            </div>
+            <ng-template #noMonthlyChart>
+              <div class="stats-empty-state">Aucune vente disponible pour générer le graphique.</div>
+            </ng-template>
+          </section>
+
+          <section class="stats-panel">
+            <div class="stats-panel-head">
+              <h5>Répartition fournisseurs</h5>
+              <span>{{ statsData.purchases.suppliers_count || 0 }} fournisseur(s)</span>
+            </div>
+            <div class="chart-shell chart-shell--donut" *ngIf="statsData.charts?.supplier_breakdown?.length; else noSupplierChart">
+              <canvas id="articleStatsSupplierChart"></canvas>
+            </div>
+            <ng-template #noSupplierChart>
+              <div class="stats-empty-state">Pas assez de données fournisseur pour afficher le donut.</div>
+            </ng-template>
+          </section>
+        </div>
+      </div>
+    </div>
   </div>
 
   <router-outlet></router-outlet>

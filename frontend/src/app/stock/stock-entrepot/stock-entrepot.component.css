@@ -1,0 +1,52 @@
+﻿.entrepot-page .card {
+  border-radius: 12px;
+}
+
+.table-wrap {
+  position: relative;
+  min-height: 320px;
+}
+
+.loader-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.entrepot-page table thead th {
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.entrepot-page table tbody td {
+  vertical-align: middle;
+}
+
+.clickable-row {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.table-hover tbody tr:hover,
+.clickable-row:hover {
+  background-color: #f6f8fc;
+}
+
+:host ::ng-deep .entrepot-popup-shell {
+  padding: 0 !important;
+  max-width: min(97vw, 1480px) !important;
+}
+
+:host ::ng-deep .swal2-popup.entrepot-popup-shell {
+  width: min(97vw, 1480px) !important;
+}
+
+:host ::ng-deep .swal2-actions .btn {
+  margin: 0 0.25rem;
+}

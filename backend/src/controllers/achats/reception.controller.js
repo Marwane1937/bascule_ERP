@@ -60,7 +60,12 @@ const createReceptionFromCommande = async (req, res) => {
       });
     }
 
-    const result = await receptionService.createReceptionFromCommande(commandeId, details || null, sequelize);
+    const result = await receptionService.createReceptionFromCommande(
+      commandeId,
+      details || null,
+      req.user?.id || null,
+      sequelize
+    );
     res.status(201).json({
       success: true,
       message: 'Réception créée avec succès',
@@ -71,6 +76,33 @@ const createReceptionFromCommande = async (req, res) => {
     res.status(500).json({
       success: false,
       message: err.message || 'Erreur lors de la création de la réception'
+    });
+  }
+};
+
+const createReceptionFromStockEntree = async (req, res) => {
+  try {
+    const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
+    const { entreeStockId } = req.body;
+
+    if (!entreeStockId) {
+      return res.status(400).json({
+        success: false,
+        message: 'entreeStockId est requis'
+      });
+    }
+
+    const result = await receptionService.createReceptionFromStockEntree(entreeStockId, sequelize);
+    res.status(201).json({
+      success: true,
+      message: 'Réception créée avec succès depuis entrée de stock',
+      data: result
+    });
+  } catch (err) {
+    console.error('[createReceptionFromStockEntree] ❌ Erreur:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || 'Erreur lors de la création de la réception depuis entrée de stock'
     });
   }
 };
@@ -171,7 +203,7 @@ const saveDetail = async (req, res) => {
       return res.status(400).json({ message: 'Tableau de lignes requis' });
     }
 
-    const results = await receptionService.saveDetail({ lignes }, sequelize);
+    const results = await receptionService.saveDetail({ lignes, userId: req.user?.id || null }, sequelize);
 
     res.json({
       message: `${results.filter(r => r?.success).length} ligne(s) traitées avec succès`,
@@ -201,11 +233,10 @@ module.exports = {
   getReceptions,
   getCommandesNonReceptionnees,
   createReceptionFromCommande,
+  createReceptionFromStockEntree,
   getReceptionById,
   updateReception,
   deleteReception,
   saveDetail,
   deleteLignesParIds
 };
-
-

@@ -1,7 +1,7 @@
-<div class="container py-4">
-  <div class="page-inner">
+<div class="container-fluid py-4 livraison-page" [class.livraison-page--detail]="detailMode">
+  <div class="page-inner" [class.page-inner--detail]="detailMode">
 
-    <!-- En-tête -->
+    <!-- En-tete -->
     <div class="page-header mb-4">
       <h3 class="fw-bold text-dark">Ventes</h3>
       <ul class="breadcrumbs d-flex align-items-center">
@@ -12,10 +12,11 @@
         <li class="nav-item fw-semibold text-muted">Liste Livraisons</li>
       </ul>
     </div>
-    <div *ngIf="successMessage" class="modern-toast" [ngClass]="{ 'toast-success': !isError, 'toast-error': isError }">
+    <div *ngIf="successMessage" class="modern-toast" [ngClass]="{ 'toast-success': !isError && !isWarning, 'toast-error': isError, 'toast-warning': isWarning }">
       <span class="toast-icon">
-        <i *ngIf="!isError" class="bi bi-check-circle-fill"></i>
-        <i *ngIf="isError" class="bi bi-exclamation-triangle-fill"></i>
+        <i *ngIf="!isError && !isWarning" class="bi bi-check-circle-fill"></i>
+        <i *ngIf="isWarning" class="bi bi-exclamation-triangle-fill"></i>
+        <i *ngIf="isError" class="bi bi-x-circle-fill"></i>
       </span>
       <span class="toast-message">{{ successMessage }}</span>
     </div>
@@ -27,9 +28,21 @@
           <i class="fas fa-chart-line me-2"></i> {{ showDashboard ? 'Masquer Dashboard' : 'Afficher Dashboard' }}
         </button>
         <div class="d-flex gap-2">
+          <button type="button" class="btn" [ngClass]="detailMode ? 'btn-primary' : 'btn-outline-primary'" (click)="toggleDetailMode()">
+            <i class="fas" [ngClass]="detailMode ? 'fa-compress-alt' : 'fa-expand-alt'"></i>
+            {{ detailMode ? 'Vue compacte' : 'Plus de detail' }}
+          </button>
           <button type="button" class="btn btn-gradient px-4 py-2 shadow-sm" data-bs-toggle="modal"
             data-bs-target="#addLivraisonModal">
             <i class="fas fa-plus me-2"></i> Ajouter un Bon de Livraison
+          </button>
+          <button
+            *ngIf="hasMultipleLivraisonsSelected()"
+            type="button"
+            class="btn btn-success px-4 py-2 shadow-sm"
+            (click)="transfererLivraisonsSelectionneesVersFacturation()">
+            <i class="fas fa-file-invoice me-2"></i>
+            Transmettre à la facturation ({{ getSelectedLivraisonsCount() }})
           </button>
           <button type="button" class="btn btn1-gradient px-4 py-2 shadow-sm" data-bs-toggle="modal"
             data-bs-target="#modalCommandeLivraisonXL">
@@ -172,7 +185,7 @@
 
             <!-- Graphiques -->
             <div class="row mb-4">
-              <!-- Graphique d'évolution des livraisons -->
+              <!-- Graphique d'evolution des livraisons -->
               <div class="col-md-6 mb-3">
                 <div class="card shadow-sm h-100">
                   <div class="card-header bg-light">
@@ -184,7 +197,7 @@
                 </div>
               </div>
               
-              <!-- Graphique de répartition par client -->
+              <!-- Graphique de repartition par client -->
               <div class="col-md-6 mb-3">
                 <div class="card shadow-sm h-100">
                   <div class="card-header bg-light">
@@ -243,7 +256,7 @@
                         <td class="text-end">{{ client.totalLivraisons }}</td>
                       </tr>
                       <tr *ngIf="dashboardStats.chiffreAffaireParClient.length === 0">
-                        <td colspan="3" class="text-center text-muted">Aucune donnée disponible</td>
+                        <td colspan="3" class="text-center text-muted">Aucune donnee disponible</td>
                       </tr>
                     </tbody>
                   </table>
@@ -276,16 +289,16 @@
                     formControlName="description" />
                 </div>
                 <div class="col-md-6 mb-3">
-                  <label for="Description" class="form-label">Date Création</label>
+                  <label for="Description" class="form-label">Date Creation</label>
                   <input type="datetime-local" class="form-control" id="date" formControlName="date" />
                 </div>
                 <div class="col-md-6 mb-3">
-                  <label for="Validité" class="form-label">Date Fin</label>
-                  <input type="date" class="form-control" id="Validité" formControlName="date_fin" />
+                  <label for="Validite" class="form-label">Date Fin</label>
+                  <input type="date" class="form-control" id="Validite" formControlName="date_fin" />
                 </div>
                 <div class="col-md-6 mb-3 position-relative">
                   <label for="ClientSearch" class="form-label">Client <span class="text-danger">*</span></label>
-                  <input id="ClientSearch" type="text" class="form-control" placeholder="Commencez à écrire..."
+                  <input id="ClientSearch" type="text" class="form-control" placeholder="Commencez a ecrire..."
                     [(ngModel)]="searchTerm" (input)="onSearchChange($any($event.target).value)"
                     [ngModelOptions]="{standalone: true}" autocomplete="off"
                     name="clientSearch" [class.is-invalid]="LivraisonForm.get('part_id')?.invalid && LivraisonForm.get('part_id')?.touched" />
@@ -303,7 +316,7 @@
                 </div>
                 <div class="col-md-6 mb-3 position-relative">
                   <label for="CommercialSearch" class="form-label">Commercial</label>
-                  <input id="CommercialSearch" type="text" class="form-control" placeholder="Commencez à écrire..."
+                  <input id="CommercialSearch" type="text" class="form-control" placeholder="Commencez a ecrire..."
                     [(ngModel)]="searchCommercial" (input)="onCommercialSearchChange($any($event.target).value)"
                     [ngModelOptions]="{standalone: true}" autocomplete="off"
                     name="commercialSearch" />
@@ -317,9 +330,16 @@
                     </li>
                   </ul>
                 </div>
+                <div class="col-md-6 mb-3">
+                  <label for="DepotIdLivraison" class="form-label">Depot</label>
+                  <select id="DepotIdLivraison" class="form-select" formControlName="depot_id">
+                    <option [ngValue]="null">-- Choisir un depot --</option>
+                    <option *ngFor="let depot of depots" [ngValue]="depot.id">{{ depot.nom }}</option>
+                  </select>
+                </div>
               </div>
               <div class="modal-footer bg-light border-top">
-                <button type="submit" class="btn btn-info" [disabled]="!LivraisonForm.valid">✅
+                <button type="submit" class="btn btn-info" [disabled]="!LivraisonForm.valid">OK
                   Enregistrer</button>
               </div>
             </form>
@@ -354,7 +374,7 @@
         </div>
         <div class="col-md-5 text-end">
             <button class="btn btn-outline-secondary me-2" (click)="toggleAdvancedFiltersLivraisons()">
-                <i class="fas fa-filter"></i> Filtres avancés
+                <i class="fas fa-filter"></i> Filtres avances
                 <i class="fas" [class.fa-chevron-down]="!showAdvancedFiltersLivraisons" [class.fa-chevron-up]="showAdvancedFiltersLivraisons"></i>
             </button>
             <button class="btn btn-outline-success" (click)="exportToCSVLivraisons()" title="Exporter en CSV/Excel">
@@ -363,17 +383,17 @@
         </div>
     </div>
 
-    <!-- Filtres avancés -->
+    <!-- Filtres avances -->
     <div class="row mb-3" *ngIf="showAdvancedFiltersLivraisons">
         <div class="col-md-12">
             <div class="card border-primary">
                 <div class="card-header bg-primary text-white">
-                    <i class="fas fa-filter"></i> Filtres avancés
+                    <i class="fas fa-filter"></i> Filtres avances
                 </div>
                 <div class="card-body">
                     <div class="row g-3">
                         <div class="col-md-4">
-                            <label class="form-label"><i class="fas fa-calendar-alt"></i> Date de début</label>
+                            <label class="form-label"><i class="fas fa-calendar-alt"></i> Date de debut</label>
                             <input type="date" class="form-control" [(ngModel)]="filterDateFromLivraisons" (change)="onFilterChangeLivraisons()">
                         </div>
                         <div class="col-md-4">
@@ -388,7 +408,7 @@
                     <div class="row mt-3">
                         <div class="col-md-12 text-end">
                             <button class="btn btn-outline-danger" (click)="resetFiltersLivraisons()">
-                                <i class="fas fa-times"></i> Réinitialiser les filtres
+                                <i class="fas fa-times"></i> Reinitialiser les filtres
                             </button>
                         </div>
                     </div>
@@ -402,8 +422,8 @@
       <div class="col-md-12">
         <div class="card border-0 shadow-sm rounded-3">
           <div class="card-body">
-            <div class="table-responsive" style="position: relative; min-height: 400px;">
-              <!-- Loader amélioré avec overlay -->
+            <div class="table-responsive livraison-table-wrap" style="position: relative; min-height: 400px;">
+              <!-- Loader ameliore avec overlay -->
               <div *ngIf="loadingLivraisons" 
                 class="text-center my-4" 
                 style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
@@ -416,30 +436,26 @@
 
               <table 
                 id="livraisonTable" 
-                class="table table-bordered table-striped table-hover" 
+                class="table table-bordered table-striped table-hover livraison-list-table" 
                 width="100%"
                 [style.opacity]="loadingLivraisons ? '0.5' : '1'">
                 <thead class="table-light">
-                  <!-- Bouton pour afficher/masquer les filtres -->
-                  <tr *ngIf="!showFilterRow" style="background-color: #f8f9fa; border-bottom: 2px solid #dee2e6;">
-                    <td [attr.colspan]="getVisibleColumnsCount() + 2" class="text-center py-2" style="padding: 8px;">
-                      <button 
-                        class="btn btn-sm btn-outline-primary" 
-                        (click)="showFilterRow = true"
-                        style="border-radius: 4px;">
-                        <i class="fas fa-filter me-1"></i>
-                        Afficher les filtres
-                        <i class="fas fa-chevron-down ms-1" style="font-size: 0.7rem;"></i>
-                      </button>
-                    </td>
-                  </tr>
-                  <!-- Ligne des en-têtes avec tri et menu contextuel -->
+                  <!-- Ligne des en-tetes avec tri et menu contextuel -->
                   <tr>
+                    <th class="text-center select-col-header" style="width: 18px; min-width: 18px;">
+                      <input
+                        class="select-col-checkbox"
+                        type="checkbox"
+                        (change)="toggleAllLivraisons($event)"
+                        [checked]="isAllLivraisonsSelected()"
+                        title="Sélectionner tout">
+                    </th>
                     <th *ngIf="columnVisibility.numero" 
+                        #numeroHeader
                         (click)="onSortLivraisons('numero')" 
                         (contextmenu)="showColumnContextMenu($event, 'numero')"
                         class="sortable column-header" 
-                        style="cursor: pointer; width: 120px;"
+                        style="cursor: pointer; width: 90px;"
                         [style.width]="columnWidths.numero"
                         [class.pinned-column]="isColumnPinned('numero')">
                       <div class="d-flex align-items-center justify-content-between">
@@ -454,12 +470,40 @@
                           </button>
                         </div>
                       </div>
+                      <span class="column-resize-handle"
+                            title="Redimensionner"
+                            (mousedown)="startColumnResize($event, 'numero', numeroHeader)"></span>
+                    </th>
+                    <th *ngIf="columnVisibility.commande_numero"
+                        #commandeHeader
+                        (click)="onSortLivraisons('commande_numero')"
+                        (contextmenu)="showColumnContextMenu($event, 'commande_numero')"
+                        class="sortable column-header"
+                        style="cursor: pointer; width: 126px;"
+                        [style.width]="columnWidths.commande_numero"
+                        [class.pinned-column]="isColumnPinned('commande_numero')">
+                      <div class="d-flex align-items-center justify-content-between">
+                        <span>Commande</span>
+                        <div class="d-flex align-items-center gap-1">
+                          <i *ngIf="isColumnPinned('commande_numero')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
+                          <i class="fas ms-1" [ngClass]="getSortIconLivraisons('commande_numero')"></i>
+                          <button class="btn btn-sm p-0 ms-1 column-menu-btn"
+                                  (click)="openColumnMenu($event, 'commande_numero')"
+                                  style="opacity: 0; transition: opacity 0.2s; border: none; background: none; padding: 2px 4px;">
+                            <i class="fas fa-ellipsis-v" style="font-size: 0.7rem;"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <span class="column-resize-handle"
+                            title="Redimensionner"
+                            (mousedown)="startColumnResize($event, 'commande_numero', commandeHeader)"></span>
                     </th>
                     <th *ngIf="columnVisibility.date" 
+                        #dateHeader
                         (click)="onSortLivraisons('date')" 
                         (contextmenu)="showColumnContextMenu($event, 'date')"
                         class="sortable column-header" 
-                        style="cursor: pointer; width: 110px;"
+                        style="cursor: pointer; width: 150px;"
                         [style.width]="columnWidths.date"
                         [class.pinned-column]="isColumnPinned('date')">
                       <div class="d-flex align-items-center justify-content-between">
@@ -474,12 +518,16 @@
                           </button>
                         </div>
                       </div>
+                      <span class="column-resize-handle"
+                            title="Redimensionner"
+                            (mousedown)="startColumnResize($event, 'date', dateHeader)"></span>
                     </th>
                     <th *ngIf="columnVisibility.client" 
+                        #clientHeader
                         (click)="onSortLivraisons('client')" 
                         (contextmenu)="showColumnContextMenu($event, 'client')"
                         class="sortable column-header" 
-                        style="cursor: pointer; min-width: 150px;"
+                        style="cursor: pointer; min-width: 150px; width: 170px;"
                         [style.width]="columnWidths.client"
                         [class.pinned-column]="isColumnPinned('client')">
                       <div class="d-flex align-items-center justify-content-between">
@@ -494,16 +542,20 @@
                           </button>
                         </div>
                       </div>
+                      <span class="column-resize-handle"
+                            title="Redimensionner"
+                            (mousedown)="startColumnResize($event, 'client', clientHeader)"></span>
                     </th>
                     <th *ngIf="columnVisibility.total_ht" 
+                        #totalHtHeader
                         (click)="onSortLivraisons('total_ht')" 
                         (contextmenu)="showColumnContextMenu($event, 'total_ht')"
-                        class="sortable column-header text-end" 
+                        class="sortable column-header text-end livraison-amount-col" 
                         style="cursor: pointer; width: 110px;"
                         [style.width]="columnWidths.total_ht"
                         [class.pinned-column]="isColumnPinned('total_ht')">
                       <div class="d-flex align-items-center justify-content-between">
-                        <span>Total HT</span>
+                        <span class="livraison-amount-label">Total HT</span>
                         <div class="d-flex align-items-center gap-1">
                           <i *ngIf="isColumnPinned('total_ht')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
                           <i class="fas ms-1" [ngClass]="getSortIconLivraisons('total_ht')"></i>
@@ -514,16 +566,20 @@
                           </button>
                         </div>
                       </div>
+                      <span class="column-resize-handle"
+                            title="Redimensionner"
+                            (mousedown)="startColumnResize($event, 'total_ht', totalHtHeader)"></span>
                     </th>
                     <th *ngIf="columnVisibility.total_tva" 
+                        #totalTvaHeader
                         (click)="onSortLivraisons('total_tva')" 
                         (contextmenu)="showColumnContextMenu($event, 'total_tva')"
-                        class="sortable column-header text-end" 
+                        class="sortable column-header text-end livraison-amount-col" 
                         style="cursor: pointer; width: 110px;"
                         [style.width]="columnWidths.total_tva"
                         [class.pinned-column]="isColumnPinned('total_tva')">
                       <div class="d-flex align-items-center justify-content-between">
-                        <span>Total TVA</span>
+                        <span class="livraison-amount-label">Total TVA</span>
                         <div class="d-flex align-items-center gap-1">
                           <i *ngIf="isColumnPinned('total_tva')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
                           <i class="fas ms-1" [ngClass]="getSortIconLivraisons('total_tva')"></i>
@@ -534,16 +590,20 @@
                           </button>
                         </div>
                       </div>
+                      <span class="column-resize-handle"
+                            title="Redimensionner"
+                            (mousedown)="startColumnResize($event, 'total_tva', totalTvaHeader)"></span>
                     </th>
                     <th *ngIf="columnVisibility.total_ttc" 
+                        #totalTtcHeader
                         (click)="onSortLivraisons('total_ttc')" 
                         (contextmenu)="showColumnContextMenu($event, 'total_ttc')"
-                        class="sortable column-header text-end" 
+                        class="sortable column-header text-end livraison-amount-col" 
                         style="cursor: pointer; width: 110px;"
                         [style.width]="columnWidths.total_ttc"
                         [class.pinned-column]="isColumnPinned('total_ttc')">
                       <div class="d-flex align-items-center justify-content-between">
-                        <span>Total TTC</span>
+                        <span class="livraison-amount-label">Total TTC</span>
                         <div class="d-flex align-items-center gap-1">
                           <i *ngIf="isColumnPinned('total_ttc')" class="fas fa-thumbtack text-primary" style="font-size: 0.7rem;"></i>
                           <i class="fas ms-1" [ngClass]="getSortIconLivraisons('total_ttc')"></i>
@@ -554,40 +614,63 @@
                           </button>
                         </div>
                       </div>
+                      <span class="column-resize-handle"
+                            title="Redimensionner"
+                            (mousedown)="startColumnResize($event, 'total_ttc', totalTtcHeader)"></span>
                     </th>
-                    <th class="text-center" style="width: 130px;">Statut Facturation</th>
-                    <th style="width: 200px;" class="text-center">Actions</th>
+                    <th class="text-center" style="width: 94px;">Statut</th>
+                    <th style="width: 128px;" class="text-center">Actions</th>
+                  </tr>
+                  <!-- Bouton pour afficher/masquer les filtres -->
+                  <tr *ngIf="!showFilterRow" style="background-color: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                    <th [attr.colspan]="getVisibleColumnsCount() + 3" class="text-center py-2" style="padding: 8px;">
+                      <button 
+                        class="btn btn-sm btn-outline-primary" 
+                        (click)="showFilterRow = true"
+                        style="border-radius: 4px;">
+                        <i class="fas fa-filter me-1"></i>
+                        Afficher les filtres
+                        <i class="fas fa-chevron-down ms-1" style="font-size: 0.7rem;"></i>
+                      </button>
+                    </th>
                   </tr>
                   <!-- Ligne des filtres (style Excel) -->
                   <tr *ngIf="showFilterRow" class="filter-row" style="background-color: #f8f9fa; border-top: 2px solid #dee2e6;">
-                    <th *ngIf="columnVisibility.numero" style="padding: 4px; position: relative;">
+                    <th class="text-center select-col-header"></th>
+                    <th *ngIf="columnVisibility.numero" style="padding: 4px; position: relative;" [style.width]="columnWidths.numero">
                       <input type="text" class="form-control form-control-sm filter-input" placeholder="Rechercher..."
                              [(ngModel)]="columnFilters.numero" (input)="onColumnFilterChange('numero', $any($event.target).value)"
                              style="font-size: 0.85rem; padding-right: 24px;">
                       <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 0.75rem; pointer-events: none;"></i>
                     </th>
-                    <th *ngIf="columnVisibility.date" style="padding: 4px; position: relative;">
+                    <th *ngIf="columnVisibility.commande_numero" style="padding: 4px; position: relative;" [style.width]="columnWidths.commande_numero">
+                      <input type="text" class="form-control form-control-sm filter-input" placeholder="Rechercher..."
+                             [(ngModel)]="columnFilters.commande_numero" (input)="onColumnFilterChange('commande_numero', $any($event.target).value)"
+                             style="font-size: 0.85rem; padding-right: 24px;">
+                      <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 0.75rem; pointer-events: none;"></i>
+                    </th>
+                    <th *ngIf="columnVisibility.date" style="padding: 4px; position: relative;" [style.width]="columnWidths.date">
                       <input type="date" class="form-control form-control-sm filter-input"
                              [(ngModel)]="columnFilters.date" (change)="onColumnFilterChange('date', $any($event.target).value)"
                              style="font-size: 0.85rem;">
                     </th>
-                    <th *ngIf="columnVisibility.client" style="padding: 4px; position: relative;">
+                    <th *ngIf="columnVisibility.client" style="padding: 4px; position: relative;" [style.width]="columnWidths.client">
                       <input type="text" class="form-control form-control-sm filter-input" placeholder="Rechercher..."
                              [(ngModel)]="columnFilters.client" (input)="onColumnFilterChange('client', $any($event.target).value)"
                              style="font-size: 0.85rem; padding-right: 24px;">
                       <i class="fas fa-filter text-muted" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 0.75rem; pointer-events: none;"></i>
                     </th>
-                    <th *ngIf="columnVisibility.total_ht" style="padding: 4px;">
+                    <th *ngIf="columnVisibility.total_ht" style="padding: 4px;" [style.width]="columnWidths.total_ht">
                       <input type="number" class="form-control form-control-sm filter-input" placeholder="Min..."
                              [(ngModel)]="columnFilters.total_ht" (input)="onColumnFilterChange('total_ht', $any($event.target).value)"
                              style="font-size: 0.85rem;">
                     </th>
-                    <th *ngIf="columnVisibility.total_tva" style="padding: 4px;">
+                    <th *ngIf="columnVisibility.total_tva" style="padding: 4px;" [style.width]="columnWidths.total_tva">
                       <input type="number" class="form-control form-control-sm filter-input" placeholder="Min..."
                              [(ngModel)]="columnFilters.total_tva" (input)="onColumnFilterChange('total_tva', $any($event.target).value)"
                              style="font-size: 0.85rem;">
                     </th>
-                    <th *ngIf="columnVisibility.total_ttc" style="padding: 4px;">
+                    <th *ngIf="columnVisibility.total_ttc" style="padding: 4px;" [style.width]="columnWidths.total_ttc">
                       <input type="number" class="form-control form-control-sm filter-input" placeholder="Min..."
                              [(ngModel)]="columnFilters.total_ttc" (input)="onColumnFilterChange('total_ttc', $any($event.target).value)"
                              style="font-size: 0.85rem;">
@@ -607,20 +690,42 @@
                 </thead>
                 <tbody>
                   <tr *ngIf="!loadingLivraisons && livraisons.length === 0">
-                    <td [attr.colspan]="getVisibleColumnsCount() + 2" class="text-center py-4">
-                      <p class="text-muted mb-0">Aucune livraison trouvée</p>
+                    <td [attr.colspan]="getVisibleColumnsCount() + 3" class="text-center py-4">
+                      <p class="text-muted mb-0">Aucune livraison trouvee</p>
                     </td>
                   </tr>
-                  <tr *ngFor="let l of livraisons; let i = index">
-                    <td *ngIf="columnVisibility.numero">{{ l.numero }}</td>
-                    <td *ngIf="columnVisibility.date">{{ l.date ? (l.date | date:'dd/MM/yyyy') : '-' }}</td>
-                    <td *ngIf="columnVisibility.client">{{ l.client || '-' }}</td>
-                    <td *ngIf="columnVisibility.total_ht" class="text-end">{{ l.total_ht | number:'1.2-2' }} dh</td>
-                    <td *ngIf="columnVisibility.total_tva" class="text-end">{{ l.total_tva | number:'1.2-2' }} dh</td>
-                    <td *ngIf="columnVisibility.total_ttc" class="text-end fw-bold">{{ l.total_ttc | number:'1.2-2' }} dh</td>
+                  <tr *ngFor="let l of livraisons; let i = index"
+                      [attr.data-livraison-numero]="l.numero"
+                      [class.livraison-row--focused]="isFocusedLivraison(l)">
+                    <td class="text-center select-col-cell">
+                      <input
+                        class="select-col-checkbox"
+                        type="checkbox"
+                        [checked]="!!l.checked"
+                        [disabled]="isFacturee(l)"
+                        (change)="toggleLivraisonSelection(l, $event)">
+                    </td>
+                    <td *ngIf="columnVisibility.numero" class="text-nowrap">{{ l.numero }}</td>
+                    <td *ngIf="columnVisibility.commande_numero" class="livraison-commande-cell">
+                      <span
+                        class="livraison-commande-trigger"
+                        [class.is-hoverable]="!!l.commande_id"
+                        [title]="l.commande_numero || '-'"
+                        (mouseenter)="onCommandeCellEnter(l, $event)"
+                        (mousemove)="onCommandeCellMove($event)"
+                        (mouseleave)="scheduleHideCommandeProgressPopover()">
+                        <span class="livraison-commande-trigger__text">{{ l.commande_numero || '-' }}</span>
+                        <i *ngIf="l.commande_id" class="fas fa-layer-group livraison-commande-trigger__icon"></i>
+                      </span>
+                    </td>
+                    <td *ngIf="columnVisibility.date" class="livraison-date-cell text-nowrap">{{ formatTableDate(l.date) }}</td>
+                    <td *ngIf="columnVisibility.client" class="livraison-client-cell" [title]="l.client || '-'">{{ l.client || '-' }}</td>
+                    <td *ngIf="columnVisibility.total_ht" class="text-end livraison-amount-cell">{{ l.total_ht | number:'1.2-2' }}</td>
+                    <td *ngIf="columnVisibility.total_tva" class="text-end livraison-amount-cell">{{ l.total_tva | number:'1.2-2' }}</td>
+                    <td *ngIf="columnVisibility.total_ttc" class="text-end fw-bold livraison-amount-cell">{{ l.total_ttc | number:'1.2-2' }}</td>
                     <td class="text-center">
                       <span *ngIf="isFacturee(l)" class="badge bg-success">FACTURÉ</span>
-                      <span *ngIf="!isFacturee(l)" class="badge bg-danger">NON FACTURÉ</span>
+                      <span *ngIf="!isFacturee(l)" class="badge bg-danger">FACTURABLE</span>
                     </td>
                     <td class="text-center">
                       <div class="btn-group">
@@ -633,7 +738,7 @@
                               <i class="fas fa-edit me-2"></i> Modifier
                             </button>
                           </li>
-                          <li>
+                          <li *ngIf="!isFacturee(l)">
                             <button class="dropdown-item text-danger" type="button" (click)="removeLivraison(l, i)">
                               <i class="fas fa-trash-alt me-2"></i> Supprimer
                             </button>
@@ -646,7 +751,7 @@
                           </li>
                           <li *ngIf="pdfPermissionsService.hasAnyPdfAccess('livraison')">
                             <button *ngIf="pdfPermissionsService.canAccessPdf('livraison', 'non_valorise')" class="dropdown-item" type="button" (click)="OnPrintLivraison(l.document_id, 'non_valorise')">
-                              <i class="fas fa-file-pdf me-2"></i> BL non valorisé
+                              <i class="fas fa-file-pdf me-2"></i> BL non valorise
                             </button>
                           </li>
                           <li *ngIf="pdfPermissionsService.hasAnyPdfAccess('livraison')"><hr class="dropdown-divider"></li>
@@ -657,7 +762,7 @@
                           </li>
                           <li *ngIf="!isFacturee(l)">
                             <button class="dropdown-item text-success" type="button" (click)="transfererLivraisonVersFacturation(l.document_id)">
-                              <i class="fas fa-file-invoice me-2"></i> Transférer vers Facturation
+                              <i class="fas fa-file-invoice me-2"></i> Transferer vers Facturation
                             </button>
                           </li>
                         </ul>
@@ -707,6 +812,101 @@
     </div> 
 
   </div>
+  <div
+    *ngIf="commandePopoverVisible"
+    class="commande-progress-popover"
+    [style.top.px]="commandePopoverPosition.top"
+    [style.left.px]="commandePopoverPosition.left"
+    (mouseenter)="onCommandePopoverMouseEnter()"
+    (mouseleave)="scheduleHideCommandeProgressPopover()">
+    <div class="commande-progress-popover__header">
+      <div>
+        <span class="commande-progress-popover__eyebrow">Commande</span>
+        <strong>{{ commandePopoverData?.commande_numero || '-' }}</strong>
+      </div>
+      <span class="commande-progress-popover__badge">
+        {{ commandePopoverData?.totals?.pending_products_count || 0 }} en attente
+      </span>
+    </div>
+
+    <div *ngIf="!commandePopoverLoading && !commandePopoverData?.message" class="commande-progress-popover__summary">
+      <div class="commande-progress-popover__metric">
+        <span>Qté réelle</span>
+        <strong>{{ (commandePopoverData?.totals?.quantite_demandee || 0) | number:'1.0-2' }}</strong>
+      </div>
+      <div class="commande-progress-popover__metric">
+        <span>Préparé</span>
+        <strong>{{ (commandePopoverData?.totals?.quantite_preparee || 0) | number:'1.0-2' }}</strong>
+      </div>
+      <div class="commande-progress-popover__metric">
+        <span>Reste</span>
+        <strong>{{ getCommandeDisplayedRemainingTotal(commandePopoverData) | number:'1.0-2' }}</strong>
+      </div>
+    </div>
+
+    <div *ngIf="!commandePopoverLoading && !commandePopoverData?.message" class="commande-progress-popover__progress">
+      <div class="commande-progress-popover__progress-head">
+        <span>Progression préparation</span>
+        <strong>
+          {{ (commandePopoverData?.totals?.quantite_preparee || 0) | number:'1.0-2' }}
+          /
+          {{ (commandePopoverData?.totals?.quantite_demandee || 0) | number:'1.0-2' }}
+        </strong>
+      </div>
+      <div class="commande-progress-popover__progress-bar">
+        <span
+          class="commande-progress-popover__progress-fill"
+          [style.width.%]="getCommandePreparationPercent(commandePopoverData?.totals?.quantite_demandee || 0, commandePopoverData?.totals?.quantite_preparee || 0)"></span>
+      </div>
+    </div>
+
+    <div *ngIf="commandePopoverLoading" class="commande-progress-popover__loading">
+      <span class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></span>
+      <span>Chargement des produits restants...</span>
+    </div>
+
+    <div *ngIf="!commandePopoverLoading && commandePopoverData?.message" class="commande-progress-popover__empty">
+      {{ commandePopoverData?.message }}
+    </div>
+
+    <div *ngIf="!commandePopoverLoading && !commandePopoverData?.message && !(commandePopoverData?.lines?.length)" class="commande-progress-popover__empty">
+      Tous les produits de cette commande sont déjà préparés et livrés.
+    </div>
+
+    <div *ngIf="!commandePopoverLoading && commandePopoverData?.lines?.length" class="commande-progress-popover__list">
+      <div class="commande-progress-line" *ngFor="let line of commandePopoverData?.lines">
+        <div class="commande-progress-line__top">
+          <div class="commande-progress-line__name">{{ line.article_nom }}</div>
+          <span class="commande-progress-line__status" [ngClass]="getCommandeLineStatusClass(line)">{{ line.etat_label }}</span>
+        </div>
+
+        <div class="commande-progress-line__metrics">
+          <div class="commande-progress-line__metric">
+            <span>Qté réelle</span>
+            <strong>{{ line.quantite_demandee | number:'1.0-2' }}</strong>
+          </div>
+          <div class="commande-progress-line__metric">
+            <span>Préparé</span>
+            <strong>{{ line.quantite_preparee | number:'1.0-2' }}</strong>
+          </div>
+          <div class="commande-progress-line__metric">
+            <span>Reste</span>
+            <strong>{{ getCommandeLineRemainingValue(line) | number:'1.0-2' }}</strong>
+            <small>{{ getCommandeLineRemainingLabel(line) }}</small>
+          </div>
+        </div>
+
+        <div class="commande-progress-line__progress-label">
+          <span>Préparation</span>
+          <strong>{{ line.quantite_preparee | number:'1.0-2' }} / {{ line.quantite_demandee | number:'1.0-2' }}</strong>
+        </div>
+
+        <div class="commande-progress-line__bar">
+          <span class="commande-progress-line__bar-fill is-prepared" [style.width.%]="getCommandePreparationPercent(line.quantite_demandee, line.quantite_preparee)"></span>
+        </div>
+      </div>
+    </div>
+  </div>
   <router-outlet></router-outlet>
 </div>
 
@@ -716,7 +916,7 @@
   <div class="modal-dialog modal-fullscreen">
     <div class="modal-content modal-elegant shadow">
       <div class="modal-header modal-header-custom">
-        <h5 class="modal-title text-white" id="modalCommandeLivraisonXLLabel">🔁 Commande vers Livraison</h5>
+        <h5 class="modal-title text-white" id="modalCommandeLivraisonXLLabel"><i class="fas fa-sync-alt me-2"></i>Commande vers Livraison</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
@@ -724,10 +924,10 @@
           <div class="col-12 d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-2">
               <button type="button" class="btn btn-success" (click)="transfererCommandeVersLivraison()" [disabled]="loadingCommandes">
-                <i class="fas fa-paper-plane me-2"></i> Transférer les sélectionnés
+                <i class="fas fa-paper-plane me-2"></i> Transferer les selectionnes
               </button>
               <span *ngIf="getSelectedCount() > 0" class="badge bg-warning text-dark">
-                {{ getSelectedCount() }} sélectionné(s)
+                {{ getSelectedCount() }} selectionne(s)
               </span>
             </div>
           </div>
@@ -762,7 +962,7 @@
                          [id]="'checkbox-' + c.document_id">
                 </td>
                 <td><strong class="text-primary">{{ c.numero }}</strong></td>
-                <td>{{ c.date ? (c.date | date:'dd/MM/yyyy') : '-' }}</td>
+                <td>{{ formatTableDate(c.date) }}</td>
                 <td>{{ c.description || '-' }}</td>
                 <td>{{ c.client || '-' }}</td>
                 <td>{{ c.commercial || '-' }}</td>
@@ -770,12 +970,16 @@
                   <div class="d-flex align-items-center gap-2">
                     <button *ngIf="c.document_id" 
                             class="btn btn-sm btn-outline-info" 
+                            [attr.data-document-id]="c.document_id"
+                            data-action="edit-commande"
                             (click)="OnEditCommande(c.document_id); $event.stopPropagation()"
                             title="Modifier">
                       <i class="fas fa-edit"></i>
                     </button>
                     <button *ngIf="c.document_id" 
                             class="btn btn-sm btn-outline-purple" 
+                            [attr.data-document-id]="c.document_id"
+                            data-action="print-commande"
                             (click)="OnPrintCommande(c.document_id); $event.stopPropagation()"
                             title="Imprimer">
                       <i class="fas fa-print"></i>
@@ -796,13 +1000,13 @@
   <div class="modal-dialog modal-lg" role="document">
     <div class="modal-content p-3">
       <div class="modal-header">
-        <h5 class="modal-title">📧 Envoyer la livraison par e-mail</h5>
+        <h5 class="modal-title"><i class="fas fa-envelope me-2"></i>Envoyer la livraison par e-mail</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <form [formGroup]="emailForm">
           <div class="mb-2">
-            <label>À :</label>
+            <label>A :</label>
             <input formControlName="to" type="email" class="form-control" placeholder="exemple@gmail.com">
           </div>
           <div class="mb-2">
@@ -815,10 +1019,10 @@
           </div>
           <div class="mb-2">
             <label>Message :</label>
-            <textarea formControlName="body" class="form-control" rows="5" placeholder="Rédigez votre message ici..."></textarea>
+            <textarea formControlName="body" class="form-control" rows="5" placeholder="Redigez votre message ici..."></textarea>
           </div>
           <div class="mb-2">
-            <strong>📎 Pièce jointe : </strong> livraison.pdf
+            <strong><i class="fas fa-paperclip me-1"></i>Pièce jointe :</strong> livraison.pdf
           </div>
         </form>
       </div>

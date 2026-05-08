@@ -191,12 +191,16 @@
                                             <i class="fas ms-1" [ngClass]="sortColumn === 'fournisseur' ? (sortDirection === 'ASC' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
                                         </th>
                                         <th>Description</th>
+                                        <th (click)="onSort('progression')" class="sortable text-center" style="cursor: pointer; width: 190px;">
+                                            Progression
+                                            <i class="fas ms-1" [ngClass]="sortColumn === 'progression' ? (sortDirection === 'ASC' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'"></i>
+                                        </th>
                                         <th style="width: 150px;" class="text-center">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <tr *ngIf="!loading && bonCommandes.length === 0">
-                                        <td colspan="5" class="text-center py-4">
+                                        <td colspan="6" class="text-center py-4">
                                             <p class="text-muted mb-0">Aucun bon de commande trouvé</p>
                                         </td>
                                     </tr>
@@ -205,6 +209,20 @@
                                         <td>{{ bc.date ? (bc.date | date:'dd/MM/yyyy') : '-' }}</td>
                                         <td>{{ bc.fournisseur || '-' }}</td>
                                         <td>{{ bc.description || '-' }}</td>
+                                        <td class="text-center">
+                                            <div class="bc-progress-summary" [attr.title]="getReceptionProgressTooltip(bc)">
+                                                <div class="bc-progress-text">{{ getReceptionProgressText(bc) }}</div>
+                                                <div class="progress bc-progress">
+                                                    <div class="progress-bar"
+                                                        role="progressbar"
+                                                        [style.width.%]="getReceptionProgressPercent(bc)"
+                                                        [attr.aria-valuenow]="getReceptionProgressPercent(bc)"
+                                                        aria-valuemin="0"
+                                                        aria-valuemax="100">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
                                         <td class="text-center">
                                             <button class="btn btn-sm btn-outline-info me-1" (click)="editBonCommande(bc.document_id)" title="Modifier">
                                                 <i class="fas fa-edit"></i>
@@ -318,9 +336,7 @@
                             </tbody>
                         </table>
                     </div>
-                </div>
-
-                <!-- Formulaire pour entrer les prix -->
+                </div>                <!-- Formulaire pour entrer les prix -->
                 <div *ngIf="selectedDemandeAchat && demandeAchatDetails">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h6>Demande d'achat : <strong>{{ selectedDemandeAchat.numero }}</strong></h6>
@@ -404,4 +420,3 @@
         </div>
     </div>
 </div>
-

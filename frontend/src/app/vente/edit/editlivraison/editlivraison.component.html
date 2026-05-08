@@ -1,6 +1,6 @@
 <div class="commande-container" style="margin-top: 0 !important; padding-top: 0 !important;">
     <!-- En-tête de la livraison -->
-    <div class="mb-2">
+    <div class="mb-2 commande-page-header">
         <div class="d-flex align-items-center mb-1">
             <div class="flex-grow-1">
                 <h3 class="mb-0 fw-bold text-primary">🚚 Bon de Livraison <span class="text-dark">#{{numeroLivraison}}</span></h3>
@@ -9,7 +9,7 @@
         </div>
         <div class="border-bottom"></div>
     </div>
-      <div
+<div
   *ngIf="successMessage"
   class="modern-toast"
   [ngClass]="{ 'toast-success': !isError, 'toast-error': isError }"
@@ -20,6 +20,14 @@
   </span>
   <span class="toast-message">{{ successMessage }}</span>
 </div>
+
+    <div class="page-loading-screen" *ngIf="pageLoading">
+        <div class="page-loading-card">
+            <div class="spinner-border text-primary page-loading-spinner" role="status" aria-hidden="true"></div>
+            <div class="page-loading-title">Chargement de la livraison...</div>
+            <div class="page-loading-subtitle">Recuperation des produits, infos client et lots.</div>
+        </div>
+    </div>
 
 
     <div class="row g-3 mb-3">
@@ -38,6 +46,10 @@
                     <p><strong>Client :</strong> {{ LivraisonForm.get('clientSearch')?.value || livraison.client || 'Non renseigné' }}</p>
                     <p><strong>Commercial :</strong> {{ LivraisonForm.get('commercialSearch')?.value || livraison.commercial || 'Non renseigné' }}</p>
                     <p><strong>Date :</strong> {{ LivraisonForm.get('date')?.value | date: 'dd/MM/yyyy' }}</p>
+                    <p><strong>Dépôt :</strong> {{ getDepotLabel() }}</p>
+                    <div *ngIf="!LivraisonForm.get('depot_id')?.value" class="alert alert-warning py-1 px-2 mt-2 mb-2">
+                        Merci d'insérer le dépôt pour cette livraison.
+                    </div>
                     <p><strong>Description :</strong> {{ LivraisonForm.get('description')?.value || livraison.description || '' }}</p>
 
                 </ng-container>
@@ -52,7 +64,7 @@
                             class="list-group position-absolute w-100 shadow"
                             style="max-height: 150px; overflow-y: auto; z-index: 1050;">
                             <li class="list-group-item list-group-item-action" *ngFor="let client of filteredClients"
-                                (click)="selectClient(client)">
+                                (mousedown)="$event.preventDefault(); selectClient(client)">
                                 {{ client.nom }}
                             </li>
                         </ul>
@@ -77,6 +89,20 @@
                         <input type="date" class="form-control form-control-sm" formControlName="date">
                     </div>
 
+                    <div class="mb-2">
+                        <label class="form-label">Dépôt <span class="text-danger">*</span></label>
+                        <select class="form-select form-select-sm"
+                                [class.is-invalid]="LivraisonForm.get('depot_id')?.invalid && LivraisonForm.get('depot_id')?.touched"
+                                formControlName="depot_id"
+                                (change)="onDepotHeaderChange()">
+                            <option [ngValue]="null">-- Choisir un dépôt --</option>
+                            <option *ngFor="let depot of depots" [ngValue]="depot.id">{{ depot.nom }}</option>
+                        </select>
+                        <div class="invalid-feedback" *ngIf="LivraisonForm.get('depot_id')?.invalid && LivraisonForm.get('depot_id')?.touched">
+                            Le dépôt est obligatoire.
+                        </div>
+                    </div>
+
                     <div>
                         <label class="form-label">Description</label>
                         <textarea class="form-control form-control-sm" rows="3" formControlName="description"
@@ -93,7 +119,7 @@
             <div class="d-flex justify-content-between align-items-center mb-2">
             <h6 class="mb-0">👤 Infos du Client</h6>
             </div>
-      
+
             <!-- Affichage infos client -->
            <p><strong>Client :</strong> {{ info.nom }} </p>
             <p><strong>Adresse :</strong> {{ info.adresse }}</p>
@@ -105,18 +131,20 @@
         </div>
         </div>
 
-      
+
 
     </div>
 
 
     <!-- Produits -->
-    <div class="bg-white rounded shadow-sm p-4 mb-3">
-        <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="bg-white rounded shadow-sm p-4 mb-3 products-panel">
+        <div class="d-flex justify-content-between align-items-center mb-3 gap-2">
             <h6 class="mb-0">📦 Liste des Produits</h6>
+            <button class="btn btn-outline-success ms-auto" (click)="addNomenclatureProduit()">Ajouter nomenclature</button>
             <button class="btn btn-success" (click)="addProduit()">➕ Ajouter produit</button>
         </div>
 
+        <div class="products-content-area">
         <!-- Mode de saisie -->
         <div class="text-end mb-3">
             <label class="me-2 fw-bold">Mode de saisie :</label>
@@ -129,23 +157,78 @@
             </div>
         </div>
 
+        <ng-template #nomenclatureNodeTpl let-node let-rootLine="rootLine">
+            <li class="nomenclature-node">
+                <div class="nomenclature-node-card">
+                    <div class="nomenclature-node-main">
+                        <div class="nomenclature-node-title">
+                            <span class="nomenclature-link-dot"></span>
+                            <strong>{{ node.code || '-' }}</strong>
+                            <span>{{ node.designation || '-' }}</span>
+                        </div>
+                        <div class="nomenclature-node-values">
+                            <span>Qte {{ node.quantiteTotale | number:'1.2-2' }}</span>
+                            <span>PU {{ node.prix | number:'1.2-2' }} dh</span>
+                            <strong>Total {{ node.total | number:'1.2-2' }} dh</strong>
+                        </div>
+                    </div>
+                    <div class="nomenclature-node-meta">
+                        <span>Base {{ node.quantite | number:'1.2-2' }}</span>
+                        <span *ngIf="node.unite">Unite {{ node.unite }}</span>
+                        <span *ngIf="node.famille">Famille {{ node.famille }}</span>
+                        <span *ngIf="node.poidsStandard !== null">Poids std {{ node.poidsStandard | number:'1.2-2' }}</span>
+                        <span *ngIf="node.poidsReel !== null">Poids reel {{ node.poidsReel | number:'1.2-2' }}</span>
+                    </div>
+                </div>
+                <ul *ngIf="node.children && node.children.length > 0" class="nomenclature-tree nomenclature-tree-nested">
+                    <ng-container *ngFor="let child of node.children; trackBy: trackByNomenclatureNode">
+                        <ng-container *ngTemplateOutlet="nomenclatureNodeTpl; context: { $implicit: child, rootLine: rootLine }"></ng-container>
+                    </ng-container>
+                </ul>
+            </li>
+        </ng-template>
+
+        <div class="d-flex justify-content-end align-items-center gap-2 mb-2">
+            <small class="fw-bold text-muted mb-0">Affichage</small>
+            <div class="btn-group btn-group-sm" role="tablist" aria-label="Affichage produits et lots">
+                <button type="button" class="btn btn-outline-dark px-3 py-1" [class.active]="activeProductTab === 'produits'" (click)="setActiveProductTab('produits')">
+                    Produits
+                </button>
+                <button type="button" class="btn btn-outline-dark px-3 py-1" [class.active]="activeProductTab === 'lots'" (click)="setActiveProductTab('lots')">
+                    Lots
+                </button>
+            </div>
+        </div>
+
         <!-- Tableau -->
-        <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
-            <table class="table table-striped align-middle text-center">
+        <div class="table-responsive products-table-wrap" *ngIf="activeProductTab === 'produits'">
+            <table class="table table-striped align-middle text-center edit-products-table">
+                <colgroup>
+                    <col [style.width]="detailsColumnWidth" />
+                    <col style="width: 92px;" />
+                    <col style="width: 92px;" />
+                    <col style="width: 78px;" />
+                    <col style="width: 72px;" />
+                    <col style="width: 96px;" />
+                    <col style="width: 44px;" />
+                </colgroup>
                 <thead class="table-light">
                     <tr>
-                        <th style="min-width: 300px;">Détails</th>
-                        <th class="text-end" style="min-width: 80px;">PU</th>
-                        <th class="text-end" style="min-width: 70px;">Qté</th>
-                        <th style="min-width: 120px;">Réduc</th>
-                        <th style="min-width: 70px;">TVA (%)</th>
-                        <th class="text-end" style="min-width: 110px;">Total</th>
-                        <th style="width: 40px; padding: 2px;">Action</th>
+                        <th #detailsHeader class="details-column-header" [style.width]="detailsColumnWidth">
+                            <span>Détails</span>
+                            <span class="column-resize-handle" title="Redimensionner" (mousedown)="startDetailsResize($event, detailsHeader)"></span>
+                        </th>
+                        <th class="text-end">PU</th>
+                        <th class="text-end">Qté</th>
+                        <th>Réduc</th>
+                        <th>TVA (%)</th>
+                        <th class="text-end">Total</th>
+                        <th class="action-column-header">Action</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <tr *ngFor="let p of produits; let i = index">
-                        <td>
+                <tbody cdkDropList [cdkDropListData]="produits" [cdkDropListDisabled]="mode === 'editor'" (cdkDropListDropped)="onProduitDrop($event)">
+                    <tr *ngFor="let p of produits; let i = index" cdkDrag cdkDragLockAxis="y">
+                        <td class="details-cell" [style.width]="detailsColumnWidth">
                             <ng-container *ngIf="mode === 'editor'">
                                 <quill-editor [(ngModel)]="p.designation" [styles]="{ height: '120px' }"
                                     [modules]="modules" format="html"
@@ -154,57 +237,96 @@
                             </ng-container>
 
                             <ng-container *ngIf="mode === 'table'">
-                                <div class="position-relative">
-                                    <input 
-                                        type="text" 
-                                        class="form-control form-control-sm" 
-                                        style="min-width: 280px; width: 100%;"
-                                        [(ngModel)]="p.articleSearch"
-                                        (input)="onArticleSearchChange(i, $any($event.target).value)"
-                                        placeholder="Rechercher un article..."
-                                        autocomplete="off" />
-                                    <ul *ngIf="p.articleSearch && filteredArticles[i] && filteredArticles[i].length > 0" 
-                                        class="list-group position-absolute w-100 shadow"
-                                        style="max-height: 600px; overflow-y: auto; z-index: 1050; font-size: 14px;">
-                                        <li class="list-group-item list-group-item-action" 
-                                            *ngFor="let article of filteredArticles[i]"
-                                            (click)="selectArticle(i, article)"
-                                            style="padding: 10px 15px; cursor: pointer; font-size: 14px; line-height: 1.5;">
-                                            {{ article.article_nom }}
-                                        </li>
+                                <div class="article-picker">
+                                    <button type="button" class="btn-letter-icon" (click)="openArticleLetter(i)" [disabled]="!p.article_id" title="Voir details article">
+                                        &#9432;
+                                    </button>
+                                    <button type="button" class="btn-drag-handle" cdkDragHandle title="Changer l ordre de la ligne">
+                                        <span class="drag-handle-glyph">&#9776;</span>
+                                    </button>
+                                    <div class="position-relative article-picker-input product-search-cell">
+                                        <input
+                                            type="text"
+                                            class="form-control form-control-sm product-search-input"
+                                            [(ngModel)]="p.articleSearch"
+                                            (input)="onArticleSearchChange(i, $any($event.target).value)"
+                                            (keydown)="onArticleSearchKeydown(i, $event)"
+                                            [placeholder]="p.nomenclatureOnly ? 'Rechercher un article nomenclature...' : 'Rechercher un article...'"
+                                            autocomplete="off" />
+                                        <ul *ngIf="p.articleSearch && filteredArticles[i] && filteredArticles[i].length > 0"
+                                            class="list-group position-absolute w-100 shadow product-autocomplete-dropdown">
+                                            <li class="list-group-item list-group-item-action product-autocomplete-item"
+                                                *ngFor="let article of filteredArticles[i]; let articleIndex = index"
+                                                [class.active]="highlightedArticleIndex[i] === articleIndex"
+                                                (click)="selectArticle(i, article)">{{ article.article_nom }}</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <small *ngIf="p.nomenclatureOnly" class="text-primary d-block mt-1 fw-semibold">ligne nomenclature</small>
+                                <small *ngIf="isStockRuptureLine(p)" class="text-danger d-block mt-1 fw-semibold">rupture de stock</small>
+                                <div *ngIf="shouldDisplayNomenclatureComponents(p) && p.nomenclatureLoading" class="nomenclature-loading">
+                                    Chargement des composants...
+                                </div>
+                                <div *ngIf="shouldDisplayNomenclatureComponents(p) && p.nomenclatureError && !p.nomenclatureLoading" class="nomenclature-empty">
+                                    {{ p.nomenclatureError }}
+                                </div>
+                                <div *ngIf="shouldDisplayNomenclatureComponents(p) && hasNomenclatureComponents(p)" class="nomenclature-panel">
+                                    <div class="nomenclature-panel-header">
+                                        <div>
+                                            <span class="nomenclature-badge">Nomenclature</span>
+                                            <strong>{{ p.articleSearch || p.designation }}</strong>
+                                        </div>
+                                        <div class="nomenclature-panel-total">
+                                            Composants {{ getNomenclatureTotal(p) | number:'1.2-2' }} dh
+                                        </div>
+                                    </div>
+                                    <ul class="nomenclature-tree">
+                                        <ng-container *ngFor="let node of p.nomenclatureComponents; trackBy: trackByNomenclatureNode">
+                                            <ng-container *ngTemplateOutlet="nomenclatureNodeTpl; context: { $implicit: node, rootLine: p }"></ng-container>
+                                        </ng-container>
                                     </ul>
                                 </div>
                             </ng-container>
                         </td>
 
                         <td>
-                            <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="p.pu"
+                            <input type="number" class="form-control form-control-sm text-end line-number-input" [(ngModel)]="p.pu"
                                 (input)="recalculateTotal(i)" />
                         </td>
 
                         <td>
-                            <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="p.qte"
+                            <input type="number" class="form-control form-control-sm text-end line-number-input" [(ngModel)]="p.qte"
                                 (input)="recalculateTotal(i)" />
                         </td>
 
                         <td>
-                            <div style="display: flex; align-items: center; gap: 6px;">
-                                <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="p.reduc" (ngModelChange)="recalculateTotal(i)" style="width: 80px;" />
-                                <select class="form-select form-select-sm" [(ngModel)]="p.reducMode" (change)="recalculateTotal(i)" style="width: 90px;">
+                            <div class="reduc-input-wrap">
+                                <input type="number" class="form-control form-control-sm text-end reduc-value-input" [(ngModel)]="p.reduc" (ngModelChange)="recalculateTotal(i)" />
+                                <select class="reduc-mode-select" [(ngModel)]="p.reducMode" (change)="recalculateTotal(i)" aria-label="Mode de réduction">
                                     <option value="pourcentage">%</option>
                                     <option value="montant">dh</option>
                                 </select>
                             </div>
                         </td>
 
-
-
-
-                        <td>{{ ((isClientExonerated ? 0 : (p.taxe || 0.2)) * 100) }}%</td>
+                        <td>
+                            <div class="taxe-input-wrap">
+                                <input
+                                    type="number"
+                                    class="form-control form-control-sm text-end line-number-input line-tax-input"
+                                    min="0"
+                                    max="100"
+                                    step="0.01"
+                                    [ngModel]="getTaxePercent(p)"
+                                    (ngModelChange)="onTaxePercentChange(i, $event)"
+                                />
+                                <span class="taxe-input-suffix">%</span>
+                            </div>
+                        </td>
 
                         <td class="text-end"><strong>{{ p.total | number:'1.2-2' }}</strong> dh</td>
 
-                        <td style="padding: 2px;">
+                        <td class="action-cell">
                             <button class="btn btn-danger" style="padding: 1px 4px; font-size: 0.7rem;" (click)="removeProduit(i)" title="Supprimer">🗑️</button>
                         </td>
                     </tr>
@@ -212,8 +334,9 @@
                     <!-- Bouton enregistrer -->
                     <tr *ngIf="produits.length > 0">
                         <td colspan="100" class="text-end pt-3">
-                            <button class="btn btn-success btn-sm" (click)="enregistrerTout()">
+                            <button class="btn btn-success btn-sm" (click)="enregistrerTout()" [disabled]="saveProduitsLoading">
                                 💾 Enregistrer tout
+                                <span *ngIf="saveProduitsLoading" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                             </button>
                         </td>
                     </tr>
@@ -222,6 +345,50 @@
 
             </table>
         </div>
+
+        <div class="table-responsive lots-table-wrap" *ngIf="activeProductTab === 'lots'">
+            <table class="table table-sm table-striped align-middle text-center mb-0 lots-table">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 90px;">Ligne</th>
+                        <th style="min-width: 260px;">Article</th>
+                        <th>N° lot</th>
+                        <th class="text-end" style="width: 120px;">Quantité</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr *ngFor="let lot of lotDetails">
+                        <td>
+                            <input type="number" class="form-control form-control-sm text-center" [(ngModel)]="lot.ligne" (ngModelChange)="markLotsDirty()" />
+                        </td>
+                        <td>
+                            <input type="text" class="form-control form-control-sm" [(ngModel)]="lot.article_nom" (ngModelChange)="onLotArticleNameChange(lot)" />
+                        </td>
+                        <td>
+                            <input type="text" class="form-control form-control-sm" [(ngModel)]="lot.serie" (ngModelChange)="markLotsDirty()" />
+                        </td>
+                        <td>
+                            <input type="number" class="form-control form-control-sm text-end" [(ngModel)]="lot.quantite" (ngModelChange)="markLotsDirty()" />
+                        </td>
+                    </tr>
+                    <tr *ngIf="lotDetails.length === 0">
+                        <td colspan="4" class="text-center text-muted py-4">
+                            Aucun lot enregistré pour cette livraison.
+                        </td>
+                    </tr>
+                    <tr *ngIf="lotDetails.length > 0">
+                        <td colspan="4" class="text-end pt-3">
+                            <button class="btn btn-success btn-sm" (click)="saveLotDetails()" [disabled]="lotsSaving || !lotsDirty">
+                                <span *ngIf="lotsSaving" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                Enregistrer les lots
+                            </button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        </div>
+
     </div>
 
     <!-- Résumé financier -->
@@ -229,16 +396,16 @@
         <div class="col-md-5 offset-md-7">
             <ul class="list-group shadow-sm rounded">
                 <li class="list-group-item d-flex justify-content-between">
-                    <strong>Sous-total</strong> <span>{{ sousTotal | number:'1.2-2' }} dh</span>
+                    <strong>Sous-total</strong> <span>{{ getDisplayedSousTotal() | number:'1.2-2' }} dh</span>
                 </li>
                 <li class="list-group-item d-flex justify-content-between">
-                    <strong>Réduction</strong> <span>{{ reducTotal | number:'1.2-2' }} dh</span>
+                    <strong>Réduction</strong> <span>{{ getDisplayedReducTotal() | number:'1.2-2' }} dh</span>
                 </li>
                 <li class="list-group-item d-flex justify-content-between">
-                    <strong>TVA ({{ isClientExonerated ? '0' : '20' }}%)</strong> <span>{{ taxeTotal | number:'1.2-2' }} dh</span>
+                    <strong>TVA</strong> <span>{{ getDisplayedTaxeTotal() | number:'1.2-2' }} dh</span>
                 </li>
                 <li class="list-group-item bg-light d-flex justify-content-between">
-                    <strong>Total général</strong> <strong>{{ totalGeneral | number:'1.2-2' }} dh</strong>
+                    <strong>Total général</strong> <strong>{{ getDisplayedTotalGeneral() | number:'1.2-2' }} dh</strong>
                 </li>
             </ul>
         </div>
@@ -266,6 +433,34 @@
             </li>
           </ul>
         </div>
+    </div>
+
+    <div class="row bg-light py-3 px-4 rounded shadow-sm align-items-center">
+      <div class="col-md-3">
+        <strong>Date:</strong>
+        <input type="date" class="form-control" [(ngModel)]="selectedInfo.date" (change)="saveInfo()">
+      </div>
+
+      <div class="col-md-3">
+        <strong>Condition de règlement:</strong>
+        <select class="form-control" [(ngModel)]="selectedInfo.condition" (change)="saveInfo()">
+          <option *ngFor="let option of conditions" [value]="option">{{ option }}</option>
+        </select>
+      </div>
+
+      <div class="col-md-3">
+        <strong>Expédition:</strong>
+        <select class="form-control" [(ngModel)]="selectedInfo.expedition" (change)="saveInfo()">
+          <option *ngFor="let option of expeditions" [value]="option">{{ option }}</option>
+        </select>
+      </div>
+
+      <div class="col-md-3">
+        <strong>Transporteur:</strong>
+        <select class="form-control" [(ngModel)]="selectedInfo.transporteur" (change)="saveInfo()">
+          <option *ngFor="let option of transporteurs" [value]="option">{{ option }}</option>
+        </select>
+      </div>
     </div>
 
 </div>

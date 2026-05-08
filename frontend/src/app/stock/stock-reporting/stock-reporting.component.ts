@@ -20,7 +20,50 @@ export class StockReportingComponent implements OnInit {
   etatStockTotalPages: number = 0;
   etatStockSortColumn: string = 'article_nom';
   etatStockSortDirection: 'ASC' | 'DESC' = 'ASC';
-  etatStockDepotId: number = 1;
+  etatStockArticle: string = '';
+  etatStockArticleId: number = 0;
+  etatStockArticleCode: string = '';
+  etatStockDateFrom: string = '';
+  etatStockDateTo: string = '';
+  etatStockFilteredArticles: any[] = [];
+  etatStockShowArticleAutocomplete: boolean = false;
+  etatStockSummary: any = {
+    article_count: 0,
+    total_entree: 0,
+    total_sortie: 0,
+    solde_quantite: 0,
+    valeur_entree: 0,
+    valeur_sortie: 0
+  };
+  etatStockSnapshot: any = {
+    article_count: 0,
+    stock_quantite: 0,
+    valeur_stock: 0,
+    negative_count: 0,
+    positive_count: 0
+  };
+  etatStockFallbackApplied: boolean = false;
+  etatStockAnalysis: any = {
+    current: {
+      article_count: 0,
+      stock_quantite: 0,
+      valeur_stock: 0,
+      stock_positive_count: 0,
+      stock_negative_count: 0,
+      stock_zero_count: 0,
+      marge_potentielle: 0
+    },
+    rotation: {
+      taux_rotation: 0,
+      cout_moyen_stock: 0,
+      mouvements_count: 0
+    },
+    topEntrees: [],
+    topSorties: [],
+    stockNegatif: [],
+    sansMouvement: [],
+    sansMouvementCount: 0
+  };
 
   // Fiche de stock
   ficheStock: any = null;
@@ -123,6 +166,46 @@ export class StockReportingComponent implements OnInit {
     }, 200);
   }
 
+  onEtatStockArticleSearchChange(term: string): void {
+    this.etatStockArticleId = 0;
+    this.etatStockArticleCode = '';
+
+    if (!term || term.trim().length === 0) {
+      this.etatStockFilteredArticles = [];
+      this.etatStockShowArticleAutocomplete = false;
+      return;
+    }
+
+    const normalizedTerm = term.trim().toLowerCase();
+    this.etatStockFilteredArticles = this.allArticles.filter((article: any) => {
+      const nom = (article.article_nom || '').toLowerCase();
+      const cod = (article.article_cod || '').toLowerCase();
+      return nom.includes(normalizedTerm) || cod.includes(normalizedTerm);
+    }).slice(0, 10);
+
+    this.etatStockShowArticleAutocomplete = this.etatStockFilteredArticles.length > 0;
+  }
+
+  selectEtatStockArticle(article: any): void {
+    this.etatStockArticle = `${article.article_cod} - ${article.article_nom}`;
+    this.etatStockArticleId = Number(article.article_id || 0);
+    this.etatStockArticleCode = article.article_cod || '';
+    this.etatStockFilteredArticles = [];
+    this.etatStockShowArticleAutocomplete = false;
+  }
+
+  onEtatStockArticleInputFocus(): void {
+    if (this.etatStockArticle && this.etatStockFilteredArticles.length > 0) {
+      this.etatStockShowArticleAutocomplete = true;
+    }
+  }
+
+  onEtatStockArticleInputBlur(): void {
+    setTimeout(() => {
+      this.etatStockShowArticleAutocomplete = false;
+    }, 200);
+  }
+
   // === ONGLET ÉTAT DE STOCK ===
 
   getEtatStock(): void {
@@ -133,13 +216,26 @@ export class StockReportingComponent implements OnInit {
       pageSize: this.etatStockPageSize,
       orderBy: this.etatStockSortColumn,
       orderDirection: this.etatStockSortDirection,
-      search: this.etatStockSearchTerm,
-      depotId: this.etatStockDepotId
+      search: this.etatStockSearchTerm
     };
+
+    if (this.etatStockArticleId) {
+      options.articleId = this.etatStockArticleId;
+    } else if (this.etatStockArticleCode) {
+      options.articleCode = this.etatStockArticleCode;
+    } else if (this.etatStockArticle) {
+      options.article = this.etatStockArticle;
+    }
+    if (this.etatStockDateFrom) options.dateFrom = this.etatStockDateFrom;
+    if (this.etatStockDateTo) options.dateTo = this.etatStockDateTo;
 
     this.stockService.getEtatStock(options).subscribe({
       next: (response: any) => {
         this.etatStock = response.data || [];
+        this.etatStockSummary = response.summary || this.etatStockSummary;
+        this.etatStockSnapshot = response.snapshot || this.etatStockSnapshot;
+        this.etatStockAnalysis = response.analysis || this.etatStockAnalysis;
+        this.etatStockFallbackApplied = !!response.fallbackApplied;
         this.etatStockTotalRecords = response.pagination?.total || 0;
         this.etatStockTotalPages = response.pagination?.totalPages || 0;
         this.etatStockLoading = false;
@@ -152,6 +248,19 @@ export class StockReportingComponent implements OnInit {
   }
 
   onEtatStockSearch(): void {
+    this.etatStockCurrentPage = 1;
+    this.getEtatStock();
+  }
+
+  clearEtatStockFilters(): void {
+    this.etatStockSearchTerm = '';
+    this.etatStockArticle = '';
+    this.etatStockArticleId = 0;
+    this.etatStockArticleCode = '';
+    this.etatStockDateFrom = '';
+    this.etatStockDateTo = '';
+    this.etatStockFilteredArticles = [];
+    this.etatStockShowArticleAutocomplete = false;
     this.etatStockCurrentPage = 1;
     this.getEtatStock();
   }
@@ -453,6 +562,15 @@ export class StockReportingComponent implements OnInit {
       orderDirection: this.etatStockSortDirection,
       search: this.etatStockSearchTerm
     };
+    if (this.etatStockArticleId) {
+      options.articleId = this.etatStockArticleId;
+    } else if (this.etatStockArticleCode) {
+      options.articleCode = this.etatStockArticleCode;
+    } else if (this.etatStockArticle) {
+      options.article = this.etatStockArticle;
+    }
+    if (this.etatStockDateFrom) options.dateFrom = this.etatStockDateFrom;
+    if (this.etatStockDateTo) options.dateTo = this.etatStockDateTo;
     this.stockService.exportEtatStockPDF(options).subscribe({
       next: (blob: Blob) => {
         const url = window.URL.createObjectURL(blob);
@@ -480,6 +598,15 @@ export class StockReportingComponent implements OnInit {
       orderDirection: this.etatStockSortDirection,
       search: this.etatStockSearchTerm
     };
+    if (this.etatStockArticleId) {
+      options.articleId = this.etatStockArticleId;
+    } else if (this.etatStockArticleCode) {
+      options.articleCode = this.etatStockArticleCode;
+    } else if (this.etatStockArticle) {
+      options.article = this.etatStockArticle;
+    }
+    if (this.etatStockDateFrom) options.dateFrom = this.etatStockDateFrom;
+    if (this.etatStockDateTo) options.dateTo = this.etatStockDateTo;
     this.stockService.exportEtatStockExcel(options).subscribe({
       next: (blob: Blob) => {
         const url = window.URL.createObjectURL(blob);

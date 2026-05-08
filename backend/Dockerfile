@@ -1,18 +1,22 @@
-FROM node:20-alpine
+FROM node:20-bookworm-slim
 
 WORKDIR /app
 
-# Copier les fichiers de dépendances
+ENV NODE_ENV=production
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
 COPY package*.json ./
 
-# Installer les dépendances de production uniquement
-RUN npm ci --only=production
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
+    ca-certificates \
+    fonts-liberation \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm ci --omit=dev
 
-# Copier le reste du code
 COPY . .
 
-# Exposer le port (par défaut 3500 selon server.js)
 EXPOSE 3500
 
-# Utiliser la commande start du package.json qui inclut --max-old-space-size=4096
 CMD ["npm", "start"]

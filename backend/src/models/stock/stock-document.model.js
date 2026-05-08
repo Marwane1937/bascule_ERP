@@ -1,5 +1,13 @@
 const { getConnection } = require('../../config/database');
 
+const getStockDocumentDetailColumns = async (sequelize) => {
+  const rows = await sequelize.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'stock_document_detail'`,
+    { type: sequelize.QueryTypes.SELECT }
+  );
+  return new Set((Array.isArray(rows) ? rows : []).map((r) => String(r.COLUMN_NAME || '').toLowerCase()));
+};
+
 /**
  * Récupérer tous les documents de stock avec pagination
  */
@@ -261,15 +269,41 @@ const createStockDocument = async (data, sequelizeConnection = null, transaction
  * Ajouter des détails à un document de stock
  */
 const addStockDocumentDetails = async (stockDocumentId, details, sequelizeConnection = null, transaction = null) => {
-  console.log('[addStockDocumentDetails] Reçu stockDocumentId:', stockDocumentId, 'type:', typeof stockDocumentId);
-  console.log('[addStockDocumentDetails] Reçu details:', details);
 
   const sequelize = sequelizeConnection || getConnection();
 
   try {
+    const detailColumns = await getStockDocumentDetailColumns(sequelize);
+    const insertCols = ['stock_id', 'article_id', 'quantite', 'prix', 'taux_tva', 'sens', 'unite_id', 'cr_date', 'user_id'];
+    const insertVals = [':stockDocumentId', ':article_id', ':quantite', ':prix', ':taux_tva', ':sens', ':unite_id', 'GETDATE()', ':user_id'];
+
+    if (detailColumns.has('depot_id')) {
+      insertCols.push('depot_id');
+      insertVals.push(':depot_id');
+    } else if (detailColumns.has('adresse_id')) {
+      insertCols.push('adresse_id');
+      insertVals.push(':depot_id');
+    }
+    if (detailColumns.has('description')) {
+      insertCols.push('description');
+      insertVals.push(':description');
+    }
+    if (detailColumns.has('lot')) {
+      insertCols.push('lot');
+      insertVals.push(':lot');
+    }
+    if (detailColumns.has('etat')) {
+      insertCols.push('etat');
+      insertVals.push(':etat');
+    }
+    if (detailColumns.has('type')) {
+      insertCols.push('type');
+      insertVals.push(':type');
+    }
+
     const insertQuery = `
-      INSERT INTO stock_document_detail (stock_id, article_id, quantite, prix, taux_tva, sens, unite_id, cr_date, user_id)
-      VALUES (:stockDocumentId, :article_id, :quantite, :prix, :taux_tva, :sens, :unite_id, GETDATE(), :user_id)
+      INSERT INTO stock_document_detail (${insertCols.join(', ')})
+      VALUES (${insertVals.join(', ')})
     `;
 
     for (const detail of details) {
@@ -278,10 +312,15 @@ const addStockDocumentDetails = async (stockDocumentId, details, sequelizeConnec
           stockDocumentId,
           article_id: detail.article_id,
           quantite: detail.quantite,
-          prix: detail.prix || null,
-          taux_tva: detail.taux_tva || null,
-          sens: detail.sens || 1,
+          prix: detail.prix ?? 0,
+          taux_tva: detail.taux_tva ?? 0,
+          sens: detail.sens ?? 1,
           unite_id: detail.unite_id || 1,
+          depot_id: detail.depot_id || null,
+          description: detail.description || null,
+          lot: detail.lot || null,
+          etat: Number(detail.etat || 0),
+          type: Number(detail.type || 0),
           user_id: detail.user_id || 1
         },
         type: sequelize.QueryTypes.INSERT,

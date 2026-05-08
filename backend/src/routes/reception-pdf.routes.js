@@ -52,7 +52,7 @@ router.get('/:filename', async (req, res) => {
       // Vérifier l'âge du fichier (ne pas servir les fichiers de plus de 1 heure)
       const stats = fs.statSync(pdfPath);
       const fileAge = Date.now() - stats.mtime.getTime();
-      console.log(`[ReceptionPDF Route] 📅 Âge du fichier: ${Math.round(fileAge / 1000)} secondes`);
+      console.log(`[ReceptionPDF Route] 📅 ge du fichier: ${Math.round(fileAge / 1000)} secondes`);
       
       if (fileAge < 60 * 60 * 1000) {
         console.log(`[ReceptionPDF Route] ✅ Envoi du PDF depuis le disque: ${pdfPath}`);

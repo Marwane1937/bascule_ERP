@@ -1,4 +1,4 @@
-/* Même look & feel que les interfaces Achats existantes */
+﻿/* MÃªme look & feel que les interfaces Achats existantes */
 .page-header h3 {
   margin: 0;
 }
@@ -22,10 +22,22 @@
 
 .reception-modal-xl .modal-content {
   border-radius: 10px;
+  overflow-x: hidden;
 }
 
 .modal-body {
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.reception-modal-xl .modal-body > .row {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.reception-modal-xl .col-md-5,
+.reception-modal-xl .col-md-7 {
+  min-width: 0;
 }
 
 /* Un peu de design pour le contenu */
@@ -37,10 +49,550 @@
   border-radius: 12px;
 }
 
+.reception-modal-xl .card-header {
+  font-size: 1.05rem;
+}
+
 .reception-modal-xl .table thead th {
   position: sticky;
   top: 0;
   z-index: 2;
 }
 
+.livraison-like-table {
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  overflow-x: auto;
+  background-color: #fefefe;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+}
+
+.livraison-like-table .table {
+  margin-bottom: 0;
+  background: white;
+}
+
+.livraison-like-table .table thead th {
+  font-weight: 600;
+}
+
+.reception-detail-search {
+  width: min(280px, 100%);
+}
+
+.reception-edit-card {
+  max-height: 68vh;
+  overflow: hidden;
+}
+
+.reception-edit-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 0.55rem 0.8rem;
+}
+
+.reception-edit-body {
+  max-height: calc(68vh - 58px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.7rem;
+}
+
+.reception-detail-list {
+  border: 1px solid #d7dee8;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.reception-detail-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem 0.55rem;
+  background: #f8fafc;
+  border-bottom: 1px solid #e5e7eb;
+  flex-wrap: wrap;
+}
+
+.reception-detail-sort-actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.reception-detail-toolbar .sort-link {
+  padding: 0.05rem 0.25rem;
+  color: #334155;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
+.reception-detail-toolbar .sort-link:hover {
+  color: #0d6efd;
+}
+
+.reception-detail-table th.sort-th {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.reception-detail-table td {
+  vertical-align: top;
+}
+
+.reception-detail-table .form-control,
+.reception-detail-table .form-select {
+  min-width: 0;
+  transition: border-color 0.3s ease;
+}
+
+.reception-detail-table .form-control:focus,
+.reception-detail-table .form-select:focus {
+  border-color: #86b7fe;
+  box-shadow: 0 0 0 0.15rem rgba(13, 110, 253, 0.12);
+}
+
+.reception-detail-table td {
+  padding: 12px;
+}
+
+.reception-detail-list .reception-detail-table {
+  margin-bottom: 0;
+}
+
+.reception-detail-list .reception-detail-table thead {
+  display: none;
+}
+
+.reception-detail-list .reception-detail-table,
+.reception-detail-list .reception-detail-table tbody {
+  display: block;
+}
+
+.reception-detail-list .reception-detail-table tbody {
+  max-height: 52vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.5rem;
+}
+
+.reception-detail-list .reception-detail-table tr {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(150px, 1.15fr) minmax(180px, 1.35fr) minmax(90px, 0.6fr) minmax(80px, 0.5fr);
+  grid-template-areas:
+    "article article article article article"
+    "depot lot quantite prix prix";
+  gap: 0.45rem;
+  padding: 0.55rem 0.65rem;
+  margin-bottom: 0.45rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.reception-detail-list .reception-detail-table tr:last-child {
+  margin-bottom: 0;
+}
+
+.reception-detail-list .reception-detail-table tr.reception-complete-line {
+  background: #f1f5f9;
+  border-color: #d8dee7;
+  opacity: 0.78;
+}
+
+.reception-detail-list .reception-detail-table tr.reception-partial-line {
+  border-color: #facc15;
+  background: #fffdf3;
+}
+
+.reception-detail-list .reception-detail-table td {
+  display: block;
+  border: 0;
+  padding: 0;
+  text-align: left !important;
+}
+
+.reception-detail-list .reception-detail-table td:nth-child(1) {
+  grid-area: article;
+}
+
+.reception-detail-list .reception-detail-table td:nth-child(1) .fw-semibold {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f3d6e;
+  line-height: 1.25;
+}
+
+.reception-detail-list .reception-detail-table td:nth-child(1) .fw-semibold span:last-child {
+  color: #134e4a;
+}
+
+.reception-detail-list .reception-detail-table td:nth-child(1) small {
+  font-size: 0.74rem;
+  color: #64748b !important;
+}
+
+.reception-line-state {
+  font-size: 0.7rem !important;
+  font-weight: 600;
+  color: #475569 !important;
+}
+
+.reception-detail-list .reception-detail-table td:nth-child(2) {
+  grid-area: depot;
+}
+
+.reception-detail-list .reception-detail-table td:nth-child(3) {
+  grid-area: lot;
+}
+
+.reception-detail-list .reception-detail-table td:nth-child(4) {
+  grid-area: quantite;
+}
+
+.reception-detail-list .reception-detail-table td:nth-child(5) {
+  grid-area: prix;
+}
+
+.reception-detail-list .reception-detail-table td:nth-child(n + 2)::before {
+  display: block;
+  margin-bottom: 0.18rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.02em;
+}
+
+.reception-detail-list .reception-detail-table td:nth-child(2)::before {
+  content: "Depot";
+}
+
+.reception-detail-list .reception-detail-table td:nth-child(3)::before {
+  content: "Numero lot";
+}
+
+.reception-detail-list .reception-detail-table td:nth-child(4)::before {
+  content: "Quantite";
+}
+
+.reception-detail-list .reception-detail-table td:nth-child(5)::before {
+  content: "Prix";
+}
+
+.reception-detail-list .reception-detail-table .form-control,
+.reception-detail-list .reception-detail-table .form-select {
+  width: 100%;
+  min-width: 0 !important;
+  max-width: 100%;
+  font-size: 0.78rem;
+  padding-top: 0.2rem;
+  padding-bottom: 0.2rem;
+  border-radius: 8px;
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #1e293b;
+}
+
+@media (max-width: 991px) {
+  .reception-detail-list .reception-detail-table tr {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "article article"
+      "depot lot"
+      "quantite prix";
+  }
+}
+
+.reception-main-table th.sort-th {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.supplier-resizable-th {
+  position: relative;
+}
+
+.resizable-header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.column-resize-handle {
+  width: 8px;
+  min-width: 8px;
+  align-self: stretch;
+  cursor: col-resize;
+  position: relative;
+}
+
+.column-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: #94a3b8;
+  border-radius: 999px;
+}
+
+.reception-main-table th,
+.reception-main-table td {
+  padding: 7px 8px;
+  font-size: 0.84rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reception-main-table-wrap {
+  overflow: visible !important;
+}
+
+.reception-main-table {
+  table-layout: fixed;
+  width: 100%;
+  overflow: visible;
+}
+
+.reception-main-table th:nth-child(1),
+.reception-main-table td:nth-child(1) {
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.reception-main-table th:nth-child(2),
+.reception-main-table td:nth-child(2) {
+  white-space: nowrap;
+  min-width: 118px;
+}
+
+.reception-main-table th:nth-child(3),
+.reception-main-table td:nth-child(3) {
+  max-width: none;
+}
+
+.reception-main-table th:nth-child(4),
+.reception-main-table td:nth-child(4),
+.reception-main-table th:nth-child(5),
+.reception-main-table td:nth-child(5),
+.reception-main-table th:nth-child(6),
+.reception-main-table td:nth-child(6) {
+  white-space: nowrap;
+}
+
+.reception-main-table .filter-input {
+  min-width: 0;
+  padding: 0.24rem 0.38rem;
+  font-size: 0.76rem;
+}
+
+.dropdown .btn.btn-primary.dropdown-toggle {
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+  padding: 0.22rem 0.45rem;
+  font-size: 0.76rem;
+}
+
+.reception-main-table th:last-child,
+.reception-main-table td:last-child {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.reception-main-table .dropdown {
+  position: relative;
+}
+
+.reception-main-table .dropdown-menu {
+  z-index: 2000;
+  min-width: 11rem;
+}
+
+.reception-main-table .badge {
+  font-size: 0.72rem;
+  padding: 0.35em 0.5em;
+}
+
+.reception-link-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #0d6efd;
+  font-weight: 700;
+}
+
+.reception-link-button:hover {
+  color: #084298;
+  text-decoration: underline;
+}
+
+.reception-link-button:disabled {
+  color: #6c757d;
+  cursor: default;
+  text-decoration: none;
+}
+
+.reception-history-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 11000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(6px);
+}
+
+.reception-history-modal {
+  width: min(760px, 100%);
+  max-height: min(88vh, 920px);
+  overflow: auto;
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+  padding: 24px;
+}
+
+.reception-history-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.reception-history-modal__eyebrow {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.reception-history-modal__title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #111827;
+}
+
+.reception-history-modal__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  color: #6b7280;
+  font-size: 0.92rem;
+}
+
+.reception-history-close {
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #312e81;
+}
+
+.reception-history-close:hover {
+  background: #e0e7ff;
+}
+
+.reception-history-state {
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: #475569;
+}
+
+.reception-history-state--error {
+  color: #b91c1c;
+}
+
+.reception-history-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.reception-history-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  background: #f8fafc;
+  padding: 18px;
+}
+
+.reception-history-card--current {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.reception-history-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.reception-history-card__header h5 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.reception-history-card__empty {
+  color: #6b7280;
+  font-size: 0.92rem;
+}
+
+.reception-history-doc {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reception-history-doc--current {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.reception-history-doc__title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.reception-history-doc__date {
+  font-size: 0.92rem;
+  color: #6b7280;
+}
+
+.reception-history-doc__hint {
+  font-size: 0.88rem;
+  color: #475569;
+}
+
+@media (max-width: 768px) {
+  .reception-history-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reception-history-modal {
+    padding: 18px;
+  }
+}
 

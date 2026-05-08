@@ -3,7 +3,18 @@ import { Router } from '@angular/router';
 import { AuthService, User, Societe } from '../service/auth.service';
 import { NotificationService, Notification } from '../service/notification.service';
 import { PermissionsService } from '../service/permissions.service';
-import { interval, Subscription } from 'rxjs';
+import { VentesService } from '../service/ventes.service';
+import { firstValueFrom, interval, Subscription } from 'rxjs';
+import { LanguageService, AppLanguage } from '../service/language.service';
+import Swal from 'sweetalert2';
+
+const CONTRAT_NOTIFICATION_FOCUS_STORAGE_KEY = 'contrat-notification-focus';
+const CONTRAT_NOTIFICATION_FOCUS_EVENT = 'contrat-notification-focus';
+
+interface NotificationContratTarget {
+  id: number | null;
+  numero: string;
+}
 
 @Component({
   selector: 'app-header',
@@ -29,7 +40,9 @@ export class HeaderComponent implements OnInit, OnDestroy {
     private authService: AuthService,
     private router: Router,
     private notificationService: NotificationService,
-    private permissionsService: PermissionsService
+    private ventesService: VentesService,
+    private permissionsService: PermissionsService,
+    public languageService: LanguageService
   ) {}
 
   ngOnInit(): void {
@@ -112,12 +125,20 @@ export class HeaderComponent implements OnInit, OnDestroy {
     this.router.navigate(['/login']);
   }
 
+  navigateToProfile(): void {
+    this.router.navigate(['/Profile']);
+  }
+
+  setLanguage(language: AppLanguage): void {
+    this.languageService.setLanguage(language);
+  }
+
   getRoleDisplayName(type: number): string {
     switch (type) {
-      case 1: return 'Administrateur';
-      case 2: return 'Utilisateur';
-      case 3: return 'Gestionnaire';
-      default: return 'Inconnu';
+      case 1: return this.languageService.instant('header.administrator');
+      case 2: return this.languageService.instant('header.user');
+      case 3: return this.languageService.instant('header.manager');
+      default: return this.languageService.instant('header.unknown');
     }
   }
 
@@ -295,6 +316,9 @@ export class HeaderComponent implements OnInit, OnDestroy {
   isUrgent(notification: Notification): boolean {
     // Pour les notifications calculées, utiliser jours_restants
     if (notification.isCalculated && notification.jours_restants !== undefined) {
+      if (notification.notificationType === 'contract_expiring') {
+        return notification.jours_restants <= 5 && notification.jours_restants >= 0;
+      }
       return notification.jours_restants < 10 && notification.jours_restants >= 0;
     }
     
@@ -347,12 +371,179 @@ export class HeaderComponent implements OnInit, OnDestroy {
   onNotificationClick(notification: Notification, event: Event): void {
     // Empêcher la propagation pour éviter de fermer le panneau
     event.stopPropagation();
-    
-    // Si c'est une notification calculée avec redirection
-    if (notification.isCalculated && notification.redirectRoute) {
-      // Ne pas fermer le panneau, juste naviguer
-      this.router.navigate([notification.redirectRoute]);
+
+    if (this.isNotificationInteractiveTarget(event.target)) {
+      return;
     }
+
+    // Si c'est une notification calculée avec redirection
+    if (notification.redirectRoute) {
+      void this.navigateToNotificationTarget(notification);
+    }
+  }
+
+  openNotificationDetails(notification: Notification, event: Event): void {
+    event.stopPropagation();
+    (event as any).stopImmediatePropagation?.();
+    void this.navigateToNotificationTarget(notification);
+  }
+
+  isContractNotification(notification: Notification): boolean {
+    return notification.notificationType === 'contract_expiring';
+  }
+
+  getNotificationDescription(notification: Notification): string {
+    if (this.isContractNotification(notification)) {
+      const client = notification.client || '';
+      const totalHt = this.formatCurrency(notification.total_ht);
+      return `Le contrat du client ${client} d'un montant de ${totalHt} dh va expirer bientôt.`;
+    }
+
+    return notification.description || 'Sans description';
+  }
+
+  formatCurrency(value: number | undefined): string {
+    const amount = Number(value ?? 0);
+    return Number.isFinite(amount)
+      ? amount.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+      : '0';
+  }
+
+  renewContractFromNotification(notification: Notification, event: Event): void {
+    event.stopPropagation();
+    (event as any).stopImmediatePropagation?.();
+    void this.handleRenewContractFromNotification(notification);
+  }
+
+  canResolveNotificationContrat(notification: Notification): boolean {
+    const routeTarget = this.getNotificationContratTargetFromRoute(notification?.redirectRoute);
+    return Boolean(
+      this.getNotificationContratId(notification)
+      || this.normalizeContratNumero(notification?.numero)
+      || routeTarget.id
+      || routeTarget.numero
+    );
+  }
+
+  canShowRenewNotificationAction(notification: Notification): boolean {
+    const days = Number(notification?.jours_restants);
+
+    return this.isContractNotification(notification)
+      && Number(notification?.parent) === 1
+      && Number.isFinite(days)
+      && days >= 0
+      && days < 10
+      && this.canResolveNotificationContrat(notification);
+  }
+
+  private isNotificationInteractiveTarget(target: EventTarget | null): boolean {
+    return target instanceof HTMLElement
+      && !!target.closest('button, a, input, select, textarea, .notification-detail-button, .btn-renew-notification, .btn-close-notification');
+  }
+
+  private openNotificationSwal(options: any): Promise<any> {
+    const customClass = options?.customClass || {};
+    const containerClass = [customClass.container, 'header-notification-swal']
+      .filter((value: string | undefined) => !!value)
+      .join(' ');
+
+    return Swal.fire({
+      ...options,
+      customClass: {
+        ...customClass,
+        container: containerClass
+      }
+    });
+  }
+
+  private async handleRenewContractFromNotification(notification: Notification): Promise<void> {
+    this.closeNotificationDropdown();
+    const requiresLookup = !this.getNotificationContratId(notification) && !!this.normalizeContratNumero(notification?.numero);
+
+    if (requiresLookup) {
+      this.openNotificationSwal({
+        title: 'Recherche du contrat...',
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+    }
+
+    const resolvedContrat = await this.resolveNotificationContrat(notification);
+
+    if (requiresLookup) {
+      Swal.close();
+    }
+
+    const contratId = resolvedContrat.id;
+    if (!contratId) {
+      this.openNotificationSwal({
+        icon: 'error',
+        title: 'Erreur',
+        text: 'Contrat introuvable depuis cette notification.',
+        confirmButtonText: 'Fermer'
+      });
+      return;
+    }
+
+    this.openNotificationSwal({
+      icon: 'question',
+      title: 'Renouveler le contrat',
+      text: 'Voulez-vous vraiment renouveler ce contrat ?',
+      showCancelButton: true,
+      confirmButtonText: 'Oui, renouveler',
+      cancelButtonText: 'Annuler',
+      customClass: {
+        confirmButton: 'btn btn-success',
+        cancelButton: 'btn btn-secondary'
+      },
+      buttonsStyling: false
+    }).then((result) => {
+      if (!result.isConfirmed) {
+        return;
+      }
+
+      this.openNotificationSwal({
+        title: 'Renouvellement en cours...',
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+
+      this.ventesService.renewContrat(contratId).subscribe({
+        next: (response: any) => {
+          const renewedContrat = response?.data?.contrat;
+          const renewedContratId = Number(renewedContrat?.id || response?.data?.new_id || 0);
+          const renewedNumero = String(renewedContrat?.numero || response?.data?.numero || '').trim();
+
+          this.closeNotificationDropdown();
+          this.openNotificationSwal({
+            icon: 'success',
+            title: 'Contrat renouvelé',
+            text: 'Le nouveau contrat a été créé avec succès.',
+            confirmButtonText: 'OK'
+          }).then(() => {
+            if (renewedContratId > 0 || renewedNumero) {
+              this.focusContratInInterface({
+                id: renewedContratId > 0 ? renewedContratId : null,
+                numero: renewedNumero
+              });
+            }
+          });
+          this.loadNotifications();
+        },
+        error: (error) => {
+          this.openNotificationSwal({
+            icon: 'error',
+            title: 'Erreur',
+            text: error?.error?.message || error?.message || 'Erreur lors du renouvellement du contrat.',
+            confirmButtonText: 'Fermer'
+          });
+        }
+      });
+    });
   }
 
   markNotificationAsRead(id: number | string, event: Event): void {
@@ -556,5 +747,169 @@ export class HeaderComponent implements OnInit, OnDestroy {
   // Helper pour vérifier si l'ID est un nombre (utilisable dans le template)
   isNumericId(id: number | string): boolean {
     return typeof id === 'number';
+  }
+
+  private async navigateToNotificationTarget(notification: Notification): Promise<void> {
+    if (!notification.redirectRoute) {
+      return;
+    }
+
+    if (!this.isContractNotification(notification)) {
+      this.closeNotificationDropdown();
+      await this.router.navigateByUrl(notification.redirectRoute);
+      return;
+    }
+
+    this.closeNotificationDropdown();
+    const requiresLookup = !this.getNotificationContratId(notification) && !!this.normalizeContratNumero(notification?.numero);
+
+    if (requiresLookup) {
+      this.openNotificationSwal({
+        title: 'Recherche du contrat...',
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+    }
+
+    const resolvedContrat = await this.resolveNotificationContrat(notification);
+
+    if (requiresLookup) {
+      Swal.close();
+    }
+
+    if (!resolvedContrat.id && !resolvedContrat.numero) {
+      await this.router.navigateByUrl(notification.redirectRoute);
+      return;
+    }
+
+    this.focusContratInInterface(resolvedContrat);
+  }
+
+  private focusContratInInterface(target: NotificationContratTarget): void {
+    const payload = {
+      contratId: target.id,
+      numero: this.normalizeContratNumero(target.numero),
+      requestedAt: Date.now()
+    };
+
+    try {
+      sessionStorage.setItem(CONTRAT_NOTIFICATION_FOCUS_STORAGE_KEY, JSON.stringify(payload));
+    } catch (error) {
+      // Ignorer les erreurs de stockage navigateur
+    }
+
+    this.closeNotificationDropdown();
+
+    const currentPath = this.router.url.split('?')[0].split('#')[0];
+    if (currentPath === '/Contrat') {
+      window.dispatchEvent(new CustomEvent(CONTRAT_NOTIFICATION_FOCUS_EVENT, { detail: payload }));
+      void this.router.navigate(['/Contrat'], { replaceUrl: true });
+      return;
+    }
+
+    void this.router.navigate(['/Contrat']);
+  }
+
+  getNotificationContratId(notification: Notification): number | null {
+    const stockId = Number(notification?.stock_id);
+    if (Number.isInteger(stockId) && stockId > 0) {
+      return stockId;
+    }
+
+    const notificationId = String(notification?.id || '').trim();
+    const match = notificationId.match(/^contract_expiring_(\d+)$/);
+    if (!match) {
+      return null;
+    }
+
+    const parsed = Number(match[1]);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed;
+    }
+
+    return this.getNotificationContratTargetFromRoute(notification?.redirectRoute).id;
+  }
+
+  private normalizeContratNumero(value: unknown): string {
+    return String(value || '').trim();
+  }
+
+  private async resolveNotificationContrat(notification: Notification): Promise<{ id: number | null; numero: string }> {
+    const routeTarget = this.getNotificationContratTargetFromRoute(notification?.redirectRoute);
+    const directId = this.getNotificationContratId(notification) || routeTarget.id;
+    const numero = this.normalizeContratNumero(notification?.numero || routeTarget.numero);
+
+    if (directId) {
+      return { id: directId, numero };
+    }
+
+    if (!numero) {
+      return { id: null, numero: '' };
+    }
+
+    try {
+      const response: any = await firstValueFrom(this.ventesService.getContrats({
+        page: 1,
+        pageSize: 25,
+        search: numero,
+        orderBy: 'date',
+        orderDirection: 'DESC'
+      }));
+
+      const contrats = Array.isArray(response?.data) ? response.data : [];
+      const matchingContrat = contrats.find((contrat: any) =>
+        this.normalizeContratNumero(contrat?.numero).toLowerCase() === numero.toLowerCase()
+      ) || contrats[0];
+
+      const resolvedId = Number(matchingContrat?.id || matchingContrat?.stock_id || 0);
+
+      return {
+        id: Number.isInteger(resolvedId) && resolvedId > 0 ? resolvedId : null,
+        numero: this.normalizeContratNumero(matchingContrat?.numero || numero)
+      };
+    } catch (error) {
+      return { id: null, numero };
+    }
+  }
+
+  private getNotificationContratTargetFromRoute(
+    redirectRoute: string | undefined
+  ): { id: number | null; numero: string } {
+    if (!redirectRoute) {
+      return { id: null, numero: '' };
+    }
+
+    try {
+      const resolvedUrl = new URL(redirectRoute, 'http://localhost');
+      const highlightedId = Number(
+        resolvedUrl.searchParams.get('highlightContratId')
+        || resolvedUrl.searchParams.get('id')
+        || 0
+      );
+      const highlightedNumero = this.normalizeContratNumero(
+        resolvedUrl.searchParams.get('highlightContratNumero')
+        || resolvedUrl.searchParams.get('search')
+      );
+      const editMatch = resolvedUrl.pathname.match(/\/Edit-Contrat\/(\d+)/i);
+      const contratMatch = resolvedUrl.pathname.match(/\/Contrat\/(\d+)/i);
+      const routeId = Number(editMatch?.[1] || contratMatch?.[1] || 0);
+
+      return {
+        id: Number.isInteger(routeId) && routeId > 0
+          ? routeId
+          : (Number.isInteger(highlightedId) && highlightedId > 0 ? highlightedId : null),
+        numero: highlightedNumero
+      };
+    } catch (error) {
+      const routeMatch = String(redirectRoute).match(/(?:Edit-Contrat|Contrat)\/(\d+)/i);
+      const routeId = Number(routeMatch?.[1] || 0);
+
+      return {
+        id: Number.isInteger(routeId) && routeId > 0 ? routeId : null,
+        numero: ''
+      };
+    }
   }
 }

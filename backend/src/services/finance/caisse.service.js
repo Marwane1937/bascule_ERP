@@ -12,9 +12,9 @@ const getCaisseDocuments = async (options = {}, sequelizeConnection = null) => {
 };
 
 // Obtenir un document de caisse par ID
-const getCaisseDocumentById = async (id) => {
+const getCaisseDocumentById = async (id, sequelizeConnection = null) => {
   try {
-    const result = await caisseModel.getCaisseDocumentById(id);
+    const result = await caisseModel.getCaisseDocumentById(id, sequelizeConnection);
     return result;
   } catch (error) {
     throw error;
@@ -113,7 +113,7 @@ const checkReglementExists = async (reglementId) => {
 const getNextCaisseNumero = async (prefix, sequelizeConnection = null) => {
   try {
     // Accepter CD, CR, CDB, CRB
-    if (prefix !== 'CD' && prefix !== 'CR' && prefix !== 'CDB' && prefix !== 'CRB') {
+    if (prefix !== 'CD' && prefix !== 'CR' && prefix !== 'CDB' && prefix !== 'CRB' && prefix !== 'JC' && prefix !== 'JCB') {
       throw new Error('Prefix doit être CD (caisse dépense), CR (caisse recette), CDB (caisse dépense black) ou CRB (caisse recette black)');
     }
 
@@ -249,7 +249,7 @@ const getCaisseDataForReportByEmploye = async (dateFrom, dateTo, employeId, sequ
       // Pour chaque document, récupérer les détails et ne compter que ceux de l'employé
       for (const docItem of filteredDocuments) {
         try {
-          const documentData = await caisseModel.getCaisseDocumentById(docItem.id);
+          const documentData = await caisseModel.getCaisseDocumentById(docItem.id, sequelizeConnection);
           if (documentData && documentData.details && documentData.details.length > 0) {
             // Filtrer les détails pour ne garder que ceux de l'employé
             const employeDetails = documentData.details.filter(detail => detail.employe_id === employeId);
@@ -331,21 +331,186 @@ const getCaisseDataForReportGroup2000_3000 = async (dateFrom, dateTo, sequelizeC
   }
 };
 
+const createCaisseDocumentV2 = async (documentData, detailsData) => {
+  if (!documentData?.date) {
+    throw new Error('Données incomplètes : date requise');
+  }
+
+  if (!documentData.affectation || (typeof documentData.affectation === 'string' && documentData.affectation.trim() === '')) {
+    throw new Error('Le champ affectation est obligatoire');
+  }
+
+  const safeDetails = Array.isArray(detailsData) ? detailsData : [];
+  const invalidDetail = safeDetails.find((detail) => detail?.sens !== undefined && detail?.sens !== null && detail.sens !== 1 && detail.sens !== -1);
+  if (invalidDetail) {
+    throw new Error('Chaque ligne de détail doit porter un sens à 1 (recette) ou -1 (dépense)');
+  }
+
+  return caisseModel.createCaisseDocument(documentData, safeDetails);
+};
+
+const updateCaisseDocumentV2 = async (id, documentData = {}, detailsData = [], sequelizeConnection = null) => {
+  if (!Array.isArray(detailsData)) {
+    throw new Error('Les détails doivent être fournis sous forme de tableau');
+  }
+
+  return caisseModel.updateCaisseDocument(id, documentData, detailsData, sequelizeConnection);
+};
+
+const updateCaisseDocumentBySensV2 = async (id, sens, documentData = {}, detailsData = [], sequelizeConnection = null) => {
+  if (!Array.isArray(detailsData)) {
+    throw new Error('Les détails doivent être fournis sous forme de tableau');
+  }
+
+  if (sens !== 1 && sens !== -1) {
+    throw new Error('Le sens doit être 1 (recette) ou -1 (dépense)');
+  }
+
+  return caisseModel.updateCaisseDocumentBySens(id, sens, documentData, detailsData, sequelizeConnection);
+};
+
+const createCaisseFromReglementV2 = async (reglementData, lettrages = []) => {
+  const existingId = await caisseModel.checkReglementExists(reglementData.regle_id);
+  if (existingId) {
+    throw new Error(`Ce règlement a déjà été enregistré en caisse (document ID: ${existingId})`);
+  }
+
+  const detailsData = (Array.isArray(lettrages) ? lettrages : []).map((lettrage) => ({
+    rubrique_id: null,
+    quantite: 1,
+    montant: lettrage.montant,
+    description: `Lettrage facture ${lettrage.document_id}`,
+    type: 'LETTRAGE',
+    etat: 1,
+    parent: reglementData.regle_id,
+    sens: 1
+  }));
+
+  if (detailsData.length === 0) {
+    detailsData.push({
+      rubrique_id: null,
+      quantite: 1,
+      montant: reglementData.montant,
+      description: `Règlement ${reglementData.numero || ''}`,
+      type: 'REGLEMENT',
+      etat: 1,
+      parent: reglementData.regle_id,
+      sens: 1
+    });
+  }
+
+  const documentType = null;
+  const existingDayId = await caisseModel.findOpenCaisseDocumentByDate(reglementData.date, documentType, null);
+
+  if (existingDayId) {
+    const existingDocument = await caisseModel.getCaisseDocumentById(existingDayId);
+    const mergedDetails = [
+      ...(existingDocument?.details || []),
+      ...detailsData
+    ];
+
+    return caisseModel.updateCaisseDocument(existingDayId, {
+      description: existingDocument?.description || `Journée caisse ${reglementData.date}`,
+      affectation: existingDocument?.affectation || (reglementData.user_name || 'SYSTEME'),
+      fond: existingDocument?.fond || 0,
+      user_id: reglementData.user_id || null
+    }, mergedDetails);
+  }
+
+  return caisseModel.createCaisseDocument({
+    date: reglementData.date,
+    part_id: reglementData.part_id,
+    employe_id: reglementData.employe_id || null,
+    affectation: reglementData.user_name || 'SYSTEME',
+    description: `Journée caisse ${reglementData.date}`,
+    fond: 0,
+    user_id: reglementData.user_id || null,
+    type: documentType
+  }, detailsData);
+};
+
+const getCaisseDataForReportV2 = async (dateFrom, dateTo, sequelizeConnection = null, caisseType = null) => {
+  console.log('[getCaisseDataForReport Service] ðŸ“¥ Récupération données pour période:', dateFrom, 'à', dateTo);
+  console.log('[getCaisseDataForReport Service] ðŸ“Š Type de caisse:', caisseType || 'declared');
+
+  const filteredDocuments = await caisseModel.getCaisseDocumentsForReport(dateFrom, dateTo, sequelizeConnection, caisseType);
+  let totalEntrees = 0;
+  let totalSorties = 0;
+  let totalFond = 0;
+
+  for (const doc of filteredDocuments || []) {
+    totalFond += parseFloat(doc.fond || 0);
+    totalEntrees += parseFloat(doc.total_recettes || 0);
+    totalSorties += parseFloat(doc.total_depenses || 0);
+  }
+
+  return {
+    documents: filteredDocuments || [],
+    totalFond,
+    totalEntrees,
+    totalSorties,
+    dateFrom,
+    dateTo
+  };
+};
+
+const getCaisseDataForReportByEmployeV2 = async (dateFrom, dateTo, employeId, sequelizeConnection = null, caisseType = null) => {
+  console.log('[getCaisseDataForReportByEmploye Service] ðŸ“¥ Récupération données pour période:', dateFrom, 'à', dateTo);
+  console.log('[getCaisseDataForReportByEmploye Service] ðŸ‘¤ Employé ID:', employeId);
+  console.log('[getCaisseDataForReportByEmploye Service] ðŸ“Š Type de caisse:', caisseType || 'declared');
+
+  const filteredDocuments = await caisseModel.getCaisseDocumentsForReportByEmploye(dateFrom, dateTo, employeId, sequelizeConnection, caisseType);
+  let totalEntrees = 0;
+  let totalSorties = 0;
+
+  for (const docItem of filteredDocuments || []) {
+    try {
+      const documentData = await caisseModel.getCaisseDocumentById(docItem.id, sequelizeConnection);
+      const employeDetails = (documentData?.details || []).filter((detail) => detail.employe_id === employeId);
+      employeDetails.forEach((detail) => {
+        const montant = parseFloat(detail.montant || 0);
+        const quantite = parseFloat(detail.quantite || 0);
+        const total = quantite > 0 ? (quantite * montant) : montant;
+
+        if (detail.sens === 1) {
+          totalEntrees += total;
+        } else if (detail.sens === -1) {
+          totalSorties += total;
+        }
+      });
+    } catch (error) {
+      console.error(`[getCaisseDataForReportByEmploye Service] âŒ Erreur traitement document ${docItem.id}:`, error.message);
+    }
+  }
+
+  return {
+    documents: filteredDocuments || [],
+    totalEntrees,
+    totalSorties,
+    dateFrom,
+    dateTo,
+    employeId
+  };
+};
+
+const getBonDeCaisseByEmployeV2 = async (documentId, employeId, sequelizeConnection = null, detailSens = null) => {
+  return caisseModel.getBonDeCaisseByEmploye(documentId, employeId, sequelizeConnection, detailSens);
+};
 
 module.exports = {
   getCaisseDocuments,
   getCaisseDocumentById,
-  createCaisseDocument,
-  updateCaisseDocument,
+  createCaisseDocument: createCaisseDocumentV2,
+  updateCaisseDocument: updateCaisseDocumentV2,
+  updateCaisseDocumentBySens: updateCaisseDocumentBySensV2,
   cloturerCaisseDocument,
   deleteCaisseDocument,
   getSoldeCaisse,
   checkReglementExists,
-  createCaisseFromReglement,
+  createCaisseFromReglement: createCaisseFromReglementV2,
   getNextCaisseNumero,
-  getCaisseDataForReport,
-  getCaisseDataForReportByEmploye,
-  getBonDeCaisseByEmploye,
+  getCaisseDataForReport: getCaisseDataForReportV2,
+  getCaisseDataForReportByEmploye: getCaisseDataForReportByEmployeV2,
+  getBonDeCaisseByEmploye: getBonDeCaisseByEmployeV2,
   getCaisseDataForReportGroup2000_3000
 };
-

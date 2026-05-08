@@ -18,6 +18,14 @@ function htmlToPlainText(html) {
   return text;
 }
 
+function normalizeDesignationForPdf(value) {
+  return htmlToPlainText(value)
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function parseColor(value) {
   if (!value) return '#000000';
   value = value.trim();
@@ -270,6 +278,8 @@ class FactureFournisseurPdfService {
         const drawDocumentHeader = (isFirstPage = false) => {
           // Récupérer la taille du logo depuis la configuration
           const logoSize = options.documentSociete?.logoSize || { width: 100, height: null };
+          const configuredLogoTop = Number(options.documentSociete?.logoTop);
+          const logoTop = Number.isFinite(configuredLogoTop) ? configuredLogoTop : 14;
           const imageOptions = { width: logoSize.width };
           if (logoSize.height) {
             imageOptions.height = logoSize.height;
@@ -279,14 +289,14 @@ class FactureFournisseurPdfService {
           if (options.documentSociete && options.documentSociete.logo) {
             try {
               const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-              doc.image(logoBuffer, 50, 20, imageOptions);
+              doc.image(logoBuffer, 50, logoTop, imageOptions);
             } catch (error) {
-              const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-              if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
+              const logoPath = options.documentSociete?.logoPath;
+              if (fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop, imageOptions);
             }
           } else {
-            const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-            if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
+            const logoPath = options.documentSociete?.logoPath;
+            if (fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop, imageOptions);
           }
 
           // En-tête entreprise - à côté du logo (x=160, y aligné avec le logo)
@@ -368,13 +378,13 @@ class FactureFournisseurPdfService {
           doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
 
           const colRefX = 50;
-          const colDesignationX = 100;
+          const colDesignationX = 95;
           const colQteX = 350;
           const colPUX = 410;
           const colRX = 460;
           const colHTX = 510;
-          const colRefWidth = 50;
-          const colDesignationWidth = 250;
+          const colRefWidth = 45;
+          const colDesignationWidth = 255;
           const colQteWidth = 60;
           const colPUWidth = 50;
           const colRWidth = 50;
@@ -428,14 +438,15 @@ class FactureFournisseurPdfService {
 
         // Positions des colonnes
         const colRefX = 50;
-        const colDesignationX = 100;
+        const colDesignationX = 95;
         const colQteX = 350;
         const colPUX = 410;
         const colRX = 460;
         const colHTX = 510;
-        const colRefWidth = 50;
-        const colDesignationWidth = 250;
-        const colDesignationPadding = 8;
+        const colRefWidth = 45;
+        const colDesignationWidth = 255;
+        const colDesignationPaddingX = 8;
+        const colDesignationPaddingY = 10;
         const colQteWidth = 60;
         const colPUWidth = 50;
         const colRWidth = 50;
@@ -490,7 +501,7 @@ class FactureFournisseurPdfService {
               remiseSymbol = '%';
             }
 
-            const designationPlain = designation
+            let designationPlain = designation
               .replace(/<h[1-6][^>]*>/gi, '\n').replace(/<\/h[1-6]>/gi, '\n')
               .replace(/<ul[^>]*>/gi, '\n').replace(/<\/ul>/gi, '\n')
               .replace(/<li[^>]*>/gi, '\n• ').replace(/<\/li>/gi, '')
@@ -499,13 +510,19 @@ class FactureFournisseurPdfService {
               .replace(/<[^>]*>/g, '')
               .replace(/[ \t]+/g, ' ')
               .trim();
+            designationPlain = normalizeDesignationForPdf(designationPlain);
 
-            const effectiveDesignationWidth = Math.max(0, colDesignationWidth - (colDesignationPadding * 2));
-            const baseRowHeight = 20;
+            const effectiveDesignationWidth = Math.max(0, colDesignationWidth - (colDesignationPaddingX * 2));
+            const designationTextOptions = {
+              width: effectiveDesignationWidth,
+              align: 'left',
+              lineGap: 1
+            };
+            const baseRowHeight = 28;
             const maxRowHeight = 500;
             doc.fontSize(9).font('Helvetica');
-            const textHeight = doc.heightOfString(designationPlain || ' ', { width: effectiveDesignationWidth, align: 'left' });
-            const naturalHeight = Math.max(baseRowHeight, Math.ceil(textHeight) + (colDesignationPadding * 2) + 10);
+            const textHeight = doc.heightOfString(designationPlain || ' ', designationTextOptions);
+            const naturalHeight = Math.max(baseRowHeight, Math.ceil(textHeight) + (colDesignationPaddingY * 2));
             const rowHeight = Math.min(maxRowHeight, naturalHeight);
 
             const currentY = isNaN(y) || y < 0 ? 0 : y;
@@ -523,7 +540,7 @@ class FactureFournisseurPdfService {
             const centerY = validY + (rowHeight / 2) - 3;
 
             doc.roundedRect(50, validY, 510, rowHeight, tableBorderRadius).stroke('#000');
-            doc.moveTo(100, validY).lineTo(100, validY + rowHeight).stroke('#000');
+            doc.moveTo(95, validY).lineTo(95, validY + rowHeight).stroke('#000');
             doc.moveTo(350, validY).lineTo(350, validY + rowHeight).stroke('#000');
             doc.moveTo(410, validY).lineTo(410, validY + rowHeight).stroke('#000');
             doc.moveTo(460, validY).lineTo(460, validY + rowHeight).stroke('#000');
@@ -531,7 +548,12 @@ class FactureFournisseurPdfService {
 
             doc.font('Helvetica').fontSize(9).fillColor('#000');
             doc.text(ref, colRefX, centerY, { width: colRefWidth, align: 'center' });
-            renderInlineHtml(doc, line.article_nom || line.article || line.designation || '', colDesignationX + colDesignationPadding, validY + colDesignationPadding, effectiveDesignationWidth, rowHeight - colDesignationPadding * 2);
+            doc.text(
+              designationPlain || '-',
+              colDesignationX + colDesignationPaddingX,
+              validY + colDesignationPaddingY,
+              designationTextOptions
+            );
             doc.text(qte.toFixed(2).replace('.', ','), colQteX, centerY, { width: colQteWidth, align: 'center' });
             doc.text(pu.toFixed(2).replace('.', ','), colPUX, centerY, { width: colPUWidth, align: 'center' });
             const remiseText = remiseValueText + (remiseSymbol === '%' ? '%' : '');
@@ -543,6 +565,17 @@ class FactureFournisseurPdfService {
         } else {
           doc.text('Aucune ligne de facture disponible.', 60, y + 10);
           y += 30;
+        }
+
+        const headerTotalHT = Number(firstLine?.facture_ht);
+        const headerTotalTVA = Number(firstLine?.facture_tva);
+        const headerTotalTTC = Number(firstLine?.facture_ttc);
+        const hasHeaderTotals = Number.isFinite(headerTotalHT) && Number.isFinite(headerTotalTVA);
+
+        if (hasHeaderTotals) {
+          totalHT = headerTotalHT;
+          totalTVA = headerTotalTVA;
+          totalTTC = Number.isFinite(headerTotalTTC) ? headerTotalTTC : (headerTotalHT + headerTotalTVA);
         }
 
         // === VÉRIFICATION SAUT DE PAGE AVANT BLOC RÉCAPITULATIF ===
@@ -630,4 +663,3 @@ class FactureFournisseurPdfService {
 }
 
 module.exports = new FactureFournisseurPdfService();
-

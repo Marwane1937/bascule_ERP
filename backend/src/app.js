@@ -5,6 +5,12 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 const path = require('path');
 
+// Charset UTF-8 global pour toutes les réponses texte/json générées par Express
+app.use((req, res, next) => {
+  res.charset = 'UTF-8';
+  next();
+});
+
 // Configuration conditionnelle (production vs développement)
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -120,6 +126,7 @@ const clientRoutes = require('./routes/base/client.routes');
 const articleRoutes = require('./routes/base/article.routes');
 const familleRoutes = require('./routes/base/famille.routes');
 const vehiculeRoutes = require('./routes/base/vehicule.routes');
+const warehouseRoutes = require('./routes/base/warehouse.routes');
 
 // ✅ Ventes
 const devisRoutes = require('./routes/ventes/devis.routes');
@@ -137,6 +144,7 @@ const financeReportingRoutes = require('./routes/finance/finance-reporting.route
 const bonCommandeRoutes = require('./routes/achats/bon-commande.routes');
 const demandeAchatRoutes = require('./routes/achats/demande-achat.routes');
 const factureFournisseurRoutes = require('./routes/achats/facture-fournisseur.routes');
+const achatReportingRoutes = require('./routes/achats/achat-reporting.routes');
 // ✅ Base
 const employeRoutes = require('./routes/base/employe.routes');
 const listesRoutes = require('./routes/listes.routes');
@@ -163,7 +171,6 @@ const userPermissionsRoutes = require('./routes/user-permissions.routes');
 const { authenticateToken } = require('./middleware/auth.middleware');
 
 app.use(express.json());
-
 // Routes publiques (pas d'authentification requise)
 app.use('/api/auth', authRoutes);
 
@@ -174,6 +181,7 @@ app.use('/api/clients', authenticateToken, clientRoutes);
 app.use('/api/articles', authenticateToken, articleRoutes);
 app.use('/api/familles', authenticateToken, familleRoutes);
 app.use('/api/vehicules', authenticateToken, vehiculeRoutes);
+app.use('/api/warehouses', authenticateToken, warehouseRoutes);
 // ✅ Ventes
 app.use('/api/devis', authenticateToken, devisRoutes);
 app.use('/api/livraisons', authenticateToken, livraisonRoutes);
@@ -194,6 +202,7 @@ app.use('/api/bon-commande', authenticateToken, bonCommandeRoutes);
 app.use('/api/demande-achat', authenticateToken, demandeAchatRoutes);
 app.use('/api/achats', authenticateToken, bonCommandeRoutes); // Alias pour compatibilité frontend
 app.use('/api/factures-fournisseur', authenticateToken, factureFournisseurRoutes);
+app.use('/api/achat/reporting', authenticateToken, achatReportingRoutes);
 const receptionRoutes = require('./routes/achats/reception.routes');
 app.use('/api/receptions', authenticateToken, receptionRoutes);
 // ✅ Stock
@@ -223,7 +232,10 @@ app.use('/api/email', authenticateToken, emailRoutes);
 // Route PDF : les routes POST sont protégées dans pdf.routes.js, la route GET est publique
 app.use('/api/pdf', pdfRoutes);
 // ✅ PDF spécialisés
-app.use('/api/caisse-pdf', authenticateToken, caissePdfRoutes);
+// Route caisse-pdf :
+//  - les routes POST sont protégées dans caisse-pdf.routes.js
+//  - la route GET est publique pour permettre l'ouverture du PDF sans header Authorization
+app.use('/api/caisse-pdf', caissePdfRoutes);
 // Route facturation-pdf : les routes POST sont protégées dans facturation-pdf.routes.js, la route GET est publique
 app.use('/api/facturation-pdf', facturationPdfRoutes);
 // Route retour-pdf : la route GET est publique (pour servir les PDFs), les routes POST sont protégées dans retour-pdf.routes.js
@@ -231,7 +243,10 @@ app.use('/api/retour-pdf', retourPdfRoutes);
 app.use('/commandes', commandePdfPublicRoutes); // Routes publiques pour servir les PDFs
 // Route commande-pdf : les routes POST sont protégées dans commande-pdf.routes.js, la route GET est publique
 app.use('/api/commande-pdf', commandePdfRoutes);
-app.use('/api/avoir-pdf', authenticateToken, avoirPdfRoutes);
+// Route avoir-pdf :
+//  - les routes POST sont protégées dans avoir-pdf.routes.js
+//  - la route GET est publique pour permettre l'ouverture du PDF sans header Authorization
+app.use('/api/avoir-pdf', avoirPdfRoutes);
 app.use('/api/facture-fournisseur-pdf', authenticateToken, factureFournisseurPdfRoutes);
 // Route reception-pdf : les routes POST sont protégées dans reception-pdf.routes.js, la route GET est publique
 app.use('/api/reception-pdf', receptionPdfRoutes);

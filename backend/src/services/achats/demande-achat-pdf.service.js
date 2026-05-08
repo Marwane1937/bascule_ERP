@@ -143,6 +143,8 @@ class DemandeAchatPdfService {
         // === ENTÊTE ENTREPRISE ===
         // Récupérer la taille du logo depuis la configuration
         const logoSize = options.documentSociete?.logoSize || { width: 100, height: null };
+        const configuredLogoTop = Number(options.documentSociete?.logoTop);
+        const logoTop = Number.isFinite(configuredLogoTop) ? configuredLogoTop : 14;
         const imageOptions = { width: logoSize.width };
         if (logoSize.height) {
           imageOptions.height = logoSize.height;
@@ -151,15 +153,15 @@ class DemandeAchatPdfService {
         if (options.documentSociete && options.documentSociete.logo) {
           try {
             const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-            doc.image(logoBuffer, 50, 20, imageOptions);
+            doc.image(logoBuffer, 50, logoTop, imageOptions);
           } catch (error) {
             console.warn('Erreur affichage logo personnalisé, utilisation du logo par défaut:', error);
-            const logoPath = path.join(__dirname, '..', '..', 'public', 'logo-bascule.jpg');
-            if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
+            const logoPath = options.documentSociete?.logoPath;
+            if (fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop, imageOptions);
           }
         } else {
-          const logoPath = path.join(__dirname, '..', '..', 'public', 'logo-bascule.jpg');
-          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
+          const logoPath = options.documentSociete?.logoPath;
+          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop, imageOptions);
         }
 
         // Utiliser l'en-tête personnalisé si disponible - à côté du logo
@@ -206,21 +208,54 @@ class DemandeAchatPdfService {
         const infoTableRowHeight = 20;
         const infoTableTotalHeight = infoTableHeaderHeight + infoTableRowHeight;
         const tableBorderRadius = 5;
+        const infoTableX = 50;
+        const infoTableWidth = 510;
+        const infoColNumeroWidth = 140;
+        const infoColDateDemandeWidth = 110;
+        const infoColDateLivraisonWidth = 110;
+        const infoColDescriptionWidth = infoTableWidth - infoColNumeroWidth - infoColDateDemandeWidth - infoColDateLivraisonWidth;
+        const infoColDateDemandeX = infoTableX + infoColNumeroWidth;
+        const infoColDateLivraisonX = infoColDateDemandeX + infoColDateDemandeWidth;
+        const infoColDescriptionX = infoColDateLivraisonX + infoColDateLivraisonWidth;
 
-        doc.roundedRect(50, infoTableY, 510, infoTableTotalHeight, tableBorderRadius).stroke('#000');
-        doc.moveTo(50, infoTableY + infoTableHeaderHeight).lineTo(560, infoTableY + infoTableHeaderHeight).stroke('#000');
-        doc.moveTo(230, infoTableY).lineTo(230, infoTableY + infoTableTotalHeight).stroke('#000');
-        doc.moveTo(410, infoTableY).lineTo(410, infoTableY + infoTableTotalHeight).stroke('#000');
+        doc.roundedRect(infoTableX, infoTableY, infoTableWidth, infoTableTotalHeight, tableBorderRadius).stroke('#000');
+        doc.moveTo(infoTableX, infoTableY + infoTableHeaderHeight).lineTo(infoTableX + infoTableWidth, infoTableY + infoTableHeaderHeight).stroke('#000');
+        doc.moveTo(infoColDateDemandeX, infoTableY).lineTo(infoColDateDemandeX, infoTableY + infoTableTotalHeight).stroke('#000');
+        doc.moveTo(infoColDateLivraisonX, infoTableY).lineTo(infoColDateLivraisonX, infoTableY + infoTableTotalHeight).stroke('#000');
+        doc.moveTo(infoColDescriptionX, infoTableY).lineTo(infoColDescriptionX, infoTableY + infoTableTotalHeight).stroke('#000');
 
         doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
         doc.text('Demande d\'Achat N°', 55, infoTableY + 8, { width: 180, align: 'center' });
-        doc.text('Date', 235, infoTableY + 8, { width: 180, align: 'center' });
-        doc.text('Description', 415, infoTableY + 8, { width: 145, align: 'center' });
+        doc.text('Date demande', infoColDateDemandeX + 5, infoTableY + 8, { width: infoColDateDemandeWidth - 10, align: 'center' });
+        doc.text('Date livraison', infoColDateLivraisonX + 5, infoTableY + 8, { width: infoColDateLivraisonWidth - 10, align: 'center' });
+        doc.text('Description', infoColDescriptionX + 5, infoTableY + 8, { width: infoColDescriptionWidth - 10, align: 'center' });
+
+        doc.save();
+        doc.rect(infoTableX + 1, infoTableY + 1, infoTableWidth - 2, infoTableHeaderHeight - 2).fill('#FFFFFF');
+        doc.restore();
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#000');
+        doc.text('Demande d\'Achat N°', infoTableX + 5, infoTableY + 8, { width: infoColNumeroWidth - 10, align: 'center' });
+        doc.text('Date demande', infoColDateDemandeX + 5, infoTableY + 8, { width: infoColDateDemandeWidth - 10, align: 'center' });
+        doc.text('Date livraison', infoColDateLivraisonX + 5, infoTableY + 8, { width: infoColDateLivraisonWidth - 10, align: 'center' });
+        doc.text('Description', infoColDescriptionX + 5, infoTableY + 8, { width: infoColDescriptionWidth - 10, align: 'center' });
 
         doc.font('Helvetica').fontSize(9);
         doc.text(`${demandeAchatData[0]?.numero || ''}`, 55, infoTableY + infoTableHeaderHeight + 6, { width: 180, align: 'center' });
         doc.text(`${demandeAchatData[0]?.date ? new Date(demandeAchatData[0].date).toLocaleDateString('fr-FR') : ''}`, 235, infoTableY + infoTableHeaderHeight + 6, { width: 180, align: 'center' });
         doc.text(`${demandeAchatData[0]?.description || ''}`, 415, infoTableY + infoTableHeaderHeight + 6, { width: 145, align: 'center' });
+
+        doc.save();
+        doc.rect(infoTableX + 1, infoTableY + infoTableHeaderHeight + 1, infoTableWidth - 2, infoTableRowHeight - 2).fill('#FFFFFF');
+        doc.restore();
+        doc.moveTo(infoTableX, infoTableY + infoTableHeaderHeight).lineTo(infoTableX + infoTableWidth, infoTableY + infoTableHeaderHeight).stroke('#000');
+        doc.moveTo(infoColDateDemandeX, infoTableY).lineTo(infoColDateDemandeX, infoTableY + infoTableTotalHeight).stroke('#000');
+        doc.moveTo(infoColDateLivraisonX, infoTableY).lineTo(infoColDateLivraisonX, infoTableY + infoTableTotalHeight).stroke('#000');
+        doc.moveTo(infoColDescriptionX, infoTableY).lineTo(infoColDescriptionX, infoTableY + infoTableTotalHeight).stroke('#000');
+        doc.font('Helvetica').fontSize(9).fillColor('#000');
+        doc.text(`${demandeAchatData[0]?.numero || ''}`, infoTableX + 5, infoTableY + infoTableHeaderHeight + 6, { width: infoColNumeroWidth - 10, align: 'center' });
+        doc.text(`${demandeAchatData[0]?.date ? new Date(demandeAchatData[0].date).toLocaleDateString('fr-FR') : ''}`, infoColDateDemandeX + 5, infoTableY + infoTableHeaderHeight + 6, { width: infoColDateDemandeWidth - 10, align: 'center' });
+        doc.text(`${demandeAchatData[0]?.date_fin ? new Date(demandeAchatData[0].date_fin).toLocaleDateString('fr-FR') : ''}`, infoColDateLivraisonX + 5, infoTableY + infoTableHeaderHeight + 6, { width: infoColDateLivraisonWidth - 10, align: 'center' });
+        doc.text(`${demandeAchatData[0]?.description || ''}`, infoColDescriptionX + 5, infoTableY + infoTableHeaderHeight + 6, { width: infoColDescriptionWidth - 10, align: 'center' });
 
         // === TABLEAU DES ARTICLES (Réf, Désignation, Qté uniquement) ===
         let y = infoTableY + infoTableTotalHeight + 10;

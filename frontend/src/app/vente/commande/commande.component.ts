@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, OnInit, ViewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { BaseService } from 'src/app/service/base.service';
@@ -12,7 +12,16 @@ import Swal from 'sweetalert2';
   templateUrl: './commande.component.html',
    styleUrls: ['./commande.component.css']
 })
-export class CommandeComponent implements OnInit, AfterViewInit {
+export class CommandeComponent implements OnInit, AfterViewInit, OnDestroy {
+  readonly defaultColumnWidths: Record<string, string> = {
+    numero: '126px',
+    date: '124px',
+    client: '240px',
+    depot: '120px',
+    status: '108px',
+    progression: '165px'
+  };
+  readonly actionColumnWidth = 112;
   devis: any[] = [];
   filteredDevis: any[] = [];
   commandes: any[] = [];
@@ -22,7 +31,7 @@ export class CommandeComponent implements OnInit, AfterViewInit {
   loadingCommandes: boolean = false;
   searchTerm = '';
   searchTermCommandes: string = ''; // Terme de recherche pour les commandes
-  searchTermDevis = ''; // Terme de recherche spécifique pour les devis
+  searchTermDevis = ''; // Terme de recherche sp?cifique pour les devis
   clients: any[] = [];
   filteredClients: any[] = [];
   selectedClient: any = null;
@@ -30,6 +39,7 @@ export class CommandeComponent implements OnInit, AfterViewInit {
   commerciaux: any[] = [];
   filteredCommerciaux: any[] = [];
   selectedCommercial: any = null;
+  depots: any[] = [];
   DevisForm!: FormGroup;
   DevisSupprimes: number[] = [];
   successMessage: string | null = null;
@@ -56,10 +66,10 @@ export class CommandeComponent implements OnInit, AfterViewInit {
   totalPagesCommandes: number = 0;
   
   // Tri pour les commandes
-  sortColumnCommandes: string = 'date';
+  sortColumnCommandes: string = 'document_id';
   sortDirectionCommandes: 'ASC' | 'DESC' = 'DESC';
   
-  // Filtres avancés pour les commandes
+  // Filtres avanc?s pour les commandes
   showAdvancedFiltersCommandes: boolean = false;
   filterDateFromCommandes: string = '';
   
@@ -76,26 +86,34 @@ export class CommandeComponent implements OnInit, AfterViewInit {
     numero: '',
     date: '',
     client: '',
-    commercial: '',
-    description: ''
+    depot: '',
+    status: '',
+    progression: ''
   };
 
   allCommandes: any[] = []; // Stocker toutes les commandes pour le filtrage
 
-  // Gestion des colonnes (affichage/masquage, épinglage, etc.)
+  // Gestion des colonnes (affichage/masquage, ?pinglage, etc.)
   columnVisibility: any = {
     numero: true,
     date: true,
     client: true,
-    commercial: true,
-    description: true
+    depot: true,
+    status: true,
+    progression: true
   };
 
   pinnedColumns: string[] = [];
-  columnWidths: any = {};
+  columnWidths: any = { ...this.defaultColumnWidths };
   showColumnMenu: boolean = false;
   activeColumnMenu: string = '';
   menuPosition: any = { x: 0, y: 0 };
+  resizingColumn: string | null = null;
+  resizeStartX = 0;
+  resizeStartWidth = 0;
+  detailMode: boolean = false;
+  private sidebarStateBeforeDetailMode: boolean | null = null;
+  private sidebarObserver: MutationObserver | null = null;
 
   getSelectedCount(): number {
     const count = this.devis.filter(d => {
@@ -125,19 +143,21 @@ export class CommandeComponent implements OnInit, AfterViewInit {
     this.getCommande();
     this.AllClients();
     this.AllCommerciaux();
+    this.AllDepots();
     this.initForm();
     this.loadNextCommandeNumero(); // Charger le numéro de commande au démarrage
 
-      // Les abonnements valueChanges sont maintenant gérés directement via (input) dans le template
-      // pour éviter les conflits avec [(ngModel)]
+      // Les abonnements valueChanges sont maintenant g?r?s directement via (input) dans le template
+      // pour ?viter les conflits avec [(ngModel)]
   }
 
   initForm(): void {
     this.DevisForm = this.fb.group({
-      date: [new Date().toISOString().split('T')[0]], // Date du jour par défaut
+      date: [this.getCurrentDateTimeLocal()], // Date/heure du jour par défaut
       description: [''],
       part_id: [0, Validators.required], // Client requis
       contact_id: [0], // Commercial non requis
+      depot_id: [null],
       date_fin: [''],
       etat: [2],
 
@@ -147,6 +167,12 @@ export class CommandeComponent implements OnInit, AfterViewInit {
     });
 
     
+  }
+
+  private getCurrentDateTimeLocal(): string {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
   }
 
   ngAfterViewInit(): void {
@@ -160,19 +186,19 @@ export class CommandeComponent implements OnInit, AfterViewInit {
       }
     });
 
-    // Ne rien faire ici, on initialise dans getClients après chargement
-    // Ajuster les colonnes lorsque le modal est affiché pour que DataTables calcule correctement les largeurs
+    // Ne rien faire ici, on initialise dans getClients apr?s chargement
+    // Ajuster les colonnes lorsque le modal est affich? pour que DataTables calcule correctement les largeurs
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const anyWindow = window as any;
-    // @ts-ignore - jQuery disponible globalement à l'exécution
+    // @ts-ignore - jQuery disponible globalement ? l'ex?cution
     if (typeof ($) !== 'undefined') {
       // @ts-ignore
       $('#modalDevisCommandeXL').on('shown.bs.modal', () => {
-        // Recharger les devis non transférés à chaque ouverture de la popup
+        // Recharger les devis non transférés ? chaque ouverture de la popup
         this.getDevisNonTransferes();
       });
 
-      // @ts-ignore - Recharger le numéro de commande à chaque ouverture du modal
+      // @ts-ignore - Recharger le numéro de commande ? chaque ouverture du modal
       $('#addClientModal').on('shown.bs.modal', () => {
         this.loadNextCommandeNumero();
         // Réinitialiser le formulaire
@@ -180,7 +206,7 @@ export class CommandeComponent implements OnInit, AfterViewInit {
         this.initForm();
       });
 
-      // @ts-ignore - Réinitialiser le formulaire à la fermeture du modal
+      // @ts-ignore - Réinitialiser le formulaire ? la fermeture du modal
       $('#addClientModal').on('hidden.bs.modal', () => {
         this.DevisForm.reset();
         this.initForm();
@@ -189,6 +215,17 @@ export class CommandeComponent implements OnInit, AfterViewInit {
         this.filteredClients = [];
         this.filteredCommerciaux = [];
       });
+    }
+
+    this.startSidebarObserver();
+  }
+
+  ngOnDestroy(): void {
+    this.onDocumentMouseUp();
+    this.sidebarObserver?.disconnect();
+    this.sidebarObserver = null;
+    if (this.detailMode && this.sidebarStateBeforeDetailMode === false) {
+      this.setSidebarHidden(false);
     }
   }
 
@@ -206,7 +243,7 @@ export class CommandeComponent implements OnInit, AfterViewInit {
     });
   }
 
-  // Méthode pour obtenir le numéro (utilisée dans le template)
+  // M?thode pour obtenir le numéro (utilis?e dans le template)
   getNextLigne(): string { 
     return this.nextCommandeNumero;
 }
@@ -230,7 +267,7 @@ export class CommandeComponent implements OnInit, AfterViewInit {
         });
 
       }, 0);
-      this.loading = false; // ✅ on cache le spinner après le chargement
+      this.loading = false; // OK on cache le spinner apr?s le chargement
     });
   }
 
@@ -240,7 +277,7 @@ export class CommandeComponent implements OnInit, AfterViewInit {
     this.ventesService.getDevisNonTransferes().subscribe({
       next: (response: any) => {
         
-      // Préserver l'état checked des devis existants
+      // Pr?server l'?tat checked des devis existants
       const existingChecked = new Map();
       this.devis.forEach(d => {
         if (d.checked) {
@@ -248,7 +285,7 @@ export class CommandeComponent implements OnInit, AfterViewInit {
         }
       });
 
-        // Gérer la réponse qui peut être { success: true, data: [...] } ou directement un tableau
+        // G?rer la r?ponse qui peut ?tre { success: true, data: [...] } ou directement un tableau
         let data = response;
         if (response && response.data && Array.isArray(response.data)) {
           data = response.data;
@@ -266,7 +303,7 @@ export class CommandeComponent implements OnInit, AfterViewInit {
       // Appliquer le filtre et la pagination
       this.applyFilterAndPagination();
       
-      this.loading = false; // ✅ on cache le spinner après le chargement
+      this.loading = false; // OK on cache le spinner apr?s le chargement
       },
       error: (error) => {
       this.loading = false;
@@ -326,7 +363,7 @@ export class CommandeComponent implements OnInit, AfterViewInit {
     this.filteredDevis = filtered.slice(this.startIndex, this.endIndex);
   }
   
-  // Méthodes pour la pagination
+  // M?thodes pour la pagination
   goToPage(page: number): void {
     if (page >= 1 && page <= this.totalPages) {
       this.currentPage = page;
@@ -344,7 +381,7 @@ export class CommandeComponent implements OnInit, AfterViewInit {
     this.applyFilterAndPagination();
   }
   
-  // Méthode pour le tri
+  // M?thode pour le tri
   sortBy(column: string): void {
     if (this.sortColumn === column) {
       this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
@@ -355,22 +392,22 @@ export class CommandeComponent implements OnInit, AfterViewInit {
     this.applyFilterAndPagination();
   }
   
-  // Vérifier si tous les devis sont sélectionnés
+  // V?rifier si tous les devis sont sélectionnés
   isAllSelected(): boolean {
     if (this.filteredDevis.length === 0) return false;
     return this.filteredDevis.every(d => d.checked);
   }
 
-  // Méthode utilitaire pour nettoyer DataTables
+  // M?thode utilitaire pour nettoyer DataTables
   private destroyDataTableCommande(): void {
     try {
-      // Détruire l'instance TypeScript si elle existe
+      // D?truire l'instance TypeScript si elle existe
       if (this.dataTableCommande) {
         this.dataTableCommande.destroy();
         this.dataTableCommande = null;
       }
       
-      // Vérifier et détruire via jQuery si nécessaire
+      // V?rifier et d?truire via jQuery si n?cessaire
       // @ts-ignore - jQuery DataTables disponible globalement
       if (typeof $ !== 'undefined' && $.fn.DataTable) {
         // @ts-ignore
@@ -381,8 +418,8 @@ export class CommandeComponent implements OnInit, AfterViewInit {
         }
       }
       
-      // NE PAS vider le tbody manuellement - laisser Angular gérer via *ngFor
-      // Angular va automatiquement mettre à jour le DOM quand this.commandes change
+      // NE PAS vider le tbody manuellement - laisser Angular g?rer via *ngFor
+      // Angular va automatiquement mettre ? jour le DOM quand this.commandes change
     } catch (e) {
     }
   }
@@ -409,14 +446,28 @@ export class CommandeComponent implements OnInit, AfterViewInit {
         const result = response.data || [];
         const pagination = response.pagination || {};
         
-        const commandesData = Array.isArray(result) ? result : [];
+        const commandesData = (Array.isArray(result) ? result : []).map((d: any) => {
+          const progressionPreparation = Number(d?.progression_preparation || 0);
+          const mapped = {
+            ...d,
+            quantite_demandee_preparation: Number(d?.quantite_demandee_preparation || 0),
+            quantite_preparee_preparation: Number(d?.quantite_preparee_preparation || 0),
+            progression_preparation: progressionPreparation
+          };
+
+          return {
+            ...mapped,
+            status: progressionPreparation >= 100 ? 'Traité' : (d?.status ?? d?.Status ?? null),
+            progression: this.getCommandeProgressLabel(mapped)
+          };
+        });
         this.totalRecordsCommandes = pagination.total || 0;
         this.totalPagesCommandes = pagination.totalPages || 1;
         
         // Extraire la liste des clients uniques pour le filtre
         this.extractClientsListCommandes(commandesData);
         
-        // Appliquer les filtres avancés côté client
+        // Appliquer les filtres avanc?s c?t? client
         this.commandes = this.applyAdvancedFiltersCommandes(commandesData).map((d: any) => ({ ...d, checked: false }));
         this.allCommandes = [...this.commandes]; // Stocker une copie pour les filtres locaux
         
@@ -427,7 +478,7 @@ export class CommandeComponent implements OnInit, AfterViewInit {
         this.cdr.detectChanges();
       },
       error: (err) => {
-        this.showError("❌ Une erreur s'est produite lors du chargement des commandes.");
+        this.showError("Erreur Une erreur s'est produite lors du chargement des commandes.");
         this.loadingCommandes = false;
         this.commandes = [];
         this.allCommandes = [];
@@ -440,7 +491,7 @@ export class CommandeComponent implements OnInit, AfterViewInit {
     this.loadCommandes();
   }
 
-  // Méthodes de pagination pour les commandes
+  // M?thodes de pagination pour les commandes
   onPageChangeCommandes(page: number): void {
     if (page >= 1 && page <= this.totalPagesCommandes && page !== this.currentPageCommandes) {
       this.loadCommandes(page, this.searchTermCommandes);
@@ -485,7 +536,64 @@ export class CommandeComponent implements OnInit, AfterViewInit {
   getDisplayRangeCommandes(): string {
     const start = ((this.currentPageCommandes - 1) * this.pageSizeCommandes) + 1;
     const end = Math.min(this.currentPageCommandes * this.pageSizeCommandes, this.totalRecordsCommandes);
-    return `${start} à ${end}`;
+    return `${start} ? ${end}`;
+  }
+
+  toggleDetailMode(): void {
+    if (!this.detailMode) {
+      this.sidebarStateBeforeDetailMode = this.isSidebarHidden();
+    }
+
+    this.detailMode = !this.detailMode;
+    this.applyDetailMode();
+  }
+
+  private applyDetailMode(): void {
+    if (this.detailMode) {
+      this.setSidebarHidden(true);
+      return;
+    }
+
+    if (this.sidebarStateBeforeDetailMode === false) {
+      this.setSidebarHidden(false);
+    }
+    this.sidebarStateBeforeDetailMode = null;
+  }
+
+  private isSidebarHidden(): boolean {
+    return !!document.querySelector('.wrapper.sidebar-hidden-desktop');
+  }
+
+  private setSidebarHidden(hidden: boolean): void {
+    const currentlyHidden = this.isSidebarHidden();
+    if (currentlyHidden === hidden) {
+      return;
+    }
+
+    const selector = hidden ? '.toggle-sidebar' : '.btn-sidebar-toggle-float, .toggle-sidebar';
+    const toggleButton = document.querySelector(selector) as HTMLElement | null;
+    toggleButton?.click();
+  }
+
+  private startSidebarObserver(): void {
+    const wrapper = document.querySelector('.wrapper');
+    if (!wrapper) {
+      return;
+    }
+
+    this.sidebarObserver?.disconnect();
+    this.sidebarObserver = new MutationObserver(() => {
+      if (this.detailMode && !this.isSidebarHidden()) {
+        this.detailMode = false;
+        this.applyDetailMode();
+        this.cdr.detectChanges();
+      }
+    });
+
+    this.sidebarObserver.observe(wrapper, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
   }
 
   // Tri par colonne pour les commandes
@@ -506,7 +614,7 @@ export class CommandeComponent implements OnInit, AfterViewInit {
     return this.sortDirectionCommandes === 'ASC' ? 'fa-sort-up' : 'fa-sort-down';
   }
 
-  // Filtres avancés pour les commandes
+  // Filtres avanc?s pour les commandes
   toggleAdvancedFiltersCommandes(): void {
     this.showAdvancedFiltersCommandes = !this.showAdvancedFiltersCommandes;
   }
@@ -565,13 +673,14 @@ export class CommandeComponent implements OnInit, AfterViewInit {
 
   // Export des données pour les commandes
   exportToCSVCommandes(): void {
-    const headers = ['Numéro', 'Date', 'Client', 'Commercial', 'Description'];
+    const headers = ['Numero', 'Date', 'Client', 'Depot', 'Status', 'Progression'];
     const rows = this.commandes.map(c => [
       c.numero || '',
       c.date ? new Date(c.date).toLocaleDateString('fr-FR') : '',
       c.client || '',
-      c.commercial || '',
-      c.description || ''
+      c.depot || '',
+      c.status ?? '',
+      this.getCommandeProgressLabel(c)
     ]);
 
     const csvContent = [
@@ -589,13 +698,13 @@ export class CommandeComponent implements OnInit, AfterViewInit {
     link.click();
     document.body.removeChild(link);
     
-    this.showNotification('✅ Export CSV réussi !', false);
+    this.showNotification('OK Export CSV réussi !', false);
   }
 
-  // Méthode pour initialiser DataTables
+  // M?thode pour initialiser DataTables
   private initializeDataTable(): void {
     try {
-      // Vérifier que le tableau existe et contient des lignes
+      // V?rifier que le tableau existe et contient des lignes
       // @ts-ignore - jQuery disponible globalement
       const tbody = $('#devisTable-Commande tbody');
       const rowCount = tbody.find('tr').length;
@@ -604,15 +713,15 @@ export class CommandeComponent implements OnInit, AfterViewInit {
         return;
       }
       
-      // Réinitialiser DataTables avec l'option destroy pour éviter les conflits
+      // Réinitialiser DataTables avec l'option destroy pour ?viter les conflits
       // @ts-ignore - jQuery DataTables
       this.dataTableCommande = $('#devisTable-Commande').DataTable({
         pageLength: 10,
         order: [0, 'desc'],
         searching: true,
         lengthChange: true,
-        destroy: true, // Permet de réinitialiser proprement si une instance existe déjà
-        paging: true, // S'assurer que la pagination est activée
+        destroy: true, // Permet de r?initialiser proprement si une instance existe déjà
+        paging: true, // S'assurer que la pagination est activ?e
         info: true, // Afficher les informations de pagination
         retrieve: false, // Ne pas récupérer une instance existante
         language: {
@@ -631,9 +740,9 @@ export class CommandeComponent implements OnInit, AfterViewInit {
       // Forcer le redraw pour s'assurer que toutes les lignes sont visibles
       // @ts-ignore
       if (this.dataTableCommande) {
-        this.dataTableCommande.draw(false); // false = ne pas réinitialiser la pagination
+        this.dataTableCommande.draw(false); // false = ne pas r?initialiser la pagination
         
-        // Vérifier le nombre de lignes après l'initialisation
+        // V?rifier le nombre de lignes apr?s l'initialisation
         const rowCountAfterInit = this.dataTableCommande.rows().count();
         
         if (rowCountAfterInit === 0 && this.commandes.length > 0) {
@@ -646,16 +755,16 @@ export class CommandeComponent implements OnInit, AfterViewInit {
   toggleAllDevis(event: Event) {
     this.isSelectingAll = true;
     const checked = (event.target as HTMLInputElement).checked;
-    // Mettre à jour explicitement chaque devis dans filteredDevis (seulement ceux visibles)
+    // Mettre ? jour explicitement chaque devis dans filteredDevis (seulement ceux visibles)
     this.filteredDevis.forEach((d) => {
       d.checked = checked;
-      // Mettre à jour aussi dans devis principal
+      // Mettre ? jour aussi dans devis principal
       const index = this.devis.findIndex(devis => devis.document_id === d.document_id);
       if (index !== -1) {
         this.devis[index].checked = checked;
       }
     });
-    // Ne pas ouvrir de pop-up pour "Sélectionner tout" - l'utilisateur utilisera le bouton "Transférer"
+    // Ne pas ouvrir de pop-up pour "S?lectionner tout" - l'utilisateur utilisera le bouton "Transf?rer"
     setTimeout(() => {
       this.isSelectingAll = false;
     }, 100);
@@ -664,15 +773,15 @@ export class CommandeComponent implements OnInit, AfterViewInit {
   onDevisCheckboxChange(devis: any, event: Event) {
     const checked = (event.target as HTMLInputElement).checked;
     
-    // Trouver l'index dans le tableau et mettre à jour directement
+    // Trouver l'index dans le tableau et mettre ? jour directement
     const index = this.devis.findIndex(d => d.document_id === devis.document_id);
     if (index !== -1) {
-      // Mettre à jour directement dans le tableau
+      // Mettre ? jour directement dans le tableau
       this.devis[index].checked = checked;
-      // Mettre à jour aussi l'objet passé en paramètre (pour cohérence)
+      // Mettre ? jour aussi l'objet pass? en param?tre (pour coh?rence)
       devis.checked = checked;
       
-      // Mettre à jour aussi dans filteredDevis
+      // Mettre ? jour aussi dans filteredDevis
       const filteredIndex = this.filteredDevis.findIndex(d => d.document_id === devis.document_id);
       if (filteredIndex !== -1) {
         this.filteredDevis[filteredIndex].checked = checked;
@@ -680,30 +789,30 @@ export class CommandeComponent implements OnInit, AfterViewInit {
       
     } else {
     }
-    // Ne plus déclencher automatiquement le transfert - l'utilisateur doit cliquer sur le bouton "Transférer"
+    // Ne plus déclencher automatiquement le transfert - l'utilisateur doit cliquer sur le bouton "Transf?rer"
   }
 
-  // Cette méthode n'est plus utilisée - le transfert se fait via transfererSelectionnes()
-  // Mais on la garde pour référence si besoin de transfert individuel direct
+  // Cette méthode n'est plus utilis?e - le transfert se fait via transfererSelectionnes()
+  // Mais on la garde pour r?f?rence si besoin de transfert individuel direct
   transfererDevis(devis: any) {
     this.ventesService.transfererDevisVersCommande(devis.document_id).subscribe({
       next: (response: any) => {
-        this.showSuccess(`✅ Devis ${devis.numero} transféré en commande ${response.numero} avec succès !`);
+        this.showSuccess(`OK Devis ${devis.numero} transféré en commande ${response.numero} avec succès !`);
         devis.checked = false;
         this.getDevisNonTransferes(); // Rafraîchir la liste des devis non transférés
                 this.loadCommandes(); // Rafraîchir la liste des commandes
       },
       error: (err) => {
-        this.showError(`❌ Une erreur s'est produite lors du transfert du devis ${devis.numero}.`);
+        this.showError(`Erreur Une erreur s'est produite lors du transfert du devis ${devis.numero}.`);
         devis.checked = false;
       }
     });
   }
 
   transfererSelectionnes() {
-    // Filtrer les devis cochés en vérifiant explicitement l'état
+    // Filtrer les devis cochés en v?rifiant explicitement l'?tat
     const devisSelectionnes = this.devis.filter(d => {
-      // Vérifier plusieurs façons d'accéder à la propriété checked
+      // V?rifier plusieurs façons d'acc?der ? la propriété checked
       const isChecked = d.checked === true || d.checked === 'true' || d.checked === 1;
       if (isChecked) {
       }
@@ -755,9 +864,9 @@ export class CommandeComponent implements OnInit, AfterViewInit {
           
           if (completed + errors === total) {
             if (errors === 0) {
-              this.showSuccess(`✅ ${completed} devis transférés avec succès !`);
+              this.showSuccess(`OK ${completed} devis transférés avec succès !`);
             } else {
-              this.showError(`⚠️ ${completed} devis transférés, ${errors} erreurs.`);
+              this.showError(`Attention ${completed} devis transférés, ${errors} erreurs.`);
             }
             this.getDevisNonTransferes(); // Rafraîchir la liste des devis non transférés
             this.getCommande();
@@ -769,9 +878,9 @@ export class CommandeComponent implements OnInit, AfterViewInit {
           
           if (completed + errors === total) {
             if (completed > 0) {
-              this.showError(`⚠️ ${completed} devis transférés, ${errors} erreurs.`);
+              this.showError(`Attention ${completed} devis transférés, ${errors} erreurs.`);
             } else {
-              this.showError(`❌ Aucun devis n'a pu être transféré.`);
+              this.showError(`Erreur Aucun devis n'a pu être transféré.`);
             }
             this.getDevisNonTransferes(); // Rafraîchir la liste des devis non transférés
             this.getCommande();
@@ -787,28 +896,63 @@ export class CommandeComponent implements OnInit, AfterViewInit {
 }
 
   OnEdit(document_id: any) {
-    // Fermer le modal s'il est ouvert pour éviter que le backdrop reste affiché
+    // Fermer le modal s'il est ouvert pour ?viter que le backdrop reste affich?
     this.closeModalIfOpen('modalDevisCommandeXL');
     this.router.navigate(['/Edit-Devis/' + document_id]);
   }
 
   OnEditCommande(document_id: any) {
-    // Fermer le modal s'il est ouvert pour éviter que le backdrop reste affiché
+    // Fermer le modal s'il est ouvert pour ?viter que le backdrop reste affich?
     this.closeModalIfOpen('modalDevisCommandeXL');
     this.router.navigate(['/Edit-Commande/' + document_id]);
   }
 
   OnPrintCommande(document_id: any) {
-    // Générer et ouvrir le PDF de la commande
+    const pendingPdfWindow = window.open('', '_blank');
+    if (pendingPdfWindow) {
+      pendingPdfWindow.document.title = 'Generation du PDF';
+      pendingPdfWindow.document.body.innerHTML = `
+        <div style="font-family: Arial, sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f8fafc; color: #0f172a;">
+          <div style="text-align: center; padding: 32px;">
+            <div style="width: 56px; height: 56px; border: 4px solid #cbd5e1; border-top-color: #2563eb; border-radius: 50%; margin: 0 auto 16px; animation: spin 0.9s linear infinite;"></div>
+            <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">Generation du PDF...</div>
+            <div style="font-size: 14px; color: #475569;">Le document va s'afficher dans cet onglet.</div>
+          </div>
+        </div>
+        <style>
+          @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        </style>
+      `;
+    }
+
+    Swal.fire({
+      title: 'Generation du PDF',
+      text: 'Veuillez patienter...',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    // G?n?rer et ouvrir le PDF de la commande
     this.emailService.generateCommandePDF(document_id.toString()).subscribe({
       next: (res: any) => {
+        Swal.close();
         if (res?.pdfUrl) {
-          window.open(res.pdfUrl, '_blank');
+          if (pendingPdfWindow && !pendingPdfWindow.closed) {
+            pendingPdfWindow.location.href = res.pdfUrl;
+          } else {
+            window.open(res.pdfUrl, '_blank');
+          }
         } else {
+          pendingPdfWindow?.close();
           Swal.fire({ icon: 'error', title: 'Erreur', text: 'Lien PDF non reçu.' });
         }
       },
       error: (err: any) => {
+        Swal.close();
+        pendingPdfWindow?.close();
         Swal.fire({ icon: 'error', title: 'Erreur', text: "Erreur lors de la génération du PDF." });
       }
     });
@@ -817,7 +961,7 @@ export class CommandeComponent implements OnInit, AfterViewInit {
   AllClients() {
     this.baseService.getClient().subscribe({
       next: (data) => {
-        // Gérer différents formats de réponse
+        // G?rer différents formats de r?ponse
         let clientsData = data;
         if (data && data.data && Array.isArray(data.data)) {
           clientsData = data.data;
@@ -827,7 +971,7 @@ export class CommandeComponent implements OnInit, AfterViewInit {
           clientsData = [];
         }
         
-        this.clients = clientsData;
+        this.clients = (clientsData || []).filter((client: any) => Number(client?.type) === 1);
         this.filteredClients = [];
       },
       error: (err) => {
@@ -862,7 +1006,7 @@ export class CommandeComponent implements OnInit, AfterViewInit {
   );
 }
 
- selectClient(client: any) {
+  selectClient(client: any) {
   if (!client || !client.part_id) {
     return;
   }
@@ -874,10 +1018,22 @@ export class CommandeComponent implements OnInit, AfterViewInit {
   this.searchTerm = client.nom;
 }
 
+  AllDepots() {
+    this.baseService.getDepots().subscribe({
+      next: (response: any) => {
+        const data = response?.data || (Array.isArray(response) ? response : []);
+        this.depots = Array.isArray(data) ? data : [];
+      },
+      error: () => {
+        this.depots = [];
+      }
+    });
+  }
+
   AllCommerciaux() {
     this.baseService.getCommercial().subscribe({
       next: (data) => {
-        // Gérer différents formats de réponse
+        // G?rer différents formats de r?ponse
         let commerciauxData = data;
         if (data && data.data && Array.isArray(data.data)) {
           commerciauxData = data.data;
@@ -938,13 +1094,14 @@ export class CommandeComponent implements OnInit, AfterViewInit {
     if (this.DevisForm.valid) {
       const formValue = {
         ...this.DevisForm.value,
+        depot_id: this.DevisForm.value?.depot_id ? Number(this.DevisForm.value.depot_id) : null,
         etat: 2  // État pour une commande
       };
       
       // Utiliser addCommande au lieu de addDevis pour créer une commande avec etat=2
       this.ventesService.addCommande(formValue).subscribe({
         next: (response: any) => {
-          this.showSuccess(`✅ Commande ${response.numero || ''} créée avec succès !`);
+          this.showSuccess(`OK Commande ${response.numero || ''} créée avec succès !`);
           // Fermer le modal et recharger les données
           const modal = document.getElementById('addClientModal');
           if (modal) {
@@ -961,11 +1118,11 @@ export class CommandeComponent implements OnInit, AfterViewInit {
           this.loadNextCommandeNumero(); // Recharger le prochain numéro
         },
         error: (err) => {
-          this.showError(`❌ Une erreur s'est produite lors de la création de la commande: ${err.error?.message || err.message || 'Erreur inconnue'}`);
+          this.showError(`Erreur Une erreur s'est produite lors de la création de la commande: ${err.error?.message || err.message || 'Erreur inconnue'}`);
         }
       });
     } else {
-      this.showError("❗ Le formulaire est invalide. Veuillez remplir tous les champs requis.");
+      this.showError("Le formulaire est invalide. Veuillez remplir tous les champs requis.");
       // Afficher les erreurs de validation
       Object.keys(this.DevisForm.controls).forEach(key => {
         const control = this.DevisForm.get(key);
@@ -1028,7 +1185,7 @@ export class CommandeComponent implements OnInit, AfterViewInit {
       // Ignore et fallback nettoyage manuel
     }
 
-    // Nettoyage de secours du backdrop si nécessaire
+    // Nettoyage de secours du backdrop si n?cessaire
     setTimeout(() => {
       try {
         // @ts-ignore
@@ -1057,7 +1214,7 @@ get commercialSearchControl() {
       next: (res: { message: string }) => {
         this.showNotification(res.message, false);
 
-        // ❗️Supprime l'élément du tableau local pour mise à jour immédiate de la vue
+        // Supprime l'élément du tableau local pour mise à jour immédiate de la vue
         this.devis.splice(index, 1);
 
         this.DevisSupprimes = [];
@@ -1069,7 +1226,7 @@ get commercialSearchControl() {
   }
 }
 
-  // Méthode pour supprimer une commande avec confirmation
+  // M?thode pour supprimer une commande avec confirmation
   removeCommande(commande: any, index: number) {
     // Afficher la pop-up de confirmation
     Swal.fire({
@@ -1105,7 +1262,7 @@ get commercialSearchControl() {
                   confirmButton: 'btn btn-success'
                 },
                 buttonsStyling: false,
-                timer: 2000, // Fermer automatiquement après 2 secondes
+                timer: 2000, // Fermer automatiquement apr?s 2 secondes
                 timerProgressBar: true
               }).then(() => {
                 // Recharger les commandes avec pagination au lieu de recharger toute la page
@@ -1178,8 +1335,9 @@ showNotification(message: string, isError: boolean = false) {
       numero: '',
       date: '',
       client: '',
-      commercial: '',
-      description: ''
+      depot: '',
+      status: '',
+      progression: ''
     };
     this.applyColumnFilters();
   }
@@ -1223,13 +1381,13 @@ showNotification(message: string, isError: boolean = false) {
   }
 
   autoSizeColumn(column: string): void {
-    this.columnWidths[column] = 'auto';
+    this.columnWidths[column] = this.defaultColumnWidths[column] || 'auto';
     this.hideColumnContextMenu();
   }
 
   autoSizeAllColumns(): void {
     Object.keys(this.columnVisibility).forEach(column => {
-      this.columnWidths[column] = 'auto';
+      this.columnWidths[column] = this.defaultColumnWidths[column] || 'auto';
     });
     this.hideColumnContextMenu();
   }
@@ -1239,12 +1397,64 @@ showNotification(message: string, isError: boolean = false) {
       numero: true,
       date: true,
       client: true,
-      commercial: true,
-      description: true
+      depot: true,
+      status: true,
+      progression: true
     };
     this.pinnedColumns = [];
-    this.columnWidths = {};
+    this.columnWidths = { ...this.defaultColumnWidths };
     this.hideColumnContextMenu();
+  }
+
+  startColumnResize(event: MouseEvent, column: string, headerEl: HTMLElement): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.resizingColumn = column;
+    this.resizeStartX = event.clientX;
+    const currentWidth = headerEl?.offsetWidth || parseInt(String(this.columnWidths[column] || ''), 10) || 160;
+    this.resizeStartWidth = currentWidth;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  @HostListener('document:mousemove', ['$event'])
+  onDocumentMouseMove(event: MouseEvent): void {
+    if (!this.resizingColumn) {
+      return;
+    }
+
+    const delta = event.clientX - this.resizeStartX;
+    const minByColumn: any = {
+      numero: 126,
+      date: 124,
+      client: 220,
+      depot: 110,
+      status: 100,
+      progression: 150
+    };
+    const maxByColumn: any = {
+      numero: 220,
+      date: 180,
+      client: 900,
+      depot: 260,
+      status: 220,
+      progression: 420
+    };
+    const minWidth = minByColumn[this.resizingColumn] ?? 90;
+    const maxWidth = maxByColumn[this.resizingColumn] ?? 600;
+    const nextWidth = Math.max(minWidth, Math.min(maxWidth, this.resizeStartWidth + delta));
+    this.columnWidths[this.resizingColumn] = `${nextWidth}px`;
+  }
+
+  @HostListener('document:mouseup')
+  onDocumentMouseUp(): void {
+    if (!this.resizingColumn) {
+      return;
+    }
+
+    this.resizingColumn = null;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
   }
 
   getColumnIndex(column: string): number {
@@ -1254,13 +1464,29 @@ showNotification(message: string, isError: boolean = false) {
 
   getColumnDisplayName(column: string): string {
     const names: any = {
-      numero: 'Numéro',
+      numero: 'Numero',
       date: 'Date',
       client: 'Client',
-      commercial: 'Commercial',
-      description: 'Description'
+      depot: 'Depot',
+      status: 'Status',
+      progression: 'Progression'
     };
     return names[column] || column;
+  }
+
+  getColumnWidth(column: string): string {
+    return this.columnWidths[column] || this.defaultColumnWidths[column] || 'auto';
+  }
+
+  getTableMinWidth(): number {
+    const visibleColumns = Object.keys(this.columnVisibility).filter((key) => this.columnVisibility[key]);
+    const total = visibleColumns.reduce((sum, column) => {
+      const rawWidth = this.getColumnWidth(column);
+      const width = parseInt(String(rawWidth || '').replace('px', ''), 10);
+      return sum + (Number.isFinite(width) ? width : 0);
+    }, 0);
+
+    return total + this.actionColumnWidth + 24;
   }
 
   getAllColumns(): string[] {
@@ -1284,4 +1510,48 @@ showNotification(message: string, isError: boolean = false) {
     event.stopPropagation();
     this.showColumnContextMenu(event, column);
   }
+
+  formatStatus(value: any): string {
+    if (value === null || value === undefined || value === '') {
+      return '-';
+    }
+    return String(value);
+  }
+
+  getCommandeStatusBadgeClass(item: any): string {
+    const status = String(item?.status ?? item?.Status ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    if (status === 'traite' || status === 'traitee') {
+      return 'badge bg-success';
+    }
+    return 'badge bg-secondary';
+  }
+
+  getCommandeProgressPercent(item: any): number {
+    const percent = Number(item?.progression_preparation || 0);
+    if (!Number.isFinite(percent) || percent <= 0) {
+      return 0;
+    }
+
+    return Math.max(0, Math.min(100, percent));
+  }
+
+  getCommandeProgressLabel(item: any): string {
+    const prepared = Number(item?.quantite_preparee_preparation || 0);
+    const demanded = Number(item?.quantite_demandee_preparation || 0);
+    const percent = Number(item?.progression_preparation || 0);
+
+    if (!Number.isFinite(demanded) || demanded <= 0) {
+      return '0 / 0 (0%)';
+    }
+
+    const safePrepared = Number.isFinite(prepared) ? Math.max(0, prepared) : 0;
+    const displayPrepared = Math.min(safePrepared, demanded);
+    const safePercent = Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 0;
+    return `${displayPrepared.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} / ${demanded.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} (${safePercent.toFixed(0)}%)`;
+  }
 }
+
+
+
+
+

@@ -164,6 +164,10 @@ table.grise {
   overflow: hidden;
 }
 
+.commande-container .products-panel {
+  overflow: visible;
+}
+
 .commande-container .btn {
   border-radius: 10px;
   font-weight: 600;
@@ -340,6 +344,56 @@ table.grise {
   border-color: #e67e22;
   box-shadow: 0 0 0 2px rgba(230, 126, 34, 0.1);
   outline: none;
+}
+
+.commande-container .table-responsive {
+  overflow: visible !important;
+}
+
+.commande-container .table {
+  overflow: visible;
+}
+
+.commande-container .products-table-wrap {
+  max-height: none;
+  overflow: visible !important;
+}
+
+.commande-container .table tbody td {
+  overflow: visible;
+}
+
+.commande-container .product-search-cell {
+  min-width: 0;
+  width: 100%;
+  position: relative;
+  z-index: 50;
+}
+
+.commande-container .product-autocomplete-dropdown {
+  margin-top: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 3000;
+  border: 1px solid rgba(230, 126, 34, 0.14);
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.14) !important;
+  overflow-x: hidden;
+}
+
+.commande-container .product-autocomplete-item {
+  text-align: left;
+  padding: 10px 12px;
+  line-height: 1.25;
+  cursor: pointer;
+}
+
+.commande-container .product-autocomplete-item:hover {
+  background: #fff4ea;
+}
+
+.commande-container .product-autocomplete-item.active {
+  background: linear-gradient(135deg, #e67e22 0%, #d35400 100%);
+  color: white;
 }
 
 .commande-container textarea.form-control {

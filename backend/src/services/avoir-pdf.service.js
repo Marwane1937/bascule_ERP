@@ -224,6 +224,8 @@ class AvoirPdfService {
 
                 // Récupérer la taille du logo depuis la configuration
                 const logoSize = options.documentSociete?.logoSize || { width: 100, height: null };
+                const configuredLogoTop = Number(options.documentSociete?.logoTop);
+                const logoTop = Number.isFinite(configuredLogoTop) ? configuredLogoTop : 14;
                 const imageOptions = { width: logoSize.width };
                 if (logoSize.height) {
                     imageOptions.height = logoSize.height;
@@ -233,14 +235,14 @@ class AvoirPdfService {
                 if (options.documentSociete && options.documentSociete.logo) {
                     try {
                         const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-                        doc.image(logoBuffer, 50, 20, imageOptions);
+                        doc.image(logoBuffer, 50, logoTop, imageOptions);
                     } catch (error) {
-                        const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-                        if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
+                        const logoPath = options.documentSociete?.logoPath;
+                        if (logoPath && fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop, imageOptions);
                     }
                 } else {
-                    const logoPath = path.join(__dirname, '..', 'public', 'logo-bascule.jpg');
-                    if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
+                    const logoPath = options.documentSociete?.logoPath;
+                    if (logoPath && fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop, imageOptions);
                 }
 
                 // Header

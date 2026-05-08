@@ -50,7 +50,10 @@ const getNextAvoirNumero = async (req, res) => {
 const createAvoirFinancier = async (req, res) => {
   try {
     const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
-    const newAvoir = await avoirService.createAvoirFinancier(req.body, sequelize);
+    const newAvoir = await avoirService.createAvoirFinancier({
+      ...req.body,
+      user_id: req.user?.id || req.user?.user_id || null
+    }, sequelize);
     res.status(201).json(newAvoir);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -60,7 +63,10 @@ const createAvoirFinancier = async (req, res) => {
 const createAvoirMarchandise = async (req, res) => {
   try {
     const sequelize = req.sequelize || databaseSwitchService.getConnectionToUse();
-    const newAvoir = await avoirService.createAvoirMarchandise(req.body, sequelize);
+    const newAvoir = await avoirService.createAvoirMarchandise({
+      ...req.body,
+      user_id: req.user?.id || req.user?.user_id || null
+    }, sequelize);
     res.status(201).json(newAvoir);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -100,6 +106,5 @@ module.exports = {
   updateAvoir,
   deleteAvoir
 };
-
 
 

@@ -4,6 +4,12 @@ const stockController = require('../controllers/stock.controller');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const databaseInjector = require('../middleware/database-injector.middleware');
 
+router.get(
+  '/preparations/:id/pdf',
+  databaseInjector.injectConnection.bind(databaseInjector),
+  stockController.printPreparationPdf
+);
+
 // Toutes les routes nécessitent une authentification
 router.use(authenticateToken);
 
@@ -25,6 +31,17 @@ router.get('/articles-stock', stockController.getArticlesStock);
 router.get('/etat-stock', stockController.getEtatStock);
 router.get('/fiche-stock/:articleId', stockController.getFicheStock);
 router.get('/chiffre-affaires-articles', stockController.getChiffreAffairesArticles);
+router.get('/entrepots', stockController.getEntrepotResume);
+router.get('/entrepots/:depotId/details', stockController.getEntrepotDetails);
+router.get('/preparations', stockController.getPreparations);
+router.get('/preparations/next-numero', stockController.getNextPreparationNumero);
+router.get('/preparations/commandes-disponibles', stockController.getCommandesDisponiblesPourPreparation);
+router.get('/preparations/article-search', stockController.searchPreparationArticles);
+router.post('/preparations', stockController.createPreparation);
+router.get('/preparations/:id', stockController.getPreparationById);
+router.put('/preparations/:id', stockController.updatePreparationHeader);
+router.post('/preparations/:id/lignes', stockController.savePreparationLines);
+router.post('/preparations/:id/transfer-to-livraison', stockController.transfererPreparationVersLivraison);
 
 // Routes d'export
 router.get('/etat-stock/export/:format', stockController.exportEtatStock);
@@ -56,6 +73,3 @@ router.post('/inventaire/:id/valider', stockController.validerInventaire);
 router.post('/inventaire/:id/validation-finale', stockController.validationFinaleInventaire);
 
 module.exports = router;
-
-
-

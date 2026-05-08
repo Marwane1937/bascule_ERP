@@ -171,6 +171,8 @@ class ReceptionPdfService {
         // === ENTÊTE ENTREPRISE ===
         // Récupérer la taille du logo depuis la configuration
         const logoSize = options.documentSociete?.logoSize || { width: 100, height: null };
+        const configuredLogoTop = Number(options.documentSociete?.logoTop);
+        const logoTop = Number.isFinite(configuredLogoTop) ? configuredLogoTop : 14;
         const imageOptions = { width: logoSize.width };
         if (logoSize.height) {
           imageOptions.height = logoSize.height;
@@ -179,15 +181,15 @@ class ReceptionPdfService {
         if (options.documentSociete && options.documentSociete.logo) {
           try {
             const logoBuffer = Buffer.from(options.documentSociete.logo, 'base64');
-            doc.image(logoBuffer, 50, 20, imageOptions);
+            doc.image(logoBuffer, 50, logoTop, imageOptions);
           } catch (error) {
             console.warn('Erreur affichage logo personnalisé, utilisation du logo par défaut:', error);
-            const logoPath = path.join(__dirname, '..', 'public', 'Cactus.png');
-            if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
+            const logoPath = options.documentSociete?.logoPath || path.join(__dirname, '..', 'public', 'Cactus.png');
+            if (fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop, imageOptions);
           }
         } else {
-          const logoPath = path.join(__dirname, '..', 'public', 'Cactus.png');
-          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, 20, imageOptions);
+          const logoPath = options.documentSociete?.logoPath || path.join(__dirname, '..', 'public', 'Cactus.png');
+          if (fs.existsSync(logoPath)) doc.image(logoPath, 50, logoTop, imageOptions);
         }
 
         // Utiliser l'en-tête personnalisé si disponible - à côté du logo
@@ -548,4 +550,3 @@ class ReceptionPdfService {
 }
 
 module.exports = new ReceptionPdfService();
-

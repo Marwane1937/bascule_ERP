@@ -1,7 +1,5 @@
 <div class="container py-4">
   <div class="page-inner">
-
-    <!-- En-tête -->
     <div class="page-header mb-4">
       <h3 class="fw-bold text-dark">Base</h3>
       <ul class="breadcrumbs d-flex align-items-center">
@@ -13,7 +11,6 @@
       </ul>
     </div>
 
-    <!-- Bouton Ajouter Client -->
     <div class="row mb-4">
       <div class="col-12 text-end">
         <button
@@ -27,7 +24,6 @@
       </div>
     </div>
 
-    <!-- Modal Formulaire d'ajout client -->
     <div
       class="modal fade"
       id="addClientModal"
@@ -38,7 +34,7 @@
       <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content modal-elegant shadow">
           <div class="modal-header modal-header-custom">
-            <h5 class="modal-title text-white" id="addClientModalLabel">➕ Nouveau Fournisseur</h5>
+            <h5 class="modal-title text-white" id="addClientModalLabel">Nouveau Fournisseur</h5>
             <button
               type="button"
               class="btn-close btn-close-white"
@@ -49,18 +45,22 @@
           <div class="modal-body">
             <form [formGroup]="fournisseurForm" (ngSubmit)="onSubmit()">
               <div class="row">
-                   <div class="col-md-4 mb-3">
+                <div class="col-md-4 mb-3">
                   <label for="Code" class="form-label">Code</label>
-                  <input type="text" class="form-control" id="Code" placeholder="Ex: F0001" formControlName="code"/>
+                  <input type="text" class="form-control" id="Code" placeholder="Ex: F0001" formControlName="code" [class.is-invalid]="fournisseurForm.get('code')?.invalid && (fournisseurForm.get('code')?.dirty || fournisseurForm.get('code')?.touched)" />
+                  <div class="invalid-feedback d-block" *ngIf="fournisseurForm.get('code')?.hasError('required') && (fournisseurForm.get('code')?.dirty || fournisseurForm.get('code')?.touched)">Le code est obligatoire.</div>
+                  <div class="invalid-feedback d-block" *ngIf="fournisseurForm.get('code')?.hasError('duplicate')">Ce code existe deja.</div>
                 </div>
                 <div class="col-md-4 mb-3">
                   <label for="name" class="form-label">Nom</label>
-                  <input type="text" class="form-control" id="name" placeholder="Ex: Nom" formControlName="nom" />
+                  <input type="text" class="form-control" id="name" placeholder="Ex: Nom" formControlName="nom" [class.is-invalid]="fournisseurForm.get('nom')?.invalid && (fournisseurForm.get('nom')?.dirty || fournisseurForm.get('nom')?.touched)" />
+                  <div class="invalid-feedback d-block" *ngIf="fournisseurForm.get('nom')?.hasError('required') && (fournisseurForm.get('nom')?.dirty || fournisseurForm.get('nom')?.touched)">Le nom est obligatoire.</div>
+                  <div class="invalid-feedback d-block" *ngIf="fournisseurForm.get('nom')?.hasError('duplicate')">Ce nom existe deja.</div>
                 </div>
               </div>
               <div class="modal-footer bg-light border-top">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="submit" class="btn btn-success" [disabled]="fournisseurForm.invalid">✅ Enregistrer</button>
+                <button type="submit" class="btn btn-success" [disabled]="fournisseurForm.invalid || checkingUnique">Enregistrer</button>
               </div>
             </form>
           </div>
@@ -68,7 +68,6 @@
       </div>
     </div>
 
-    <!-- Barre de recherche et taille page -->
     <div class="row mb-3">
       <div class="col-md-6">
         <div class="input-group">
@@ -77,9 +76,13 @@
             type="text"
             class="form-control"
             placeholder="Rechercher par code, nom..."
+            list="fournisseur-search-suggestions"
             [(ngModel)]="searchTerm"
             (keyup.enter)="onSearch()"
           />
+          <datalist id="fournisseur-search-suggestions">
+            <option *ngFor="let suggestion of fournisseurSearchSuggestions" [value]="suggestion"></option>
+          </datalist>
           <button class="btn btn-primary" type="button" (click)="onSearch()">
             <i class="fas fa-search"></i> Rechercher
           </button>
@@ -95,14 +98,11 @@
       </div>
     </div>
 
-    <!-- Tableau Client -->
     <div class="row">
       <div class="col-md-12">
         <div class="card border-0 shadow-sm rounded-3">
-         
           <div class="card-body">
             <div class="table-responsive" style="position: relative; min-height: 300px;">
-              <!-- Loader overlay -->
               <div
                 *ngIf="loading"
                 class="text-center my-4"
@@ -127,36 +127,45 @@
                     <th (click)="onSort('nom')" class="sortable" style="cursor: pointer;">
                       Nom <i class="fas ms-1" [ngClass]="getSortIcon('nom')"></i>
                     </th>
-                    <th style="width: 150px;" class="text-center">Actions</th>
+                    <th style="width: 210px;" class="text-center">Actions</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   <tr *ngIf="!loading && fournisseurs.length === 0">
                     <td colspan="3" class="text-center py-4">
-                      <p class="text-muted mb-0">Aucun fournisseur trouvé</p>
+                      <p class="text-muted mb-0">Aucun fournisseur trouve</p>
                     </td>
                   </tr>
 
                   <tr *ngFor="let fournisseur of fournisseurs">
-                    <td>{{ fournisseur.code }}</td>
+                    <td class="fw-semibold">{{ fournisseur.code }}</td>
                     <td>{{ fournisseur.nom }}</td>
 
                     <td class="text-center">
-                      <button class="btn btn-sm btn-outline-info me-1" (click)="OnEdit(fournisseur.part_id)" title="Modifier">
-                        <i class="fas fa-edit"></i>
-                      </button>
-                      <button class="btn btn-sm btn-outline-danger me-1" (click)="removeFournisseur(fournisseur)" title="Supprimer">
-                        <i class="fas fa-trash-alt"></i>
-                      </button>
+                      <div class="stats-action-group">
+                        <button
+                          class="btn btn-sm btn-outline-primary"
+                          (click)="openStatsModal(fournisseur)"
+                          title="Statistiques"
+                          [disabled]="statsLoadingFournisseurId === fournisseur.part_id"
+                        >
+                          <span *ngIf="statsLoadingFournisseurId === fournisseur.part_id" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                          <i *ngIf="statsLoadingFournisseurId !== fournisseur.part_id" class="fas fa-chart-pie"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-info" (click)="OnEdit(fournisseur.part_id)" title="Modifier">
+                          <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" (click)="removeFournisseur(fournisseur)" title="Supprimer">
+                          <i class="fas fa-trash-alt"></i>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
               </table>
-
             </div>
 
-            <!-- Pagination -->
             <div *ngIf="!loading && totalPages > 1" class="d-flex justify-content-between align-items-center mt-3">
               <div class="text-muted">
                 Affichage de {{ getDisplayRange() }} sur {{ totalRecords }} fournisseurs
@@ -193,7 +202,158 @@
         </div>
       </div>
     </div>
+  </div>
 
+  <div *ngIf="showStatsModal" class="stats-modal-backdrop" (click)="closeStatsModal()">
+    <div class="stats-modal-card" (click)="$event.stopPropagation()">
+      <div class="stats-modal-header">
+        <div>
+          <div class="stats-modal-kicker">Analyse fournisseur</div>
+          <h4 class="stats-modal-title mb-1">{{ statsData?.partner?.nom || selectedStatsFournisseur?.nom }}</h4>
+          <div class="stats-modal-subtitle">{{ statsData?.partner?.code || selectedStatsFournisseur?.code }}</div>
+        </div>
+        <button type="button" class="stats-close-btn" (click)="closeStatsModal()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <div *ngIf="statsLoading" class="stats-loading-state">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Chargement...</span>
+        </div>
+        <p class="mb-0">Chargement de la situation fournisseur...</p>
+      </div>
+
+      <div *ngIf="!statsLoading && statsData" class="stats-modal-body">
+        <div class="stats-kpi-grid">
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">Commandes HT</span>
+            <strong>{{ statsData.situation.ordered_ht | number:'1.2-2' }} dh</strong>
+          </div>
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">Receptions HT</span>
+            <strong>{{ statsData.situation.received_ht | number:'1.2-2' }} dh</strong>
+          </div>
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">Factures HT</span>
+            <strong>{{ statsData.situation.invoiced_ht | number:'1.2-2' }} dh</strong>
+          </div>
+          <div class="stats-kpi-card">
+            <span class="stats-kpi-label">Commandes ouvertes</span>
+            <strong>{{ statsData.situation.open_orders_count || 0 }}</strong>
+          </div>
+        </div>
+
+        <div class="stats-summary-grid">
+          <section class="stats-panel">
+            <div class="stats-panel-head">
+              <h5>Situation fournisseur</h5>
+              <span>{{ statsData.situation.commandes_count || 0 }} commande(s)</span>
+            </div>
+            <div class="facts-grid">
+              <div class="fact-row">
+                <span>Statut</span>
+                <strong [class.text-warning]="statsData.situation.open_orders_count > 0" [class.text-success]="statsData.situation.open_orders_count <= 0">
+                  {{ statsData.situation.open_orders_count > 0 ? 'Sous suivi' : 'Stable' }}
+                </strong>
+              </div>
+              <div class="fact-row">
+                <span>Derniere activite</span>
+                <strong>{{ statsData.situation.last_activity_date ? (statsData.situation.last_activity_date | date:'dd/MM/yyyy') : '-' }}</strong>
+              </div>
+              <div class="fact-row">
+                <span>Taux de reception</span>
+                <strong>{{ statsData.situation.reception_rate | number:'1.0-2' }} %</strong>
+              </div>
+              <div class="fact-row">
+                <span>Quantite en attente</span>
+                <strong>{{ statsData.situation.quantity_pending | number:'1.0-2' }}</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="stats-panel">
+            <div class="stats-panel-head">
+              <h5>Releve activite</h5>
+              <span>{{ statsData.statement?.length || 0 }} ligne(s)</span>
+            </div>
+            <div class="statement-table-wrap" *ngIf="statsData.statement?.length; else noStatementState">
+              <table class="statement-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Numero</th>
+                    <th>Type</th>
+                    <th class="text-end">Qte</th>
+                    <th class="text-end">HT</th>
+                    <th>Statut</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let row of statsData.statement">
+                    <td>{{ row.date | date:'dd/MM/yyyy' }}</td>
+                    <td>{{ row.numero || '-' }}</td>
+                    <td>{{ row.doc_type || '-' }}</td>
+                    <td class="text-end">{{ row.quantity | number:'1.0-2' }}</td>
+                    <td class="text-end">{{ row.amount_ht | number:'1.2-2' }}</td>
+                    <td>{{ row.statut || '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <ng-template #noStatementState>
+              <div class="stats-empty-state stats-empty-state--small">Aucune activite disponible pour ce fournisseur.</div>
+            </ng-template>
+          </section>
+        </div>
+
+        <div class="stats-chart-grid">
+          <section class="stats-panel">
+            <div class="stats-panel-head">
+              <h5>Evolution mensuelle</h5>
+              <span>{{ statsData.charts?.monthly_activity?.length || 0 }} mois</span>
+            </div>
+            <div class="chart-shell" *ngIf="statsData.charts?.monthly_activity?.length; else noActivityChart">
+              <canvas id="supplierStatsActivityChart"></canvas>
+            </div>
+            <ng-template #noActivityChart>
+              <div class="stats-empty-state">Aucune activite disponible pour generer le graphique.</div>
+            </ng-template>
+          </section>
+
+          <section class="stats-panel">
+            <div class="stats-panel-head">
+              <h5>Repartition flux</h5>
+              <span>{{ statsData.charts?.breakdown?.length || 0 }} indicateur(s)</span>
+            </div>
+            <div class="chart-shell chart-shell--donut" *ngIf="statsData.charts?.breakdown?.length; else noBreakdownChart">
+              <canvas id="supplierStatsBreakdownChart"></canvas>
+            </div>
+            <ng-template #noBreakdownChart>
+              <div class="stats-empty-state">Pas assez de donnees pour afficher le donut.</div>
+            </ng-template>
+          </section>
+        </div>
+
+        <section class="stats-panel">
+          <div class="stats-panel-head">
+            <h5>Recommandations AI</h5>
+            <span>{{ statsData.recommendations?.length || 0 }} insight(s)</span>
+          </div>
+          <div class="recommendation-list">
+            <article class="recommendation-card" *ngFor="let recommendation of statsData.recommendations" [attr.data-tone]="recommendation.tone || 'info'">
+              <div class="recommendation-icon">
+                <i [class]="getRecommendationIcon(recommendation.tone)"></i>
+              </div>
+              <div>
+                <div class="recommendation-title">{{ recommendation.title }}</div>
+                <div class="recommendation-text">{{ recommendation.message }}</div>
+              </div>
+            </article>
+          </div>
+        </section>
+      </div>
+    </div>
   </div>
 
   <router-outlet></router-outlet>
